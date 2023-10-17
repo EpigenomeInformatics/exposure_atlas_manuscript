@@ -103,7 +103,8 @@ colorSchemes <- list(
     HIV_chronic = "#800080",
     HIV_pre =  "#FFC0CB",
     OP_high = "#A0522D",
-    OP_low = "#5E3D23"
+    OP_low = "#5E3D23",
+    OP_med = "#D2691E"
   ),
   Cluster_atac = c(
     C0 = "#FF0000",
@@ -270,7 +271,8 @@ name_mapping <- c(
   "HIV_chr" = "HIV_chronic",
   "HIV_ctrl" = "HIV_pre",
   "OP_high" = "OP_high",
-  "OP_low" = "OP_low"
+  "OP_low" = "OP_low",
+  "OP_med" = "OP_med"
 )
 
 # Rename the categories using the mapping
