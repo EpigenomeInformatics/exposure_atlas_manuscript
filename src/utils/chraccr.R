@@ -53,13 +53,13 @@ plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, label
 
 ### Function to prepare differentially accessible regions for scatter plots
 ### Written by : Irem B. Gündüz  & Fabian Müller
-prepareDARforPlot <- function(cell, outputDir, i, region) {
+prepareDARforPlot <- function(cell, outputDir, i, region="archrPeaks") {
   # get the path of bed.files
   bed.files <- list.files(paste0(outputDir, cell, "/reports/differential_data"), pattern = "diffTab", full.names = T)
   bed.files <- grep(bed.files, pattern = region, fixed = T, value = T)[i]
 
   dm <- read.delim(bed.files)
-  isDiff <- cutL0.5fc2Padj05(dm[, c("log2FoldChange", "padj")])
+  isDiff <- cutL0.5fc2Padj05(dm[, c("log2FoldChange", "padj")],padj=0.05)
   isDiff[is.na(isDiff)] <- FALSE # fill missing as FALSE
   dm$isDiff <- isDiff # Add differentials
   dm <- data.table::as.data.table(dm) %>%

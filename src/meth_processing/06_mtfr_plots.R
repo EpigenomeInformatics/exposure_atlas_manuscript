@@ -23,6 +23,7 @@ condition <- c("C19_ctrl", "C19_sev")
 ds_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/Mono_CD14/data/"
 source("/icbb/projects/igunduz/sc_epigenome_exp/utils/mtfr_plots_helpers.R")
 source("/icbb/projects/igunduz/sc_epigenome_exp/utils/chraccr.R")
+source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/methyltfr_utils.R")
 
 logger.start("Reading methylTFR deviations")
 mtfr_devs <- list.files(mtfr_dir, pattern = cell, full.names = TRUE)
@@ -382,9 +383,184 @@ dev.off()
 logger.completed()
 
 logger.start("Correlation analysis between chromVAR and methylTFR")
-sapply(
-  data.frame(zmat),
-  function(x) Map(function(a,b) cor.test(a,b)$p.value,
-                                list(x),
-                                as.data.frame(groupMat))
+sub_mtfr <- groupMat#[motifs,]
+chromvar = data.frame(
+  B_cell = rowMeans(zmat[,c(1:2)]),
+  Monocyte = rowMeans(zmat[,c(4:5)]),
+  NK_cell = zmat[,"NK_CD16"],
+  Tc_Mem = zmat[,"T_mem_CD8"],
+  T_naive = zmat[,"T_naive"],
+  Th_mem = zmat[,"T_mem_CD4"]
 )
+methyltfr = data.frame(
+  B_cell = sub_mtfr[,"B-cell"],
+  Monocyte = sub_mtfr[,"Monocyte"],
+  NK_cell = sub_mtfr[,"NK-cell"],
+  Tc_Mem = sub_mtfr[,"Tc-Mem"],
+  T_naive = rowMeans(data.frame(sub_mtfr[,5],sub_mtfr[,7])),
+  Th_mem = sub_mtfr[,"Th-Mem"]
+)
+methyltfr <- as.data.frame(t(methyltfr))
+chromvar <- as.data.frame(t(chromvar))
+cormat<- cor(chromvar,methyltfr)
+#cormat <- apply(cormat,2,as.numeric)
+
+
+d <- data.frame(cor = diag(cormat))
+rownames(d) <- colnames(chromvar)
+neg_cor <- dplyr::filter(d,cor < -0.7)
+c <- apply(chromvar,2,as.numeric)
+m <- apply(methyltfr,2,as.numeric)
+c <- c[,rownames(neg_cor)]
+m <-m[,rownames(neg_cor)]
+
+pvals <- sapply(colnames(c),function(motif) p.adjust(cor.test(c[,motif],m[,motif])$p.value))
+pvals <- data.frame(vals = pvals)
+p<-ggplot(d, aes(cor)) + 
+  geom_histogram(color="black", fill="white")
+ggsave(p, file = "/icbb/projects/igunduz/correlation_hist.pdf")
+
+ml <-  c
+mr <-  m
+rownames(ml) <- rownames(mr) <- rownames(chromvar)
+mr <-  t(mr)
+ml <-  t(ml)
+
+#cs <- colpal.cont(9, "cb.Reds")
+#cs <- circlize::colorRamp2(seq(round(min(ml))-1, round(max(ml))+1, length.out = length(cs)), cs)
+#csr <- colpal.cont(9, "cb.Purples")
+#csr <- circlize::colorRamp2(seq(round(min(mr))-1, round(max(mr))+1, length.out = length(csr)), csr)
+
+cell_type = c(
+    "B_cell" = "#AE017E",
+    "Monocyte" = "#CC4C02",
+    "NK_cell" = "#A65628",
+    "Th_mem" = "#41B6C4",
+    "Tc_Mem" = "#4292C6",
+    "T_naive" = "#888FB5"
+  )
+
+colAnnot <- HeatmapAnnotation(
+  Cells = colnames(mr),
+  col = list(
+    Cells = cell_type
+  ),
+  show_annotation_name = FALSE
+)
+
+hmap_cm <- diagDivCellHeatmap(ml,mr,
+ top_annotation = colAnnot,
+name.l = "chromVAR <- methylTFR", 
+name.r = "methylTFR <- chromVAR")#,col.r = csr,col.l = cs)
+
+pdf("/icbb/projects/igunduz/correlation_heatmap.pdf", width = 20, height = 20)
+draw(hmap_cm)
+dev.off()
+logger.completed()
+
+logger.start("Preparing figure 1 chromVAR heatmap...")
+project <- ArchR::loadArchRProject(outputDir,showLogo=FALSE)
+
+logger.start("Looking into variable z-scores using chromVAR")
+pseudo_chrom <- ArchR::getGroupSE(project,"altiusMatrix",groupBy = "ClusterCellTypes",divideN = TRUE)
+seZ <- pseudo_chrom[rowData(pseudo_chrom)$seqnames=="z",]
+zmat <- assay(seZ)
+zmat <- as.matrix(zmat)
+rownames(zmat) <- rowData(seZ)$name
+logger.completed()
+
+
+logger.info("Preparing annotation for chromVAR")
+ann <- data.frame(Cell = colnames(zmat))
+rownames(ann) <- ann$Cell
+
+zmat[abs(round(zmat, 2)) < 0.1] <- NA
+zmat[abs(round(zmat, 2)) > 3] <- NA
+zmat <- zmat[complete.cases(zmat), ]
+motifs <- rownames(zmat)
+
+cmat <- deviationW2annotHeatmap(
+  mat = zmat,
+  ann_df = ann,
+  cluster_col = "Cell",
+  fill_col_cell_type = at_cell_cols, # Assuming you have colors in ann$CellType
+  #fill_col_condition = exposure_colors, # Assuming you have colors in ann$Condition
+  colors = "cptcity.arendal_temperature",
+  clustering_method = "within",
+  cluster_rows = TRUE,
+  package = "chromVAR",
+  row_order = NULL
+)
+
+
+# Plot the heatmap
+pdf("/icbb/projects/igunduz/figure_1_chromvar_heatmap_zscores.pdf", width = 20, height = 20)
+draw(cmat$hm)
+dev.off()
+logger.completed()
+
+logger.start("Looking for methylTFR values of same motifs")
+conditions <- c("HIV_acu", "HIV_chr", "HIV_ctrl", "OP_high", "OP_low","OP_med","C19_ctrl","C19_sev","C19_mild","Influenza_d30","Influenza_ctrl")
+
+# Replace forward slashes with underscores in conditions
+conditions <- gsub("/", "_", conditions)
+
+# Create all possible combinations of cells and conditions
+combinations <- expand.grid(Cell = cells, Condition = conditions)
+
+# Create the desired strings
+result <- paste0(combinations$Cell, "_", combinations$Condition, "_")
+
+# Initialize data frames to store results
+cell <- condition <- list()
+
+# Loop through combinations and read the data
+mtfr_devs <- list()
+for (x in seq_along(result)) {
+  path <- paste0(mtfr_dir, "/", result[x], "deviations.RDS")
+  cur_dev <- readRDS(path)
+  mtfr_devs[[x]] <- cur_dev
+  cell[[x]] <- rep(as.character(combinations$Cell[[x]]), ncol(cur_dev))
+  condition[[x]] <- rep(as.character(combinations$Condition[[x]]), ncol(cur_dev))
+}
+
+# Combine the lists into data frames
+mtfr_devs <- do.call(cbind, mtfr_devs)
+cell <- unlist(cell)
+condition <- unlist(condition)
+
+
+groupMat <- mtfr_devs
+groupMat <- computeZScore(as.matrix(groupMat))
+groupMat <- as.data.frame(t(groupMat))
+
+groupMat$Cell <- cell
+groupMat <- aggregate(. ~ Cell, data = groupMat, FUN = median)
+groupMat <- as.data.frame(t(groupMat))
+colnames(groupMat) <- groupMat[1,]
+groupMat <- groupMat[-1,]
+groupMat <- apply(groupMat, 2, as.numeric)
+rownames(groupMat) <- rownames(mtfr_devs)
+groupMat <- groupMat[motifs,]
+
+
+logger.info("Successfully read all the methylTFR deviations")
+ann <- data.frame(Cell = colnames(groupMat))
+rownames(ann) <- colnames(groupMat)
+
+heatmap_result <- deviationW2annotHeatmap(
+  mat = groupMat[motifs,],
+  ann_df = ann,
+  cluster_col = "Cell",
+  fill_col_cell_type = cell_type_colors, # Assuming you have colors in ann$CellType
+  #fill_col_condition = exposure_colors, # Assuming you have colors in ann$Condition
+  colors = "cptcity.arendal_temperature",
+  clustering_method = "within",
+  cluster_rows = TRUE
+)
+
+# Plot the heatmap
+pdf("/icbb/projects/igunduz/figure_1_mtfr_heatmap_zscore.pdf", width = 20, height = 20)
+draw(heatmap_result$hm)
+dev.off()
+logger.completed()
