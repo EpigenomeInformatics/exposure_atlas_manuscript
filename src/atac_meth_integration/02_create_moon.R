@@ -35,7 +35,7 @@ subset <- ImportALLC(sampleAnnot,
   batchSize = 300,
   numThreads = 30,
   regionSets, regionSetNames,
-  #mcType = "CGN",
+  # mcType = "CGN",
   blackList = NULL, singleCovOff = 99999
 )
 

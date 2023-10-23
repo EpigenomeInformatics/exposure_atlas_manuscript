@@ -7,9 +7,9 @@
 #####################################################################
 
 suppressPackageStartupMessages({
-library(ArchR)
-library(ChrAccR)
-library(dplyr)
+  library(ArchR)
+  library(ChrAccR)
+  library(dplyr)
 })
 
 set.seed(12) # set seed
@@ -33,11 +33,11 @@ sampleannot <- merge(sampleannot, batch, by = "fragmentFiles")
 outputDir <- "/icbb/projects/igunduz/DARPA_analysis/BedFiles_final/"
 # rundir <- paste0("/icbb/projects/igunduz/DARPA/Generated/ChrAccRuns_covid_030723/")
 rundir <- paste0("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_", Sys.Date(), "/")
-if(!dir.exists(rundir)) dir.create(rundir)
+if (!dir.exists(rundir)) dir.create(rundir)
 
 # set the cell types and the comparisons
-#cells <- c("B_mem", "B_naive", "Mono_CD14","Mono_CD16", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive" "T_mix","T_naive")
-cells <- c("Mono_CD14", "NK_CD16", "T_mem_CD8", "T_mem_CD4","T_naive")
+# cells <- c("B_mem", "B_naive", "Mono_CD14","Mono_CD16", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive" "T_mix","T_naive")
+cells <- c("Mono_CD14", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive")
 
 
 diffCompNames <- c(
@@ -81,8 +81,8 @@ lapply(cells, function(cell) {
   peaks <- getPeakSet(project)
   # peaks <- peaks[grep(paste0("^",cell), peaks$GroupReplicate), ]
   regionSetList <- list(
-    archr_peaks = sort(peaks)#,
-    #tiling200bp = muRtools::getTilingRegions("hg38", width = 200L, onlyMainChrs = TRUE)
+    archr_peaks = sort(peaks) # ,
+    # tiling200bp = muRtools::getTilingRegions("hg38", width = 200L, onlyMainChrs = TRUE)
   )
 
   # set configuration elements

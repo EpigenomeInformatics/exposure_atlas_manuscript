@@ -7,9 +7,9 @@
 #####################################################################
 
 suppressPackageStartupMessages({
-library(ArchR)
-library(ChrAccR)
-library(dplyr)
+  library(ArchR)
+  library(ChrAccR)
+  library(dplyr)
 })
 set.seed(12) # set seed
 outputDir <- "/icbb/projects/igunduz/archr_project_011023"
@@ -23,12 +23,12 @@ sampleannot$fragmentFiles <- gsub(x = sampleannot$fragmentFiles, pattern = ".bed
 # set directory for the output
 outputDir <- "/icbb/projects/igunduz/DARPA_analysis/BedFiles_final/"
 rundir <- paste0("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_", Sys.Date(), "/")
-if(!dir.exists(rundir)) dir.create(rundir)
+if (!dir.exists(rundir)) dir.create(rundir)
 # rundir <- "/icbb/projects/igunduz/DARPA/Generated/ChrAccRuns_280623/"
 
 # set the cell types and the comparisons
-#cells <- c("B_mem", "B_naive", "Mono_CD14","Mono_CD16", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive", "T_mix","T_naive","T_mait")
-cells<- c("Mono_CD14", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive", "T_mix","T_naive","Mono_CD16","T_mait")
+# cells <- c("B_mem", "B_naive", "Mono_CD14","Mono_CD16", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive", "T_mix","T_naive","T_mait")
+cells <- c("Mono_CD14", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive", "T_mix", "T_naive", "Mono_CD16", "T_mait")
 diffCompNames <- c(
   "HIV_ctrl vs HIV_chr [sample_exposure_group]",
   "HIV_ctrl vs HIV_acu [sample_exposure_group]",
@@ -39,7 +39,7 @@ diffCompNames <- c(
   "OP_high vs OP_med [sample_exposure_group]",
   "OP_med vs OP_low [sample_exposure_group]"
 )
-lapply(cells, function(cell){
+lapply(cells, function(cell) {
   # reassign the fragment file paths
   sampleannot$fragmentFiles2 <- paste0(
     paste0(outputDir, cell, "/"),
@@ -72,12 +72,12 @@ lapply(cells, function(cell){
     before_in_filtered && after_in_filtered
   })]
 
-  #peaks <- readRDS("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/rawData/regionsGR.rds")
+  # peaks <- readRDS("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/rawData/regionsGR.rds")
   # peaks <- peaks[grep(paste0("^",cell), peaks$GroupReplicate), ]
   peaks <- getPeakSet(project)
   regionSetList <- list(
-    archr_peaks = sort(peaks)#,
-    #tiling200bp = muRtools::getTilingRegions("hg38", width = 200L, onlyMainChrs = TRUE)
+    archr_peaks = sort(peaks) # ,
+    # tiling200bp = muRtools::getTilingRegions("hg38", width = 200L, onlyMainChrs = TRUE)
   )
   # set configuration elements
   setConfigElement("annotationColumns", c("sampleIdCol", "sample_exposure_type", "sample_exposure_group"))

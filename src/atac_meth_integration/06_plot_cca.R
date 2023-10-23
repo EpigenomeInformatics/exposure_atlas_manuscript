@@ -34,10 +34,10 @@ cellAnnot_atac <- read.delim("/icbb/projects/igunduz/DARPA_analysis/artemis_0310
 rownames(cellAnnot_atac) <- cellAnnot_atac[, "cellId_archr"]
 cellAnnot_atac$Cluster_atac <- cellAnnot_atac$Clusters_0.8
 cellAnnot_atac$exposure <- cellAnnot_atac$sample_exposure_group
-cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group =="HIV_acu", "HIV_acute",cellAnnot_atac$sample_exposure_group)
-cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group =="HIV_chr", "HIV_chronic",cellAnnot_atac$sample_exposure_group)
-cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group =="HIV_ctr", "HIV_pre",cellAnnot_atac$sample_exposure_group)
-cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group =="OP_med", "OP_medium",cellAnnot_atac$sample_exposure_group)
+cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group == "HIV_acu", "HIV_acute", cellAnnot_atac$sample_exposure_group)
+cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group == "HIV_chr", "HIV_chronic", cellAnnot_atac$sample_exposure_group)
+cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group == "HIV_ctr", "HIV_pre", cellAnnot_atac$sample_exposure_group)
+cellAnnot_atac$exposure <- ifelse(cellAnnot_atac$sample_exposure_group == "OP_med", "OP_medium", cellAnnot_atac$sample_exposure_group)
 
 cellAnnot_meth <- readRDS("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/cellAnnot_meth.rds")
 rownames(cellAnnot_meth) <- cellAnnot_meth[, "Cell_UID"]
@@ -62,7 +62,7 @@ colorSchemes <- list(
   ClusterCellTypes = c(
     B_mem = "#AE017E",
     B_naive = "#F768A1",
-    DC =  "#67000D",
+    DC = "#67000D",
     Mono_CD14 = "#FE9929",
     Mono_CD16 = "#CC4C02",
     NK_CD16 = "#A65628",
@@ -101,7 +101,7 @@ colorSchemes <- list(
   exposure = c(
     HIV_acute = "#DC143C",
     HIV_chronic = "#800080",
-    HIV_pre =  "#FFC0CB",
+    HIV_pre = "#FFC0CB",
     OP_high = "#A0522D",
     OP_low = "#5E3D23",
     OP_med = "#D2691E"
@@ -194,7 +194,7 @@ names(dimnames(contTab_m2a)) <- c("M", "A")
 fn <- file.path(oDir, paste0("chord_nn_match", "_nearest_acc_for_meth", ".pdf"))
 pdf(fn, width = 10, height = 10)
 par(cex = 0.45) # Adjust the font size
-chordDiagramFromContingencyTable(contTab_truncPerc(contTab_m2a,by="column"), chordColorByCol = TRUE, cs_row = cs_cl_meth, cs_column = cs_cl_atac)
+chordDiagramFromContingencyTable(contTab_truncPerc(contTab_m2a, by = "column"), chordColorByCol = TRUE, cs_row = cs_cl_meth, cs_column = cs_cl_atac)
 dev.off()
 
 logger.start("Contingency Tables")
@@ -205,7 +205,7 @@ contTab_m2as <- t(contTab_m2a / rowSums(contTab_m2a))
 class(contTab_m2as) <- "matrix"
 
 # Remove the "Plasma" row from contTab_a2ms
-#contTab_a2ms <- contTab_a2ms[rownames(contTab_a2ms) %in% rownames(contTab_m2as), ]
+# contTab_a2ms <- contTab_a2ms[rownames(contTab_a2ms) %in% rownames(contTab_m2as), ]
 
 rowAnnot <- rowAnnotation(
   class_atac = rownames(contTab_a2ms),
@@ -244,12 +244,12 @@ logger.completed()
 
 logger.start("Preapaing UMAP data")
 umap_atac <- cellAnnot_atac[rownames(cellAnnot_atac) %in% rownames(annot_acc), paste0("UMAP_", 1:2)]
-umap_meth <- readRDS(paste0("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/itLSI_res/itLSI_res_",k,".rds"))$umapCoord
+umap_meth <- readRDS(paste0("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/itLSI_res/itLSI_res_", k, ".rds"))$umapCoord
 umap_meth <- umap_meth[rownames(umap_meth) %in% rownames(annot_meth), ]
 logger.completed()
 
 logger.start("Side-by-side dimred plot (crosscluster)")
-pp_acc <- getDimRedPlot(umap_atac, annot = annot_acc, colorCol = "mapped_cell_class", shapeCol = FALSE, colScheme = cs_cl_meth, ptSize = 0.25, addLabels = FALSE, addDensity = FALSE, annot.text = NULL) + coord_fixed() + guides(colour = guide_legend(override.aes = list(size = 5))) + theme_void()+ theme(legend.position = "bottom")
+pp_acc <- getDimRedPlot(umap_atac, annot = annot_acc, colorCol = "mapped_cell_class", shapeCol = FALSE, colScheme = cs_cl_meth, ptSize = 0.25, addLabels = FALSE, addDensity = FALSE, annot.text = NULL) + coord_fixed() + guides(colour = guide_legend(override.aes = list(size = 5))) + theme_void() + theme(legend.position = "bottom")
 pp_meth <- getDimRedPlot(umap_meth, annot = annot_meth, colorCol = "mapped_cell_class", shapeCol = FALSE, colScheme = cs_cl_atac, ptSize = 0.25, addLabels = FALSE, addDensity = FALSE, annot.text = NULL) + coord_fixed() + guides(colour = guide_legend(override.aes = list(size = 5))) + theme_void() + theme(legend.position = "bottom")
 pp <- cowplot::plot_grid(pp_acc, pp_meth)
 ggsave4doc(file.path(oDir, paste0("umap_nearestNeighbor_crossmap_", "crosscluster", ".pdf")), pp, width = 384, height = 128)
@@ -261,9 +261,9 @@ annot_acc$sample_exposure_type <- cellAnnot_atac[rownames(annot_acc), "sample_ex
 annot_acc$sample_exposure_type <- cellAnnot_atac[rownames(annot_acc), "sample_exposure_group"]
 annot_acc$ClusterCellTypes <- cellAnnot_atac[rownames(annot_acc), "ClusterCellTypes"]
 annot_meth$sample_exposure_type <- cellAnnot_meth[rownames(cellAnnot_meth) %in% rownames(annot_meth), "condition"]
-clustAss <- readRDS(paste0("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/itLSI_res/itLSI_res_",k,".rds"))$clustAss
-clustAss <-  as.data.frame(clustAss)
-annot_meth$Clusters <- clustAss[rownames(clustAss) %in% rownames(annot_meth),"clustAss"]
+clustAss <- readRDS(paste0("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/itLSI_res/itLSI_res_", k, ".rds"))$clustAss
+clustAss <- as.data.frame(clustAss)
+annot_meth$Clusters <- clustAss[rownames(clustAss) %in% rownames(annot_meth), "clustAss"]
 annot_acc$Cluster_atac <- cellAnnot_atac[rownames(annot_acc), "Clusters_0.8"]
 annot_meth$cell_type <- cellAnnot_meth[rownames(cellAnnot_meth) %in% rownames(annot_meth), "cell_type"]
 name_mapping <- c(
@@ -282,22 +282,20 @@ annot_meth$exposure <- annot_meth$sample_exposure_type
 umapDir <- file.path("/icbb/projects/igunduz/DARPA_analysis/artemis_031023", "umap")
 if (!dir.exists(umapDir)) dir.create(umapDir)
 
-	for (i in 1:nrow(annotPairs)){
-		cs <- NULL
-		if (is.element(annotPairs[i, "annot_atac"], names(colorSchemes))) cs <- colorSchemes[[annotPairs[i, "annot_atac"]]]
-		pp_atac <- getDimRedPlot(umap_atac, annot=annot_acc, colorCol=annotPairs[i, "annot_atac"], shapeCol=FALSE, colScheme=cs, ptSize=0.25, addLabels=FALSE, addDensity=FALSE, annot.text=NULL) + coord_fixed() + theme_void()
-		if (!is.numeric(annot_acc[,annotPairs[i, "annot_atac"]])){
-			pp_atac <- pp_atac + guides(colour=guide_legend(override.aes=list(size=5)))+ theme(legend.position = "bottom")
-		}
-		cs <- NULL
-		if (is.element(annotPairs[i, "annot_meth"], names(colorSchemes))) cs <- colorSchemes[[annotPairs[i, "annot_meth"]]]
-		pp_meth <- getDimRedPlot(umap_meth, annot=annot_meth, colorCol=annotPairs[i, "annot_meth"], shapeCol=FALSE, colScheme=cs, ptSize=0.25, addLabels=FALSE, addDensity=FALSE, annot.text=NULL) + coord_fixed() + theme_void()
-		if (!is.numeric(annot_meth[,annotPairs[i, "annot_meth"]])){
-			pp_meth <- pp_meth + guides(colour=guide_legend(override.aes=list(size=5)))+ theme(legend.position = "bottom")
-		}
-		pp <- cowplot::plot_grid(pp_atac, pp_meth)
-		ggsave4doc(file.path(umapDir, paste0("dimRed_umap_", annotPairs[i, "annotName"], ".pdf")), pp, width=384, height=128)
-	}
+for (i in 1:nrow(annotPairs)) {
+  cs <- NULL
+  if (is.element(annotPairs[i, "annot_atac"], names(colorSchemes))) cs <- colorSchemes[[annotPairs[i, "annot_atac"]]]
+  pp_atac <- getDimRedPlot(umap_atac, annot = annot_acc, colorCol = annotPairs[i, "annot_atac"], shapeCol = FALSE, colScheme = cs, ptSize = 0.25, addLabels = FALSE, addDensity = FALSE, annot.text = NULL) + coord_fixed() + theme_void()
+  if (!is.numeric(annot_acc[, annotPairs[i, "annot_atac"]])) {
+    pp_atac <- pp_atac + guides(colour = guide_legend(override.aes = list(size = 5))) + theme(legend.position = "bottom")
+  }
+  cs <- NULL
+  if (is.element(annotPairs[i, "annot_meth"], names(colorSchemes))) cs <- colorSchemes[[annotPairs[i, "annot_meth"]]]
+  pp_meth <- getDimRedPlot(umap_meth, annot = annot_meth, colorCol = annotPairs[i, "annot_meth"], shapeCol = FALSE, colScheme = cs, ptSize = 0.25, addLabels = FALSE, addDensity = FALSE, annot.text = NULL) + coord_fixed() + theme_void()
+  if (!is.numeric(annot_meth[, annotPairs[i, "annot_meth"]])) {
+    pp_meth <- pp_meth + guides(colour = guide_legend(override.aes = list(size = 5))) + theme(legend.position = "bottom")
+  }
+  pp <- cowplot::plot_grid(pp_atac, pp_meth)
+  ggsave4doc(file.path(umapDir, paste0("dimRed_umap_", annotPairs[i, "annotName"], ".pdf")), pp, width = 384, height = 128)
+}
 logger.completed()
-
-

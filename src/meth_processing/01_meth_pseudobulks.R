@@ -5,7 +5,9 @@
 # created on 2023-08-24 by Irem Gunduz
 # Create pseudobulks for the methylation data
 #####################################################################
-suppressPackageStartupMessages({library(dplyr)})
+suppressPackageStartupMessages({
+  library(dplyr)
+})
 set.seed(12)
 source("/icbb/projects/igunduz/sc_epigenome_pathogen_exposure/utils/createPseudoBulks.R")
 

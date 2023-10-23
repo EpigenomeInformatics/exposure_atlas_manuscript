@@ -21,10 +21,10 @@ rownames(cellAnnot_atac) <- cellAnnot_atac$cellId_archr
 colname_samplId_atac <- "sample_sampleId_cminid"
 colname_samplId_meth <- "CommonMinID"
 
-cellAnnot_meth <-  read.delim("/icbb/projects/igunduz/DARPA/allc_full_sampleannot_290823.tsv")
+cellAnnot_meth <- read.delim("/icbb/projects/igunduz/DARPA/allc_full_sampleannot_290823.tsv")
 rownames(cellAnnot_meth) <- cellAnnot_meth[, "Cell_UID"]
 cellAnnot_meth <- cellAnnot_meth %>%
-    dplyr::filter(sample_exposure_type %in% c("COVID","FLU","HIV","OP"))
+  dplyr::filter(sample_exposure_type %in% c("COVID", "FLU", "HIV", "OP"))
 
 
 logger.start("Finding common samples")
@@ -56,9 +56,11 @@ write.table(cellAnnot_meth, "/icbb/projects/igunduz/DARPA_analysis/artemis_03102
 logger.completed()
 
 rawdir <- "/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/"
-if (!dir.exists(rawdir)) {dir.create(rawdir)}
+if (!dir.exists(rawdir)) {
+  dir.create(rawdir)
+}
 logger.start("Saving Archr peak regions...")
-ap_ha <- ArchR::loadArchRProject("/icbb/projects/igunduz/archr_project_011023/", force = T,showLogo=F)
+ap_ha <- ArchR::loadArchRProject("/icbb/projects/igunduz/archr_project_011023/", force = T, showLogo = F)
 regGr <- ArchR::getPeakSet(ap_ha)
-saveRDS(regGr, paste0(rawdir,"regionsGR.rds"))
+saveRDS(regGr, paste0(rawdir, "regionsGR.rds"))
 logger.completed()

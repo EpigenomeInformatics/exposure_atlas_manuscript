@@ -79,25 +79,27 @@ for (motif in motif_names) {
   )
 }
 
-#set the markers
-markerGenes <- c("MZF1","RUNX3","SPIB","REL","RELB")
+# set the markers
+markerGenes <- c("MZF1", "RUNX3", "SPIB", "REL", "RELB")
 
-#plot tracks
+# plot tracks
 p <- plotBrowserTrack(
-    ArchRProj = project, 
-    groupBy = "sample_exposure_group", 
-    geneSymbol = markerGenes, 
-    plotSummary = c("bulkTrack","featureTrack","loopTrack","geneTrack"),
-    minCells  = 50,
-    tileSize = 500,
-    pal = c("#4F609C", "#C43E96","#06948E","#C03830"),
-    useGroups = c("C19_ctrl","C19_mild","C19_mod","C19_sev"),
-    upstream = 70000,    
-    downstream = 70000
+  ArchRProj = project,
+  groupBy = "sample_exposure_group",
+  geneSymbol = markerGenes,
+  plotSummary = c("bulkTrack", "featureTrack", "loopTrack", "geneTrack"),
+  minCells = 50,
+  tileSize = 500,
+  pal = c("#4F609C", "#C43E96", "#06948E", "#C03830"),
+  useGroups = c("C19_ctrl", "C19_mild", "C19_mod", "C19_sev"),
+  upstream = 70000,
+  downstream = 70000
 )
 
-#save them as pdf
-plotPDF(plotList = p, 
-    name = "Plot-motif_track_plots.pdf", 
-    ArchRProj = project, 
-    addDOC = FALSE, width = 5, height = 5)
+# save them as pdf
+plotPDF(
+  plotList = p,
+  name = "Plot-motif_track_plots.pdf",
+  ArchRProj = project,
+  addDOC = FALSE, width = 5, height = 5
+)

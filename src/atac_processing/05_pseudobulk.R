@@ -11,10 +11,10 @@ outputDir <- "/icbb/projects/igunduz/archr_project_011023/"
 
 # load libraries
 suppressPackageStartupMessages({
-library(ArchR)
-library(dplyr)
-library(muLogR)
-library(BSgenome.Hsapiens.UCSC.hg38)
+  library(ArchR)
+  library(dplyr)
+  library(muLogR)
+  library(BSgenome.Hsapiens.UCSC.hg38)
 })
 
 addArchRThreads(threads = 30) # set the cores
@@ -40,7 +40,7 @@ project <- ArchR::addReproduciblePeakSet(
 # add peak matrix and peak set
 project <- addPeakMatrix(project)
 
-saveRDS(getPeakSet(project), paste0(outputDir,"/global_peaklist.rds"))
+saveRDS(getPeakSet(project), paste0(outputDir, "/global_peaklist.rds"))
 saveArchRProject(project, outputDirectory = outputDir, load = FALSE)
 
 # extract info for cells,cell types and sample
@@ -94,7 +94,7 @@ fragments <- purrr::map(fragments, ~ purrr::compact(.)) %>% purrr::keep(~ length
 
 # create a directory for BED files
 outputDir <- "/icbb/projects/igunduz/DARPA_analysis/BedFiles_final/"
-if(!dir.exists(outputDir)){
+if (!dir.exists(outputDir)) {
   dir.create(outputDir)
   logger.info("Created new directory: ", outputDir)
 }

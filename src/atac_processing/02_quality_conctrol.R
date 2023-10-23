@@ -8,10 +8,10 @@
 
 ## Load Libraries
 suppressPackageStartupMessages({
-library(ArchR)
-library(dplyr)
-library(ggplot2)
-library(BSgenome.Hsapiens.UCSC.hg38)
+  library(ArchR)
+  library(dplyr)
+  library(ggplot2)
+  library(BSgenome.Hsapiens.UCSC.hg38)
 })
 set.seed(12) # set seed
 
@@ -55,7 +55,7 @@ project@projectMetadata$outputDirectory <- outputDir
 # project@projectMetadata$GroupCoverages$ClusterCellTypes$coverageMetadata$File = gsub("DARPA/ArchRProject_5x/ATAC_processed","ATAC_processed_final",project@projectMetadata$GroupCoverages$ClusterCellTypes$coverageMetadata$File)
 
 # save the project to the subdirectory
-saveRDS(project, paste0(outputDir,"Save-ArchR-Project.rds"))
+saveRDS(project, paste0(outputDir, "Save-ArchR-Project.rds"))
 
 ## Add exposure annotations to cells
 cellann <- data.table::fread("/icbb/projects/igunduz/DARPA/ArchRProject_5x/cellAnnot_archr.tsv") %>%
@@ -77,27 +77,27 @@ project <- addCellColData(
 # add annotations
 project <- addArchRAnnotations(project)
 
-#before filtering
+# before filtering
 p <- plotUniqueFragsvsTSS(project)
 # save pdf
 plotPDF(p, name = "TSS-vs-Frags-before-filtering.pdf", ArchRProj = project, addDOC = FALSE)
 
-#Filter based on TSS enrichment
+# Filter based on TSS enrichment
 idxPass <- which(project$TSSEnrichment >= 8)
 cellsPass <- project$cellNames[idxPass]
 project <- project[cellsPass, ]
 
-#Filter based on unique fragments
+# Filter based on unique fragments
 idxPass <- which(log10(project$nFrags) >= 3)
 cellsPass <- project$cellNames[idxPass]
 project <- project[cellsPass, ]
 
-#after filtering
+# after filtering
 p <- plotUniqueFragsvsTSS(project)
 # save pdf
 plotPDF(p, name = "TSS-vs-Frags-after-filtering.pdf", ArchRProj = project, addDOC = FALSE)
 
-# remove doublets 
+# remove doublets
 project <- filterDoublets(project)
 
 # save the project to the subdirectory

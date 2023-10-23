@@ -5,7 +5,7 @@
 # created on 2023-08-25 written by Fabian Mueller adapted by Irem Gunduz
 # CCA analysis of scATAC + scMethylation data of the common samples
 #####################################################################
-#!/usr/bin/env Rscript
+# !/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
   library(readr)
@@ -23,11 +23,11 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 set.seed(12) # set seed
-#outputDir <- "/icbb/projects/igunduz/archr_project_011023/"
+# outputDir <- "/icbb/projects/igunduz/archr_project_011023/"
 
 logger.start("Loading ATAC data")
-project <- ArchR::loadArchRProject("/icbb/projects/igunduz/archr_project_011023",showLogo=FALSE)
-#project <- ArchR::loadArchRProject(outputDir, force = T,showLogo=FALSE)
+project <- ArchR::loadArchRProject("/icbb/projects/igunduz/archr_project_011023", showLogo = FALSE)
+# project <- ArchR::loadArchRProject(outputDir, force = T,showLogo=FALSE)
 methDir <- "/icbb/projects/igunduz/DARPA_analysis/artemis_031023/"
 
 logger.start("Preparing sample annotation")
@@ -60,11 +60,11 @@ cell$cellId_archr <- rownames(cell)
 cellAnnot_atac <- merge(cellAnnot_atac, cell, by = "cellId_archr")
 
 # save sample annotation
-if(!file.exists(paste0(methDir,"rawData/cellAnnot_atac.tsv"))){
-write.table(cellAnnot_atac,
-  file = paste0(methDir,"rawData/cellAnnot_atac.tsv"),
-  sep = "\t", quote = FALSE, row.names = FALSE
-)
+if (!file.exists(paste0(methDir, "rawData/cellAnnot_atac.tsv"))) {
+  write.table(cellAnnot_atac,
+    file = paste0(methDir, "rawData/cellAnnot_atac.tsv"),
+    sep = "\t", quote = FALSE, row.names = FALSE
+  )
 }
 rownames(cellAnnot_atac) <- cellAnnot_atac$cellId_archr
 cellIds_atac <- rownames(cellAnnot_atac)
@@ -74,7 +74,7 @@ for (cn in c(grep("^sample", colnames(ca_global), value = TRUE))) {
 logger.completed()
 
 logger.start("Loading methylation cell annotation")
-#cellAnnot_meth <- as.data.frame(data.table::fread("/icbb/projects/igunduz/DARPA/allc_sample_annot_final.csv"))
+# cellAnnot_meth <- as.data.frame(data.table::fread("/icbb/projects/igunduz/DARPA/allc_sample_annot_final.csv"))
 cellAnnot_meth <- readRDS("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/cellAnnot_meth.rds")
 rownames(cellAnnot_meth) <- cellAnnot_meth[, "cellId"]
 
@@ -108,7 +108,7 @@ logger.completed()
 
 
 logger.start("Preparing methylation data")
-se <- readRDS(paste0(methDir,"rawData/methSe_filtered.rds"))
+se <- readRDS(paste0(methDir, "rawData/methSe_filtered.rds"))
 rt <- "archr_peaks"
 logger.info(c("Region type:", rt))
 methSeL <- assay(se, "mc")
@@ -117,10 +117,10 @@ cm_meth <- as(methSeL, "matrix")
 logger.completed()
 
 logger.start("Organizing methylation data")
-#cm_meth <- methSeL
+# cm_meth <- methSeL
 logger.info("Organizing methylation regions")
 rr <- readRDS(paste0("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/regionsGR_filtered.rds"))
-rr <- data.table::as.data.table(rr) 
+rr <- data.table::as.data.table(rr)
 rownames(cm_meth) <- paste0("peak", "_", rr$seqnames, "_", rr$start, "to", rr$end)
 logger.completed()
 
@@ -140,7 +140,7 @@ tfIdf <- function(X) {
   idf <- tf * log(1 + ncol(X) / rowSums(X)) # inverse document frequency
   na <- sum(is.na(x = idf))
   logger.info(paste0("Number of NaNs in idf:", na))
-  if(na > 0){
+  if (na > 0) {
     idf[is.na(idf)] <- 0
   }
   return(idf)
@@ -169,12 +169,12 @@ cm_atac <- cm_atac > 0
 cm_meth <- !is.na(cm_meth) & cm_meth < 0.4
 logger.completed()
 
-#logger.start("Filtering low quality regions")
+# logger.start("Filtering low quality regions")
 # filter regions with low quality
-#keep <- rowSums(cm_meth) > 0
-#logger.info(paste0("Retained ", sum(keep), " of ", nrow(cm_meth), " (", round(100 * sum(keep) / nrow(cm_meth), 2), "%) regions"))
-#cm_meth <- cm_meth[keep, ]
-#logger.completed()
+# keep <- rowSums(cm_meth) > 0
+# logger.info(paste0("Retained ", sum(keep), " of ", nrow(cm_meth), " (", round(100 * sum(keep) / nrow(cm_meth), 2), "%) regions"))
+# cm_meth <- cm_meth[keep, ]
+# logger.completed()
 
 # use the region set of peaks from ATAC intersecting with methylation measurements
 logger.info("Region set overlap between ATAC and METH:")
@@ -187,8 +187,8 @@ logger.start("Calculating TF-IDF on scMETH")
 tfidf_meth <- tfIdf(cm_meth)
 logger.completed()
 rm(cm_meth)
-#logger.info("Converting to matrix...")
-#tfidf_meth <- as(tfidf_meth, "matrix")
+# logger.info("Converting to matrix...")
+# tfidf_meth <- as(tfidf_meth, "matrix")
 ChrAccR::cleanMem()
 logger.completed()
 

@@ -11,19 +11,19 @@ outputDir <- "/icbb/projects/igunduz/archr_project_011023/"
 
 # load libraries
 suppressPackageStartupMessages({
-library(ArchR)
-library(dplyr)
-library(mclust)
-#library(pheatmap)
-library(ggplot2)
-library(rescueR)
+  library(ArchR)
+  library(dplyr)
+  library(mclust)
+  # library(pheatmap)
+  library(ggplot2)
+  library(rescueR)
 })
 # load the functions
 source("/icbb/projects/igunduz/sc_epigenome_pathogen_exposure/utils/jaccard.R")
 
 addArchRThreads(threads = 30) # set the cores
 addArchRGenome("hg38") # set the reference genome
-project <- ArchR::loadArchRProject(outputDir,showLogo=FALSE)
+project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 
 # load the scRNAseq data
 sRNA <- readRDS("/icbb/projects/igunduz/DARPA/blood_imatlas_seurat.RDS")
@@ -36,7 +36,7 @@ project <- addGeneIntegrationMatrix(
   reducedDims = "IterativeLSI",
   seRNA = sRNA,
   addToArrow = FALSE,
-  #force = TRUE,
+  # force = TRUE,
   groupRNA = "Manually_curated_celltype",
   nameCell = "predictedCellAtlas",
   nameGroup = "predictedGroupAtlas",
@@ -83,7 +83,7 @@ rand <- mclust::adjustedRandIndex(
   project$predictedGroupAtlas,
   project$Clusters_0.8
 )
-#0.4682788
+# 0.4682788
 
 # construct confusion matrix
 df <- as.data.frame(as.matrix(confusionMatrix(
@@ -93,56 +93,59 @@ df <- as.data.frame(as.matrix(confusionMatrix(
 
 # plot Jaccard index as heatmap
 jacch <- computeJaccardIndex(df, heatmap = TRUE)
-pdf(file = paste0(outputDir,"Plots/jaccard_pheatmap_annotated.pdf"), width = 7, height = 7)
+pdf(file = paste0(outputDir, "Plots/jaccard_pheatmap_annotated.pdf"), width = 7, height = 7)
 jacch
 dev.off()
 
-#Relabel the cell types
+# Relabel the cell types
 cM <- confusionMatrix(
   project$Clusters_0.8,
   project$predictedGroupAtlas
 )
 labelOld <- rownames(cM)
 labelNew <- colnames(cM)[apply(cM, 1, which.max)]
-labelNew2 <- c("Mono_CD14", "NK_CD16"  , "NK_CD16" ,  "T_mem_CD8", "Mono_CD14" ,"Mono_CD16",
- "Mono_CD14" ,"T_mem_CD4" ,"T_mem_CD8" ,"T_mait" ,   "T_mix" ,  "B_naive"  ,
- "T_mem_CD4", "T_naive" ,  "T_mem_CD4" ,"T_naive" ,  "B_mem" ,    "T_mem_CD8",
- "DC"      ,  "Plasma"   , "T_mix", "B_naive"  
+labelNew2 <- c(
+  "Mono_CD14", "NK_CD16", "NK_CD16", "T_mem_CD8", "Mono_CD14", "Mono_CD16",
+  "Mono_CD14", "T_mem_CD4", "T_mem_CD8", "T_mait", "T_mix", "B_naive",
+  "T_mem_CD4", "T_naive", "T_mem_CD4", "T_naive", "B_mem", "T_mem_CD8",
+  "DC", "Plasma", "T_mix", "B_naive"
 )
 project$ClusterCellTypes <- mapLabels(project$Clusters_0.8, oldLabels = labelOld, newLabels = labelNew2)
 
-#cell <- data.frame(cluster = unique(project$Clusters_0.8))
-#cell$cell_types <- c("Mono_CD14", "NK_CD16", "T_mem_CD8", "Mono_CD16", "T_mem_CD4", "T_mait", "T_naive", "B_naive", "B_mem", "DC", "Plasma")
-#conf_matrix <- confusionMatrix(project$Clusters_0.8, project$cell_types)
-#cell$cell_types <- colnames(conf_matrix)[apply(conf_matrix, 1, which.max)]
+# cell <- data.frame(cluster = unique(project$Clusters_0.8))
+# cell$cell_types <- c("Mono_CD14", "NK_CD16", "T_mem_CD8", "Mono_CD16", "T_mem_CD4", "T_mait", "T_naive", "B_naive", "B_mem", "DC", "Plasma")
+# conf_matrix <- confusionMatrix(project$Clusters_0.8, project$cell_types)
+# cell$cell_types <- colnames(conf_matrix)[apply(conf_matrix, 1, which.max)]
 
 cbPalette <- c(
   "#ae017e", "#f768a1", "#67000d",
-   "#fe9929","#cc4c02","#B5651D",
-    "#a106bd", "#41b6c4", "#4292c6", 
-    "#0074cc", "#888fb5","#c7e9b4"
+  "#fe9929", "#cc4c02", "#B5651D",
+  "#a106bd", "#41b6c4", "#4292c6",
+  "#0074cc", "#888fb5", "#c7e9b4"
 )
 df <- getEmbedding(project, embedding = "UMAPHarmony", returnDF = TRUE)
 colnames(df) <- c("UMAP1", "UMAP2")
 df$Group <- project$ClusterCellTypes
-umap <- plotNiceArchRumap(df,colorPalette = cbPalette)
-ggsave(umap, file = paste0(outputDir,"Plots/umap_annotated.pdf"), width = 7, height = 7)
+umap <- plotNiceArchRumap(df, colorPalette = cbPalette)
+ggsave(umap, file = paste0(outputDir, "Plots/umap_annotated.pdf"), width = 7, height = 7)
 
 
-#plot cell-type proportion plot
+# plot cell-type proportion plot
 cell <- as.data.frame(project@cellColData) %>%
   dplyr::filter(!sample_exposure_group %in% c("BA_na", "BA_vac"))
 cell <- table(cell$ClusterCellTypes, cell$sample_exposure_group)
 cell <- as.matrix(cell)
 
-stacked <- cellTypeProportionPlot(cell, scale = TRUE, center = FALSE, 
-groupName = "Exposure", colorPalette = cbPalette, order = c(
-  "C19_ctrl", "C19_mild", "C19_mod", "C19_sev",
-  "HIV_ctrl", "HIV_acu", "HIV_chr", "Influenza_ctrl",
-  "Influenza_d3", "Influenza_d6", "Influenza_d30",
-  "OP_low", "OP_med", "OP_high"
-))
-ggsave(stacked, file = paste0(outputDir,"Plots/cellTypeProportion_stacked.pdf"), width = 13, height = 10)
+stacked <- cellTypeProportionPlot(cell,
+  scale = TRUE, center = FALSE,
+  groupName = "Exposure", colorPalette = cbPalette, order = c(
+    "C19_ctrl", "C19_mild", "C19_mod", "C19_sev",
+    "HIV_ctrl", "HIV_acu", "HIV_chr", "Influenza_ctrl",
+    "Influenza_d3", "Influenza_d6", "Influenza_d30",
+    "OP_low", "OP_med", "OP_high"
+  )
+)
+ggsave(stacked, file = paste0(outputDir, "Plots/cellTypeProportion_stacked.pdf"), width = 13, height = 10)
 
 
 # save the project to the subdirectory

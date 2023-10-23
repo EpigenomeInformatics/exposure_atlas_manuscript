@@ -8,8 +8,8 @@
 
 ## Load Libraries
 suppressPackageStartupMessages({
-library(ArchR)
-library(dplyr)
+  library(ArchR)
+  library(dplyr)
 })
 set.seed(12) # set seed
 
@@ -20,7 +20,7 @@ addArchRGenome("hg38") # set the reference genome
 outputDir <- "/icbb/projects/igunduz/archr_project_011023/"
 
 # load the project and cell annotation table
-project <- ArchR::loadArchRProject(outputDir,showLogo=FALSE)
+project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 
 # add iterative LSI
 project <- addIterativeLSI(
@@ -38,6 +38,28 @@ project <- addIterativeLSI(
   saveIterations = TRUE,
   nPlot = 100000
 )
+
+# add clusters
+project <- addClusters(
+  input = project,
+  reducedDims = "IterativeLSI",
+  method = "Seurat",
+  force = TRUE,
+  name = "Clusters",
+  resolution = 0.8
+)
+
+# add umap
+project <- addUMAP(
+  ArchRProj = project,
+  reducedDims = "IterativeLSI",
+  name = "UMAP",
+  force = TRUE,
+  nNeighbors = 40,
+  minDist = 0.5,
+  metric = "cosine"
+)
+
 
 ## Apply batch correction using Harmony
 # perform harmony
@@ -92,6 +114,27 @@ har_umapsg <- plotEmbedding(
 # save the UMAP plots
 plotPDF(har_umapc, har_umapc, har_umapsg, har_umaps,
   name = "Harmony-Plots-Samples-Clusters-Tile-Matrix.pdf",
+  ArchRProj = project, addDOC = FALSE, width = 5, height = 5
+)
+
+
+u1 <- plotEmbedding(
+  ArchRProj = project,
+  colorBy = "cellColData",
+  name = "Clusters",
+  embedding = "UMAP"
+)
+
+u2 <- plotEmbedding(
+  ArchRProj = project,
+  colorBy = "cellColData",
+  name = "sample_exposure_type",
+  embedding = "UMAP"
+)
+
+# save the UMAP plots
+plotPDF(u1, u2,
+  name = "Harmony-Plots-Samples-Clusters-Tile-Matrix-NO-HARMONY.pdf",
   ArchRProj = project, addDOC = FALSE, width = 5, height = 5
 )
 
