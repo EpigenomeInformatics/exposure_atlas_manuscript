@@ -9,12 +9,22 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 n <- 1
-harmony <- "withHARMONY"
+harmony <- "withHARMONY_mono_sub"
 
 addArchRThreads(threads = 30) # set the cores
 project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 mpal <- readRDS(mpal_dir) # Summarised experiment containing counts and metadata for the MPAL data
 # colData(mpal)$BioClassification <- sub(".*_", "", colData(mpal)$BioClassification)
+
+idxSample <- BiocGenerics::which(project$ClusterCellTypes %in% c("DC","Mono_CD14","Mono_CD16"))
+cellsSample <- project$cellNames[idxSample]
+project2 <- project[cellsSample, ]
+
+desired_bio_classes <- c("09_pDC", "10_cDC","11_CD14.Mono.1","12_CD14.Mono.2")
+
+# Subset the object based on the BioClassification column
+subset_mpal <- mpal[, mpal$BioClassification %in% desired_bio_classes]
+
 
 # Filter unknown cells
 # mpal <- mpal[!colData(mpal)$BioClassification== "Unk", ]
@@ -22,8 +32,8 @@ mpal <- readRDS(mpal_dir) # Summarised experiment containing counts and metadata
 logger::log_info(paste0("Setting n to ", n))
 # Project the MPAL data onto the ArchR project
 projected <- projectBulkATAC_vs2(
-  ArchRProj = project,
-  seATAC = mpal,
+  ArchRProj = project2,
+  seATAC = subset_mpal,
   reducedDims = "IterativeLSI",
   embedding = "UMAPHarmony",
   n = n,
@@ -37,8 +47,13 @@ projected <- readRDS(file = paste0("/icbb/projects/igunduz/archr_project_011023/
 colData(mpal)$BioClassification <- sub(".*_", "", colData(mpal)$BioClassification)
 metadata <- as.data.frame(colData(mpal))
 metadata <- dplyr::select(metadata, BioClassification)
-metadata <- dplyr::filter(metadata, BioClassification != "Unk")
+metadata <- dplyr::filter(metadata, BioClassification %in% c("cDC","CD14.Mono.1","CD14.Mono.2"))#!= "Unk")
 metadata$Type <- rownames(metadata)
+
+projected[[2]]$CellTypes <- project$ClusterCellTypes
+projected[[2]] <- as.data.frame(projected[[2]])
+projected[[2]] <- dplyr::filter(projected[[2]], CellTypes %in% c("Mono_CD14","Mono_CD16"))#!= "Unk")
+projected[[2]] <- dplyr::select(projected[[2]], UMAP1, UMAP2,Type)
 
 projected[[1]] <- merge(metadata, as.data.frame(projected[[1]]), by = "Type")
 projected[[1]] <- dplyr::select(projected[[1]], BioClassification, UMAP1, UMAP2)
@@ -51,5 +66,5 @@ pal <- paletteDiscrete(unique(as.vector(plotProj[, 3])))
 pal["scATAC"] <- "lightgrey"
 p <- ggPoint(plotProj[, 1], plotProj[, 2], as.vector(plotProj[, 3]), rastr = TRUE, pal = pal)
 
-ggsave(paste0("/icbb/projects/igunduz/Plot-Bulk-Heme-Overlay-Projection_n", n, "_", harmony, "v2.pdf"), plot = p, width = 10, height = 10)
+ggsave(paste0("/icbb/projects/igunduz/Plot-Bulk-Heme-Overlay-Projection_n", n, "_", harmony, "sub.pdf"), plot = p, width = 10, height = 10)
 ggsave(paste0("/icbb/projects/igunduz/Plot-Bulk-Heme-Overlay-Projection_n", n, "_", harmony, "v2.jpeg"), plot = p, width = 10, height = 10)

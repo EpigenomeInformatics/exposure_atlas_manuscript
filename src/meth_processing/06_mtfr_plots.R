@@ -13,6 +13,7 @@ suppressPackageStartupMessages({
   library(JASPAR2020)
   library(TFBSTools)
   library(ArchR)
+  library(muRtools)
 })
 set.seed(42)
 
@@ -25,6 +26,7 @@ ds_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_
 source("/icbb/projects/igunduz/sc_epigenome_exp/utils/mtfr_plots_helpers.R")
 source("/icbb/projects/igunduz/sc_epigenome_exp/utils/chraccr.R")
 source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/methyltfr_utils.R")
+source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/mtfr_plots_helpers.R")
 
 logger.start("Reading methylTFR deviations")
 mtfr_devs <- list.files(mtfr_dir, pattern = cell, full.names = TRUE)
@@ -70,7 +72,6 @@ cvd <- ChrAccR:::getChromVarDev(ds, "archr_peaks", motifs = motifPFMatrixList)
 logger.info(c("Saving chromvar object: ", paste0(ds_dir, "chromvar_diffs_jaspar2020.rds")))
 # saveRDS(cvd,paste0(ds_dir,"chromvar_diffs_mono_clust.rds"))
 saveRDS(cvd, paste0(ds_dir, "chromvar_diffs_jaspar2020_rawds.rds"))
-
 logger.start("Running differential analysis")
 chromvar_mat <- chromVAR::deviations(cvd)
 chromvar_mat <- as.data.frame(chromvar_mat)
@@ -126,7 +127,7 @@ mtfr_devs <- mtfr_devs[motifs, ]
 hm_mtfr <- deviationHeatmap(mtfr_devs, ann, cluster_rows = TRUE)
 logger.completed()
 
-logger.info("Plotting the heatmap for methylTFR")
+logger.info("Plotting the heatmap for methylTFR") 
 pdf(paste0(ds_dir, "mtfr_diff_pheatmap.pdf"), width = 20, height = 20)
 draw(hm_mtfr$hm)
 dev.off()
@@ -388,7 +389,7 @@ logger.completed()
 logger.start("Correlation analysis between chromVAR and methylTFR")
 sub_mtfr <- groupMat # [motifs,]
 chromvar <- data.frame(
-  B_cell = rowMeans(zmat[, c(1:2)]),
+  B_cell = zmat[, "B_mem"],#rowMeans(zmat[, c(1:2)]),
   Monocyte = rowMeans(zmat[, c(4:5)]),
   NK_cell = zmat[, "NK_CD16"],
   Tc_Mem = zmat[, "T_mem_CD8"],
@@ -411,7 +412,7 @@ cormat <- cor(chromvar, methyltfr)
 
 d <- data.frame(cor = diag(cormat))
 rownames(d) <- colnames(chromvar)
-neg_cor <- dplyr::filter(d, cor < -0.7)
+neg_cor <- dplyr::filter(d, cor <= -0.65)
 c <- apply(chromvar, 2, as.numeric)
 m <- apply(methyltfr, 2, as.numeric)
 c <- c[, rownames(neg_cor)]
@@ -429,11 +430,6 @@ rownames(ml) <- rownames(mr) <- rownames(chromvar)
 mr <- t(mr)
 ml <- t(ml)
 
-# cs <- colpal.cont(9, "cb.Reds")
-# cs <- circlize::colorRamp2(seq(round(min(ml))-1, round(max(ml))+1, length.out = length(cs)), cs)
-# csr <- colpal.cont(9, "cb.Purples")
-# csr <- circlize::colorRamp2(seq(round(min(mr))-1, round(max(mr))+1, length.out = length(csr)), csr)
-
 cell_type <- c(
   "B_cell" = "#AE017E",
   "Monocyte" = "#CC4C02",
@@ -442,6 +438,56 @@ cell_type <- c(
   "Tc_Mem" = "#4292C6",
   "T_naive" = "#888FB5"
 )
+
+#cs <- colpal.cont(9, "cb.Reds")
+#colors.cv <- ChrAccR::getConfigElement("colorSchemesCont")
+#colors.cv <- colors.cv[[".default.div"]]
+#csl <- circlize::colorRamp2(seq(round(min(ml))-1, round(max(ml))+1, length.out = length(colors.cv )), colors.cv )
+
+cs_col <- colpal.cont(9,  "cptcity.jjg_misc_temperature")
+#cs <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
+#csl <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
+
+cs <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
+csl <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
+
+ann <- data.frame(Cell = colnames(mr))
+rownames(ann) <- colnames(mr)
+
+heatmap_result <- deviationW2annotHeatmap(
+  mat = mr,
+  ann_df = ann,
+  cluster_col = "Cell",
+  fill_col_cell_type = cell_type, # Assuming you have colors in ann$CellType
+  # fill_col_condition = exposure_colors, # Assuming you have colors in ann$Condition
+  colors = "cptcity.arendal_temperature",
+  clustering_method = "within",
+  cluster_rows = FALSE#,
+  #row_order = motifs
+)
+
+# Plot the heatmap
+pdf("/icbb/projects/igunduz/mtfr_heatmap_zscore_vs2.pdf", width = 20, height = 20)
+draw(heatmap_result$hm)
+dev.off()
+
+heatmap_result <- deviationW2annotHeatmap(
+  mat = ml,
+  ann_df = ann,
+  cluster_col = "Cell",
+  fill_col_cell_type = cell_type, # Assuming you have colors in ann$CellType
+  # fill_col_condition = exposure_colors, # Assuming you have colors in ann$Condition
+  colors = "cptcity.arendal_temperature",
+  clustering_method = "within",
+  cluster_rows = FALSE,
+  package = "chromVAR"
+  #row_order = motifs
+)
+
+# Plot the heatmap
+pdf("/icbb/projects/igunduz/cvar_heatmap_zscore_vs2.pdf", width = 20, height = 20)
+draw(heatmap_result$hm)
+dev.off()
 
 colAnnot <- HeatmapAnnotation(
   Cells = colnames(mr),
@@ -453,9 +499,10 @@ colAnnot <- HeatmapAnnotation(
 
 hmap_cm <- diagDivCellHeatmap(ml, mr,
   top_annotation = colAnnot,
-  name.l = "chromVAR <- methylTFR",
-  name.r = "methylTFR <- chromVAR"
-) # ,col.r = csr,col.l = cs)
+  name.l = "chromVAR",
+  name.r = "methylTFR",
+  ,col.r= cs,col.l = csl)
+#) # ,col.r = csr,col.l = cs)
 
 pdf("/icbb/projects/igunduz/correlation_heatmap.pdf", width = 20, height = 20)
 draw(hmap_cm)
@@ -567,3 +614,4 @@ heatmap_result <- deviationW2annotHeatmap(
 pdf("/icbb/projects/igunduz/figure_1_mtfr_heatmap_zscore.pdf", width = 20, height = 20)
 draw(heatmap_result$hm)
 dev.off()
+
