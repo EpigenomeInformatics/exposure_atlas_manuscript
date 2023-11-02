@@ -10,16 +10,16 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(muLogR)
   library(rescueR)
-  library(JASPAR2020)
-  library(TFBSTools)
+ # library(JASPAR2020)
+#  library(TFBSTools)
   library(ArchR)
   library(muRtools)
 })
 set.seed(42)
 
 logger.info("Starting analysis for Monocyte in chromVAR and methylTFR")
-mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/jaspar2020"
-# mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/ClustResults"
+mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/jaspar2020_271023"
+#mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/ClustResults_271023"
 cell <- "Monocyte"
 condition <- c("C19_ctrl", "C19_sev")
 ds_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/Mono_CD14/data/"
@@ -34,16 +34,17 @@ mtfr_devs <- list.files(mtfr_dir, pattern = cell, full.names = TRUE)
 mtfr_devs <- rlist::list.cbind(lapply(condition, function(x) {
   readRDS(mtfr_devs[grepl(x, mtfr_devs)])
 }))
+
 mtfr_devs <- as.data.frame(mtfr_devs)
 logger.completed()
 
-tf_bindsites <- readRDS("/icbb/projects/igunduz/annotation/methylTFRAnnotationHg38/inst/extdata/jaspar2020_tf_bindsites.rds")
-rownames(mtfr_devs) <- names(tf_bindsites)
+#tf_bindsites <- readRDS("/icbb/projects/igunduz/annotation/methylTFRAnnotationHg38/inst/extdata/jaspar2020_tf_bindsites.rds")
+#rownames(mtfr_devs) <- names(tf_bindsites)
 logger.info("Reading sample annotation")
 sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
 groups <- sannot$C19_sev_vs_Ctrl
 logger.start("Computing differential deviations")
-diffm <- computeL2FCdevs(deviations = mtfr_devs, computezscore = TRUE, group = groups)
+diffm <- computeL2FCdevs_vs2(deviations = as.matrix(mtfr_devs), computezscore = TRUE, group = groups)
 logger.completed()
 
 
@@ -77,7 +78,8 @@ chromvar_mat <- chromVAR::deviations(cvd)
 chromvar_mat <- as.data.frame(chromvar_mat)
 # rownames(chromvar_mat) <- sub(".*_", "", rownames(chromvar_mat))
 groups <- ifelse(grepl("ctrl", colnames(chromvar_mat)), "C19_ctrl", "C19_sev")
-diff <- computeL2FCdevs(deviations = chromvar_mat, computezscore = TRUE, grp1name = "ctrl", group = groups)
+diff <- computeL2FCdevs_vs2(deviations = as.matrix(chromvar_mat), computezscore = TRUE,
+ grp1name = "ctrl", group = groups)#,chromvar_obj=cvd)
 
 
 diff$isDiff_1 <- ifelse(diff$p_value_adjusted < 0.05, TRUE, FALSE)

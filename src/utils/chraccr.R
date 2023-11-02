@@ -20,20 +20,20 @@ plotMAwithChrAccR <- function(cell, outputDir, i, region) {
 
 ### Scatter plot of log2FoldChange per two group condition
 ### Written by: Irem B. Gündüz
-plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, label = FALSE,
-                            meth_label = "differential in METH", atac_label = "differential in ATAC") {
+plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, textsize = 10, point_size = 3, label = FALSE, 
+                            meth_label = "differential in METH", atac_label = "differential in ATAC", max_overlaps = 500) {
   p1 <- ggplot(datatable, aes(
     x = .data[[group1]], y = .data[[group2]],
-    fill = interaction(isDiff_1, isDiff_2, sep = "-", lex.order = TRUE)
+    color = interaction(isDiff_1, isDiff_2, sep = "-", lex.order = TRUE)
   )) +
-    geom_hex(bins = 150) +
+    geom_point(size = point_size) +
     theme_classic() +
     ylab(y_lab) +
     xlab(x_lab) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_vline(xintercept = 0, linetype = "dashed") +
     theme(legend.position = "bottom", axis.title = element_text(size = 16), legend.text = element_text(size = 14)) +
-    scale_fill_manual(paste0("Is differential? ", comb),
+    scale_color_manual(paste0("Is differential? ", comb),
       values = c("#a6cee3", "#006400", "#1a1ce3", "#e31a1c"),
       labels = c("Not Differential", meth_label, atac_label, "differential in both")
     ) +
@@ -43,10 +43,12 @@ plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, label
       geom_text_repel(
         data = datatable[datatable$isDiff_1 | datatable$isDiff_2, ],
         aes(x = .data[[group1]], y = .data[[group2]], label = name),
-        color = "black", size = 10, box.padding = 0.5,
-        segment.color = "black", segment.size = 0.1 # Decreased line thickness
-      ) # Add lines and adjust line size
+        color = "black", size = textsize, box.padding = 0.5,
+        segment.color = "black", segment.size = 0.1,
+        max.overlaps = max_overlaps  # Increase max.overlaps as needed
+      )
   }
+  ChrAccR:::cleanMem()
   return(p1)
 }
 

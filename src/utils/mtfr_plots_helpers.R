@@ -1,4 +1,4 @@
-computeL2FCdevs <- function(deviations, grp1name = NULL ,computezscore = FALSE, differential_deviation_test = TRUE,
+computeL2FCdevs_vs2 <- function(deviations, grp1name = NULL ,computezscore = FALSE, differential_deviation_test = TRUE,
                           alternative = c("two.sided"), group = NULL, parametric = TRUE,chromvar_obj=NULL) {
   if(is.null(row.names(deviations))){
     stop("Please provide motifs as rownames in deviations data.frame!")
@@ -22,7 +22,7 @@ computeL2FCdevs <- function(deviations, grp1name = NULL ,computezscore = FALSE, 
     sidx.grp2 <- which(group == grp2name)
   }
   # run differential deviation test
-  diff <- methylTFR::differential_deviation_test(deviations, groups = group, parametric = parametric, alternative = alternative)
+  diff <- methylTFR:::differential_deviation_test(deviations, groups = group, parametric = parametric, alternative = alternative)
   colnames(diff) <- c("motifs", "p_value", "p_value_adjusted")
 
   # Subset the matrix based on the group columns
@@ -45,7 +45,7 @@ computeL2FCdevs <- function(deviations, grp1name = NULL ,computezscore = FALSE, 
     if(!is.null(chromvar_obj)){
       deviations <-  chromVAR::deviationScores(chromvar_obj)
     }else{
-      deviations <- rescueR::computeZScore(deviations)
+      deviations <- methylTFR:::computeZScore(deviations)
     }
     deviations <- as.data.frame(deviations)
     rownames(deviations) <- NULL

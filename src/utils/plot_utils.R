@@ -134,7 +134,7 @@ rnbeadsDensityScatter <- function(cell, comp, path, region) {
       ) +
         labs(x = paste("Mean-Methylation (", grp.names[2], ")", sep = " "), y = paste("Mean-Methylation (", grp.names[1], ")", sep = "  ")) +
         coord_fixed() +
-        theme_bw() +
+        theme_classic() +
         theme(legend.position = "none")
     }
     ChrAccR:::cleanMem()
