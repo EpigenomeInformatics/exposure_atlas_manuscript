@@ -1,7 +1,6 @@
 # Compute the z-score, helper for clusterATACzscores
 computeZScore <- function(counts) {
-  counts <- DelayedArray::DelayedArray(counts)
-  counts <- (counts - DelayedMatrixStats::rowMeans2(counts)) / DelayedMatrixStats::rowSds(counts)
+  counts <- (counts - matrixStats::rowMeans2(counts)) /matrixStats::rowSds(counts)
   counts[base::is.nan(counts)] <- 0
   return(counts)
 }

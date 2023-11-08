@@ -17,6 +17,7 @@ suppressPackageStartupMessages({
 
 # Load the functions
 source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/plot_utils.R")
+source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/chraccr.R")
 
 cells <- data.table::fread("/icbb/projects/igunduz/DARPA/allc_sample_annot_final.csv") %>%
   dplyr::select(!V1) %>%

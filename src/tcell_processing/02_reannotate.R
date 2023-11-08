@@ -139,8 +139,7 @@ table(project$TcellSub)
 
 cell <- as.data.frame(project@cellColData)%>%
   dplyr::filter(!sample_exposure_group %in% c("BA_na","BA_vac")) 
-
-cell <- table(cell$TcellSub,cell$sample_exposure_group)
+cell <- table(cell$predictedGroup_tcell_final,cell$sample_exposure_group)
 cell <- as.matrix(cell)
 cell <- scale(cell, center=FALSE, scale=colSums(cell))
 cell <- reshape2::melt(cell)
@@ -151,11 +150,13 @@ cell$Exposure <- factor(cell$Exposure, levels=c("C19_ctrl","C19_mild","C19_mod",
                             "HIV_ctrl","HIV_acu","HIV_chr","Influenza_ctrl",
                             "Influenza_d3","Influenza_d6","Influenza_d30",
                             "OP_low","OP_med","OP_high"))
+cell_type_colors <- c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#6b5b95", "#4f8f6f", "#ff6b6b", "#ffa07a", "#20b2aa", "#9370db", "#32cd32", "#ff1493")
+cell_type_colors <- c("#1f77b4", "#ff7f0e", "#e377c2", "#20b2aa", "#6b5b95", "#4f8f6f", "#2ca02c", "#32cd32", "#d62728", "#1f77b4", "#ff7f0e", "#9370db", "#ff6b6b", "#1f77b4", "#7f7f7f", "#2ca02c", "#e377c2", "#ff1493")
 
 #custom_palette <- c("#08519c", "#3182bd", "#6baed6", "#1b7837", "#5aae61", "#a6dba0", "#762a83", "#c2a5cf")
 stacked <- ggplot(cell, aes(fill=CellTypes, y=FractionOfCells, x=Exposure)) + 
     geom_bar(position="fill", stat="identity")+
-    scale_fill_manual(values=colpal.bgp2 )+
+    scale_fill_manual(values=cell_type_colors)+
       labs(x = "Exposure Type",
        y = "Cell Fractions")+ 
      theme_minimal()+

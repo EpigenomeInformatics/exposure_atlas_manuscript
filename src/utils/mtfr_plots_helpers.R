@@ -1,5 +1,5 @@
-computeL2FCdevs_vs2 <- function(deviations, grp1name = NULL ,computezscore = FALSE, differential_deviation_test = TRUE,
-                          alternative = c("two.sided"), group = NULL, parametric = TRUE,chromvar_obj=NULL) {
+computeL2FCdevs_vs2 <- function(deviations,computezscore = FALSE, differential_deviation_test = TRUE,
+                          alternative = c("two.sided"), group = NULL, parametric = TRUE,chromvar_obj=NULL,grp1name=NULL,grp2name=NULL) {
   if(is.null(row.names(deviations))){
     stop("Please provide motifs as rownames in deviations data.frame!")
   }
@@ -16,8 +16,9 @@ computeL2FCdevs_vs2 <- function(deviations, grp1name = NULL ,computezscore = FAL
     stop("Please provide a logical value for computezscore!")
   }
   if (!is.null(group)) {
-    grp1name <- unique(group)[1]
-    grp2name <- unique(group)[2]
+    unique_groups <- unique(group)
+    grp1name <- unique_groups[grep("trl$", unique_groups)]
+    grp2name <- unique_groups[which(unique_groups != grp1name)]
     sidx.grp1 <- which(group == grp1name)
     sidx.grp2 <- which(group == grp2name)
   }

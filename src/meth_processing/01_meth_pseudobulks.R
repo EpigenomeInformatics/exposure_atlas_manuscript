@@ -73,11 +73,17 @@ for (cell in cells) {
     stop("Missing input files for samples: ", paste(missingSamples, collapse = ", "))
   }
   logger::log_success("Located all of the samples.")
-  comparasions <- c(
+  # write sampleannot as tsv
+  write.table(sampleann, file = paste0(outputDir, "/", cell, "_sampleannot.tsv"), quote = FALSE, sep = "\t", col.names = T, row.names = FALSE)
+  logger::log_success("Created sample annotation for ", cell)
+}
+
+#####################################################################
+    comparasions <- c(
     "C19_mild_vs_Ctrl", "C19_sev_vs_Ctrl", "HIV_acu_vs_Ctrl", "Influenza_ctrl_vs_d30",
     "HIV_chr_vs_Ctrl", "OP_high_vs_low", "OP_high_vs_med", "OP_low_vs_med"
   )
-
+  
   for (comp in comparasions) {
     # write sampleannot as tsv
     sampleann %>%
@@ -86,9 +92,3 @@ for (cell in cells) {
       arrange(desc(row_number())) %>%
       write.table(file = paste0(outputDir, "/", cell, "_", comp, "_sampleannot.tsv"), quote = FALSE, sep = "\t", col.names = T, row.names = FALSE)
   }
-  # write sampleannot as tsv
-  write.table(sampleann, file = paste0(outputDir, "/", cell, "_sampleannot.tsv"), quote = FALSE, sep = "\t", col.names = T, row.names = FALSE)
-  logger::log_success("Created sample annotation for ", cell)
-}
-
-#####################################################################

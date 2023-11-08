@@ -44,7 +44,7 @@ logger.info("Reading sample annotation")
 sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
 groups <- sannot$C19_sev_vs_Ctrl
 logger.start("Computing differential deviations")
-diffm <- computeL2FCdevs_vs2(deviations = as.matrix(mtfr_devs), computezscore = TRUE, group = groups)
+diffm <- computeL2FCdevs_vs2(deviations = as.matrix(rev(mtfr_devs)), computezscore = TRUE, group = groups,parametric=T)
 logger.completed()
 
 
@@ -78,13 +78,13 @@ chromvar_mat <- chromVAR::deviations(cvd)
 chromvar_mat <- as.data.frame(chromvar_mat)
 # rownames(chromvar_mat) <- sub(".*_", "", rownames(chromvar_mat))
 groups <- ifelse(grepl("ctrl", colnames(chromvar_mat)), "C19_ctrl", "C19_sev")
-diff <- computeL2FCdevs_vs2(deviations = as.matrix(chromvar_mat), computezscore = TRUE,
- grp1name = "ctrl", group = groups)#,chromvar_obj=cvd)
+diff <- computeL2FCdevs_vs2(deviations = as.matrix(chromvar_mat), computezscore = TRUE,parametric=TRUE,
+ #grp1name = "C19_ctrl", grp2name="C19_sev",
+ group = groups,chromvar_obj=cvd)
 
 
 diff$isDiff_1 <- ifelse(diff$p_value_adjusted < 0.05, TRUE, FALSE)
 diffm$isDiff_2 <- ifelse(diffm$p_value_adjusted < 0.05, TRUE, FALSE)
-
 
 # merge the two matrices
 diff <- diff[, c("motifs", "zDiff", "isDiff_1")]
@@ -92,8 +92,18 @@ colnames(diff) <- c("name", "zDiff_chromvar", "isDiff_1")
 diffm <- diffm[, c("motifs", "zDiff", "isDiff_2")]
 colnames(diffm) <- c("name", "zDiff_methylTFR", "isDiff_2")
 merged <- merge(diff, diffm, by = "name")
+
+merged_orig <- merged
 # organise motifnames in merged
 merged$name <- sub("_.*", "", merged$name)
+
+#organize motif names
+merged$name <- sub("\\.var.*", "", merged$name)
+merged$name <- sub(".*\\.\\.", "", merged$name)
+
+#set threshold for chromvar 
+#merged$zDiff_chromvar[abs(merged$zDiff_chromvar) > ] <- NA
+#merged <- merged[complete.cases(merged), ]
 
 # Call the plotScatterL2FC function with the merged data
 l2fcmc <- plotScatterL2FC(
@@ -103,23 +113,35 @@ l2fcmc <- plotScatterL2FC(
   comb = "Comparison",
   group1 = "zDiff_chromvar",
   group2 = "zDiff_methylTFR",
-  label = TRUE # ,
+  label = TRUE,
+  max_overlaps = 15# ,
   # textsize= 20,
   # bins=50
 )
 cor(merged$zDiff_chromvar, merged$zDiff_methylTFR)
 logger.info("Plotting scatter plot")
-ggsave(paste0("/icbb/projects/igunduz/Figures/chromvar_mtfr_scatter_mono_jaspar2020.pdf"), l2fcmc, width = 10, height = 10)
+ggsave(paste0("/icbb/projects/igunduz/Figures/chromvar_mtfr_scatter_mono_jaspar2020vs2.pdf"), l2fcmc, width = 10, height = 10)
 
-sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
-groups <- sannot$C19_sev_vs_Ctrl
-diffm <- computeL2FCdevs(deviations = mtfr_devs, computezscore = TRUE, group = groups)
-diffm$isDiff_2 <- ifelse(diffm$p_value_adjusted < 0.05, TRUE, FALSE)
-motifs <- rownames(diffm)[diffm$isDiff_2]
+merged <- merged_orig
+#subset merged based on diffs
+merged <- merged[merged$isDiff_1 | merged$isDiff_2, ]
+#subset based on negative zdiff on chromvar positive on methylTFR
+merged_an <- merged[merged$zDiff_chromvar < 0 & merged$zDiff_methylTFR > 0, ]
+#subset based on positive zdiff on chromvar negative on methylTFR
+merged_an2 <- merged[merged$zDiff_chromvar > 0 & merged$zDiff_methylTFR < 0, ]
+#merge them together
+merged_an <- rbind(merged_an, merged_an2)
+motifs <- merged_an$name
+
+#sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
+#groups <- sannot$C19_sev_vs_Ctrl
+#diffm <- computeL2FCdevs_vs2(deviations = as.matrix(rev(mtfr_devs)), computezscore = TRUE, group = groups)
+#diffm$isDiff_2 <- ifelse(diffm$p_value_adjusted < 0.05, TRUE, FALSE)
+#motifs <- rownames(diffm)[diffm$isDiff_2]
 
 logger.start("Plotting the heatmap for methylTFR")
 # mtfr_devs <- mtfr_devs[motifs,]
-mtfr_devs <- computeZScore(as.matrix(mtfr_devs))
+mtfr_devs <- methylTFR:::computeZScore(as.matrix(mtfr_devs))
 mtfr_devs <- as.data.frame(mtfr_devs)
 # rownames(mtfr_devs) <- names(tf_bindsites)
 logger.info("Create a data frame for the samples' conditions")
@@ -138,7 +160,7 @@ dev.off()
 
 logger.start("Plotting the heatmap for chromVAR")
 logger.info("Subset chromVAR matrix for differentials")
-chromvar_mat <- computeZScore(chromVAR::deviationScores(cvd))
+chromvar_mat <- chromVAR::deviationScores(cvd)#computeZScore(chromVAR::deviations(cvd))
 chromvar_mat <- chromvar_mat[motifs, ]
 chromvar_mat <- as.data.frame(chromvar_mat)
 logger.info("Create a data frame for the samples' conditions")
@@ -189,7 +211,7 @@ cellsSample <- project$cellNames[idxSample]
 project <- project[cellsSample, ]
 
 logger.start("Looking into variable z-scores using chromVAR")
-pseudo_chrom <- ArchR::getGroupSE(project, "altiusMatrix", groupBy = "ClusterCellTypes", divideN = TRUE)
+pseudo_chrom <- ArchR::getGroupSE(project, "altiusMatrix", groupBy = "ClusterCellTypes", divideN = T)
 seZ <- pseudo_chrom[rowData(pseudo_chrom)$seqnames == "z", ]
 zmat <- assay(seZ)
 # zmat <- computeZScore(zmat)
@@ -241,7 +263,7 @@ project <- addCellColData(
   name = "pseudo_group", cells = project$cellNames, force = T
 )
 
-pseudo_chrom <- ArchR::getGroupSE(project, "altiusMatrix", groupBy = "pseudo_group", divideN = FALSE)
+pseudo_chrom <- ArchR::getGroupSE(project, "altiusMatrix", groupBy = "pseudo_group", divideN = F)
 seZ <- pseudo_chrom[rowData(pseudo_chrom)$seqnames == "deviations", ]
 mat <- assay(seZ)
 rownames(mat) <- rowData(seZ)$name
@@ -347,24 +369,24 @@ logger.completed()
 
 logger.start("Running z-score analysis using methylTFR")
 
-logger.info("Dividing the matrix by the number of cells in each cluster")
-nCells <- table(cell)
-groupMat <- t(mtfr_devs) / as.vector(nCells)
-groupMat <- as.data.frame(t(groupMat))
+#logger.info("Dividing the matrix by the number of cells in each cluster")
+#nCells <- table(cell)
+#groupMat <- t(mtfr_devs) / as.vector(nCells)
+#groupMat <- as.data.frame(t(groupMat))
 
 groupMat <- mtfr_devs
-groupMat <- computeZScore(as.matrix(groupMat))
+#groupMat <- computeZScore(as.matrix(groupMat))
 groupMat <- as.data.frame(t(groupMat))
 
 groupMat$Cell <- cell
-groupMat <- aggregate(. ~ Cell, data = groupMat, FUN = median)
+groupMat <- aggregate(. ~ Cell, data = groupMat, FUN = sum)
 groupMat <- as.data.frame(t(groupMat))
 colnames(groupMat) <- groupMat[1, ]
 groupMat <- groupMat[-1, ]
 groupMat <- apply(groupMat, 2, as.numeric)
 rownames(groupMat) <- rownames(mtfr_devs)
 logger.completed()
-
+groupMat <- computeZScore(as.matrix(groupMat))
 
 logger.info("Successfully read all the methylTFR deviations")
 ann <- data.frame(Cell = colnames(groupMat))
@@ -414,7 +436,7 @@ cormat <- cor(chromvar, methyltfr)
 
 d <- data.frame(cor = diag(cormat))
 rownames(d) <- colnames(chromvar)
-neg_cor <- dplyr::filter(d, cor <= -0.65)
+neg_cor <- dplyr::filter(d, cor <= -0.5)
 c <- apply(chromvar, 2, as.numeric)
 m <- apply(methyltfr, 2, as.numeric)
 c <- c[, rownames(neg_cor)]

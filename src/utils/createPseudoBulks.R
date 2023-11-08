@@ -187,7 +187,6 @@ aggregateALLCSamples <- function(files, excludeChr, singleCovOff, group, group2,
 }
 
 # A helper for pseudobulks,converts and exports GRanges objects
-# Irem B. Gunduz
 #
 makeGRanges <- function(meth, group, group2, outputDir) {
   # Add empty strand column
