@@ -18,15 +18,15 @@ suppressPackageStartupMessages({
 set.seed(42)
 
 logger.info("Starting analysis for Monocyte in chromVAR and methylTFR")
-mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/jaspar2020_271023"
-#mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/ClustResults_271023"
+mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updated_jaspar2020_091123"
+#mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updatedClustResults_071023"
 cell <- "Monocyte"
 condition <- c("C19_ctrl", "C19_sev")
 ds_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/Mono_CD14/data/"
 source("/icbb/projects/igunduz/sc_epigenome_exp/utils/mtfr_plots_helpers.R")
-source("/icbb/projects/igunduz/sc_epigenome_exp/utils/chraccr.R")
 source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/methyltfr_utils.R")
 source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/mtfr_plots_helpers.R")
+source("/icbb/projects/igunduz/sc_epigenome_exp/utils/chraccr.R")
 
 logger.start("Reading methylTFR deviations")
 mtfr_devs <- list.files(mtfr_dir, pattern = cell, full.names = TRUE)
@@ -80,7 +80,7 @@ chromvar_mat <- as.data.frame(chromvar_mat)
 groups <- ifelse(grepl("ctrl", colnames(chromvar_mat)), "C19_ctrl", "C19_sev")
 diff <- computeL2FCdevs_vs2(deviations = as.matrix(chromvar_mat), computezscore = TRUE,parametric=TRUE,
  #grp1name = "C19_ctrl", grp2name="C19_sev",
- group = groups,chromvar_obj=cvd)
+ group = groups)#,chromvar_obj=cvd)
 
 
 diff$isDiff_1 <- ifelse(diff$p_value_adjusted < 0.05, TRUE, FALSE)
@@ -114,13 +114,13 @@ l2fcmc <- plotScatterL2FC(
   group1 = "zDiff_chromvar",
   group2 = "zDiff_methylTFR",
   label = TRUE,
-  max_overlaps = 15# ,
+  max_overlaps = 14# ,
   # textsize= 20,
   # bins=50
 )
 cor(merged$zDiff_chromvar, merged$zDiff_methylTFR)
 logger.info("Plotting scatter plot")
-ggsave(paste0("/icbb/projects/igunduz/Figures/chromvar_mtfr_scatter_mono_jaspar2020vs2.pdf"), l2fcmc, width = 10, height = 10)
+ggsave(paste0("/icbb/projects/igunduz/Figures/chromvar_mtfr_scatter_mono_jaspar2020.pdf"), l2fcmc, width = 10, height = 10)
 
 merged <- merged_orig
 #subset merged based on diffs

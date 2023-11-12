@@ -18,13 +18,14 @@ mpal <- readRDS(mpal_dir) # Summarised experiment containing counts and metadata
 
 idxSample <- BiocGenerics::which(project$ClusterCellTypes %in% c("DC","Mono_CD14","Mono_CD16"))
 cellsSample <- project$cellNames[idxSample]
-project2 <- project[cellsSample, ]
+project <- project[cellsSample, ]
 
-desired_bio_classes <- c("09_pDC", "10_cDC","11_CD14.Mono.1","12_CD14.Mono.2")
+desired_bio_classes <- c("10_cDC","11_CD14.Mono.1","12_CD14.Mono.2",
+"05_CMP.LMPP","01_HSC","08_GMP.Neut",
+"07_GMP")
 
 # Subset the object based on the BioClassification column
 subset_mpal <- mpal[, mpal$BioClassification %in% desired_bio_classes]
-
 
 # Filter unknown cells
 # mpal <- mpal[!colData(mpal)$BioClassification== "Unk", ]
@@ -32,7 +33,7 @@ subset_mpal <- mpal[, mpal$BioClassification %in% desired_bio_classes]
 logger::log_info(paste0("Setting n to ", n))
 # Project the MPAL data onto the ArchR project
 projected <- projectBulkATAC_vs2(
-  ArchRProj = project2,
+  ArchRProj = project,
   seATAC = subset_mpal,
   reducedDims = "IterativeLSI",
   embedding = "UMAPHarmony",
@@ -47,12 +48,13 @@ projected <- readRDS(file = paste0("/icbb/projects/igunduz/archr_project_011023/
 colData(mpal)$BioClassification <- sub(".*_", "", colData(mpal)$BioClassification)
 metadata <- as.data.frame(colData(mpal))
 metadata <- dplyr::select(metadata, BioClassification)
-metadata <- dplyr::filter(metadata, BioClassification %in% c("cDC","CD14.Mono.1","CD14.Mono.2"))#!= "Unk")
+metadata <- dplyr::filter(metadata, BioClassification %in% c("cDC","CD14.Mono.1","CD14.Mono.2","CMP.LMPP","HSC","GMP.Neut","GMP"))#!= "Unk")
 metadata$Type <- rownames(metadata)
+
 
 projected[[2]]$CellTypes <- project$ClusterCellTypes
 projected[[2]] <- as.data.frame(projected[[2]])
-projected[[2]] <- dplyr::filter(projected[[2]], CellTypes %in% c("Mono_CD14","Mono_CD16"))#!= "Unk")
+projected[[2]] <- dplyr::filter(projected[[2]], CellTypes %in% c("Mono_CD14","Mono_CD16","DC"))#!= "Unk")
 projected[[2]] <- dplyr::select(projected[[2]], UMAP1, UMAP2,Type)
 
 projected[[1]] <- merge(metadata, as.data.frame(projected[[1]]), by = "Type")

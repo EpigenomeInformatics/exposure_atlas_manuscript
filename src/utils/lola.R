@@ -6,17 +6,18 @@ lolaVolcanoPlotC19 <- function(cell, lolaDb, outputDir, pValCut = 2, region = "a
     df <- bed.files$region
     bed <- names(df)
     df <- df[[bed]]$archr_peaks %>%
-      dplyr::filter(collection == database) %>%
-      dplyr::filter(userSet %in% c("rankCut_1000_hyper", "rankCut_1000_hypo")) %>%
-      dplyr::mutate(condition = ifelse(userSet == "rankCut_1000_hyper", "gain", "loss"))
+      dplyr::filter(collection == database) #%>%
+      #dplyr::filter(userSet %in% c("rankCut_500_hyper", "rankCut_500_hypo")) %>%
+      #dplyr::mutate(condition = ifelse(userSet == "rankCut_500_hyper", "gain", "loss"))
     df <- muRtools:::lolaPrepareDataFrameForPlot(lolaDb, df,
       scoreCol = "log2OR", signifCol = signifCol,
       orderCol = "maxRnk", includedCollections = database,
       pvalCut = pValCut, maxTerms = Inf, perUserSet = FALSE,
       groupByCollection = TRUE, orderDecreasing = NULL
     )
+    df$condition <- ifelse(grepl("hypo", df$userSet, ignore.case = TRUE), "loss", "gain")
     df$log2OR <- ifelse(df$condition == "loss", -df$log2OR, df$log2OR)
-    df$name <- df$description
+    df$name <- ifelse(database == "TF_motif_clusters",df$description,df$target)
   } else {
     bed.files <- list.files(paste0(outputDir, cell, "/reports/differential_data"), pattern = "lolaRes", full.names = TRUE)
     bed.files <- grep(bed.files,pattern=region,value=TRUE)
@@ -59,14 +60,16 @@ lolaVolcanoPlotC19 <- function(cell, lolaDb, outputDir, pValCut = 2, region = "a
   top_motifs_gain <- df %>%
     dplyr::filter(differential == "Differential", condition == "gain") %>%
     arrange(desc(qValueLog)) %>%
+    distinct(name, .keep_all = TRUE) %>%
     dplyr::filter(qValueLog > 2) %>%
-    top_n(10, qValueLog)
+    top_n(12, qValueLog)
 
-  top_motifs_loss <- df %>%
+  top_motifs_loss <-  df %>%
     dplyr::filter(differential == "Differential", condition == "loss") %>%
     arrange(desc(qValueLog)) %>%
-    dplyr::filter(qValueLog > 2) %>%
-    top_n(10, qValueLog)
+    distinct(name, .keep_all = TRUE) %>%
+    dplyr::filter(qValueLog > 2)%>%
+    top_n(12, qValueLog)
 
   top_motifs <- bind_rows(top_motifs_gain, top_motifs_loss)
 
