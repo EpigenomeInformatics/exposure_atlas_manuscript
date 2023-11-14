@@ -18,8 +18,8 @@ suppressPackageStartupMessages({
 set.seed(42)
 
 logger.info("Starting analysis for Monocyte in chromVAR and methylTFR")
-mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updated_jaspar2020_091123"
-#mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updatedClustResults_071023"
+mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updated_jaspar2020_121123"
+#mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updated_ClustResults_121123"
 cell <- "Monocyte"
 condition <- c("C19_ctrl", "C19_sev")
 ds_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/Mono_CD14/data/"
@@ -34,7 +34,6 @@ mtfr_devs <- list.files(mtfr_dir, pattern = cell, full.names = TRUE)
 mtfr_devs <- rlist::list.cbind(lapply(condition, function(x) {
   readRDS(mtfr_devs[grepl(x, mtfr_devs)])
 }))
-
 mtfr_devs <- as.data.frame(mtfr_devs)
 logger.completed()
 
@@ -44,7 +43,8 @@ logger.info("Reading sample annotation")
 sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
 groups <- sannot$C19_sev_vs_Ctrl
 logger.start("Computing differential deviations")
-diffm <- computeL2FCdevs_vs2(deviations = as.matrix(rev(mtfr_devs)), computezscore = TRUE, group = groups,parametric=T)
+diffm <- computeL2FCdevs(deviations = as.matrix(rev(mtfr_devs)), 
+computezscore = TRUE, group = groups,parametric=T)
 logger.completed()
 
 
@@ -78,9 +78,9 @@ chromvar_mat <- chromVAR::deviations(cvd)
 chromvar_mat <- as.data.frame(chromvar_mat)
 # rownames(chromvar_mat) <- sub(".*_", "", rownames(chromvar_mat))
 groups <- ifelse(grepl("ctrl", colnames(chromvar_mat)), "C19_ctrl", "C19_sev")
-diff <- computeL2FCdevs_vs2(deviations = as.matrix(chromvar_mat), computezscore = TRUE,parametric=TRUE,
+diff <- computeL2FCdevs(deviations = as.matrix(chromvar_mat), computezscore = TRUE,parametric=TRUE,
  #grp1name = "C19_ctrl", grp2name="C19_sev",
- group = groups)#,chromvar_obj=cvd)
+ group = groups)# ,chromvar_obj=cvd)
 
 
 diff$isDiff_1 <- ifelse(diff$p_value_adjusted < 0.05, TRUE, FALSE)
@@ -141,7 +141,7 @@ motifs <- merged_an$name
 
 logger.start("Plotting the heatmap for methylTFR")
 # mtfr_devs <- mtfr_devs[motifs,]
-mtfr_devs <- methylTFR:::computeZScore(as.matrix(mtfr_devs))
+mtfr_devs <- computeZScore(as.matrix(mtfr_devs))
 mtfr_devs <- as.data.frame(mtfr_devs)
 # rownames(mtfr_devs) <- names(tf_bindsites)
 logger.info("Create a data frame for the samples' conditions")
@@ -152,7 +152,7 @@ hm_mtfr <- deviationHeatmap(mtfr_devs, ann, cluster_rows = TRUE)
 logger.completed()
 
 logger.info("Plotting the heatmap for methylTFR") 
-pdf(paste0(ds_dir, "mtfr_diff_pheatmap.pdf"), width = 20, height = 20)
+pdf(paste0(ds_dir, "mtfr_diff_pheatmap_only_mtfr.pdf"), width = 20, height = 20)
 draw(hm_mtfr$hm)
 dev.off()
 
@@ -170,7 +170,7 @@ rownames(ann) <- colnames(chromvar_mat)
 hm <- deviationHeatmap(chromvar_mat, ann, package = "chromVAR", colors = "cb.BrBG", row_order = hm_mtfr$row_order, cluster_rows = FALSE)
 
 # plot the chromvar heatmap
-pdf(paste0(ds_dir, "chromvar_diff_pheatmap.pdf"), width = 20, height = 20)
+pdf(paste0(ds_dir, "chromvar_diff_pheatmap_only_mtfr.pdf"), width = 20, height = 20)
 draw(hm$hm)
 dev.off()
 logger.completed()

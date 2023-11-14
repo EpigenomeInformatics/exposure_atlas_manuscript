@@ -1,4 +1,4 @@
-computeL2FCdevs_vs2 <- function(deviations,computezscore = FALSE, differential_deviation_test = TRUE,
+computeL2FCdevs <- function(deviations,computezscore = FALSE, differential_deviation_test = TRUE,
                           alternative = c("two.sided"), group = NULL, parametric = TRUE,chromvar_obj=NULL,grp1name=NULL,grp2name=NULL) {
   if(is.null(row.names(deviations))){
     stop("Please provide motifs as rownames in deviations data.frame!")
@@ -46,7 +46,7 @@ computeL2FCdevs_vs2 <- function(deviations,computezscore = FALSE, differential_d
     if(!is.null(chromvar_obj)){
       deviations <-  chromVAR::deviationScores(chromvar_obj)
     }else{
-      deviations <- methylTFR:::computeZScore(deviations)
+      deviations <- computeZScore(deviations)
     }
     deviations <- as.data.frame(deviations)
     rownames(deviations) <- NULL
@@ -214,4 +214,45 @@ diagDivCellHeatmap <- function(ml, mr, col.l=NULL, col.r=NULL, name.l="Lower lef
 	dummyHm <- Heatmap(dummyM, col=colPalLegend_r, width=unit(0, "mm"), name=name.r)
 
 	return(res + dummyHm)
+}
+
+computeZScore <- function(mat) {
+  mat <- (mat - matrixStats::rowMeans2(mat)) / matrixStats::rowSds(mat)
+  mat[base::is.nan(mat)] <- 0
+  return(mat)
+}
+
+
+### Scatter plot of log2FoldChange per two group condition
+### Written by: Irem B. Gündüz
+plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, textsize = 10, point_size = 3, label = FALSE, 
+                            meth_label = "differential in METH", atac_label = "differential in ATAC", max_overlaps = 500) {
+  p1 <- ggplot(datatable, aes(
+    x = .data[[group1]], y = .data[[group2]],
+    color = interaction(isDiff_1, isDiff_2, sep = "-", lex.order = TRUE)
+  )) +
+    geom_point(size = point_size) +
+    theme_classic() +
+    ylab(y_lab) +
+    xlab(x_lab) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_vline(xintercept = 0, linetype = "dashed") +
+    theme(legend.position = "bottom", axis.title = element_text(size = 16), legend.text = element_text(size = 14)) +
+    scale_color_manual(paste0("Is differential? ", comb),
+      values = c("#a6cee3", "#006400", "#1a1ce3", "#e31a1c"),
+      labels = c("Not Differential", meth_label, atac_label, "differential in both")
+    ) +
+    scale_alpha_continuous(range = c(0.1, 1))
+  if (label) {
+    p1 <- p1 +
+      geom_text_repel(
+        data = datatable[datatable$isDiff_1 | datatable$isDiff_2, ],
+        aes(x = .data[[group1]], y = .data[[group2]], label = name),
+        color = "black", size = textsize, box.padding = 0.5,
+        segment.color = "black", segment.size = 0.1,
+        max.overlaps = max_overlaps  # Increase max.overlaps as needed
+      )
+  }
+  ChrAccR:::cleanMem()
+  return(p1)
 }

@@ -95,7 +95,9 @@ plotPDF(
 )
 
 data("human_pwms_v2") # load the motifs
-motifNames <- grep("PAX5|GATA3|GATA1|IRF4|TBX21", names(human_pwms_v2), value = TRUE, ignore.case = TRUE) # search NFKB motifs
+motifNames <- grep("PAX5|GATA3|GATA1|IRF4|TBX21|CD14", names(human_pwms_v2), value = TRUE, ignore.case = TRUE) # search NFKB motifs
+markersConcatenated <- paste(markerGenes, collapse = "|")
+motifNames <- grep(markersConcatenated, names(human_pwms_v2), value = TRUE, ignore.case = TRUE) # search NFKB motifs
 
 motif_positions <- motifmatchr::matchMotifs(
   pwms = human_pwms_v2[motifNames],

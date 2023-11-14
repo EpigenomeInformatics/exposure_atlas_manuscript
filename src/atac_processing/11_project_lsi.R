@@ -20,9 +20,11 @@ idxSample <- BiocGenerics::which(project$ClusterCellTypes %in% c("DC","Mono_CD14
 cellsSample <- project$cellNames[idxSample]
 project <- project[cellsSample, ]
 
-desired_bio_classes <- c("10_cDC","11_CD14.Mono.1","12_CD14.Mono.2",
-"05_CMP.LMPP","01_HSC","08_GMP.Neut",
-"07_GMP")
+#save the project to the subdirectory
+outputDir <- "/icbb/projects/igunduz/mono_subset/"
+saveArchRProject(project, outputDirectory = outputDir, load = TRUE)
+
+desired_bio_classes <- c("10_cDC","11_CD14.Mono.1","12_CD14.Mono.2","05_CMP.LMPP","01_HSC","08_GMP.Neut","07_GMP")
 
 # Subset the object based on the BioClassification column
 subset_mpal <- mpal[, mpal$BioClassification %in% desired_bio_classes]
