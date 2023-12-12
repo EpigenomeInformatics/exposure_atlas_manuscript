@@ -31,11 +31,11 @@ diffCompNames <- c(
   "HIV_chr_vs_Ctrl", "OP_high_vs_low", "OP_high_vs_med", "OP_low_vs_med"
 )
 
-plot.dir <- "/icbb/projects/igunduz/DARPA_analysis/rnbeads_run_061023/plots/"
+plot.dir <- "/icbb/projects/igunduz/DARPA_analysis/RnBeads_0111023/plots/"
 if (!dir.exists(plot.dir)) {
   dir.create(plot.dir)
 }
-path <- "/icbb/projects/igunduz/DARPA_analysis/rnbeads_run_061023/"
+path <- "/icbb/projects/igunduz/DARPA_analysis/RnBeads_0111023/"
 
 for (cell in cells) {
   for (comp in diffCompNames) {

@@ -20,7 +20,7 @@ plotMAwithChrAccR <- function(cell, outputDir, i, region) {
 
 ### Scatter plot of log2FoldChange per two group condition
 ### Written by: Irem B. Gündüz
-plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, textsize = 10, point_size = 3, label = FALSE, 
+plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, textsize = 10, point_size = 3, label = FALSE,
                             meth_label = "differential in METH", atac_label = "differential in ATAC", max_overlaps = 500) {
   p1 <- ggplot(datatable, aes(
     x = .data[[group1]], y = .data[[group2]],
@@ -45,7 +45,7 @@ plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, texts
         aes(x = .data[[group1]], y = .data[[group2]], label = name),
         color = "black", size = textsize, box.padding = 0.5,
         segment.color = "black", segment.size = 0.1,
-        max.overlaps = max_overlaps  # Increase max.overlaps as needed
+        max.overlaps = max_overlaps # Increase max.overlaps as needed
       )
   }
   ChrAccR:::cleanMem()
@@ -55,13 +55,13 @@ plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, texts
 
 ### Function to prepare differentially accessible regions for scatter plots
 ### Written by : Irem B. Gündüz  & Fabian Müller
-prepareDARforPlot <- function(cell, outputDir, i, region="archrPeaks") {
+prepareDARforPlot <- function(cell, outputDir, i, region = "archrPeaks") {
   # get the path of bed.files
   bed.files <- list.files(paste0(outputDir, cell, "/reports/differential_data"), pattern = "diffTab", full.names = T)
   bed.files <- grep(bed.files, pattern = region, fixed = T, value = T)[i]
 
   dm <- read.delim(bed.files)
-  isDiff <- cutL0.5fc2Padj05(dm[, c("log2FoldChange", "padj")]) #,padj=0.05)
+  isDiff <- cutL0.5fc2Padj05(dm[, c("log2FoldChange", "padj")]) # ,padj=0.05)
   isDiff[is.na(isDiff)] <- FALSE # fill missing as FALSE
   dm$isDiff <- isDiff # Add differentials
   dm <- data.table::as.data.table(dm) %>%

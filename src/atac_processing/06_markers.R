@@ -8,6 +8,7 @@
 
 set.seed(12) # set seed
 outputDir <- "/icbb/projects/igunduz/archr_project_011023/"
+source("/icbb/projects/igunduz/exposure_atlas_manuscript/src/utils/archr_utils.R")
 
 # load libraries
 suppressPackageStartupMessages({
@@ -15,9 +16,10 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(ChrAccR)
   library(BSgenome.Hsapiens.UCSC.hg38)
-  library(JASPAR2018)
+  library(JASPAR2020)
   library(chromVARmotifs)
   library(muLogR)
+  library(methylTFRAnnotationHg38)
 })
 addArchRThreads(threads = 30) # set the cores
 project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
@@ -34,7 +36,8 @@ markerGenes <- c(
   "TBX21", # NK
   "CD3G", "NCAM1", "FCGR3A",
   "FOXP3", "GATA3", "RORC", "PDCD1",
-  "HLA-DRA", "CD28", "IL2RA", "CD69", "CD44"
+  "HLA-DRA", "CD28", "IL2RA", "CD69", "CD44",
+  "CCR7"
 )
 
 cbPalette <- c(
@@ -66,6 +69,18 @@ plotPDF(
 
 if ("Motif" %ni% names(project@peakAnnotation)) {
   project <- addMotifAnnotations(ArchRProj = project, motifSet = "cisbp", name = "Motif")
+}
+
+if ("altius" %ni% names(project@peakAnnotation)) {
+  logger.start("Loading motif clusters")
+  cvMot <- readRDS("/icbb/projects/igunduz/annotation/methylTFRAnnotationHg38ClustJaspar/inst/extdata/altius_tf_bindsites.rds")
+  logger.completed()
+  project <- addPeakAnnotationsNew(ArchRProj = project, regions = altius$clusterOcc, name = "altius")
+}
+
+if ("jaspar2020" %ni% names(project@peakAnnotation)) {
+  logger.start("Loading jaspar2020 motifs ")
+  project <- addPeakAnnotationsNew(ArchRProj = project, regions = altius$clusterOcc, name = "jaspar2020")
 }
 
 # add dev matrix for motif

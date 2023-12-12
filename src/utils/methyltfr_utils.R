@@ -55,10 +55,10 @@ converToEPP <- function(granges, save = TRUE, filePath = NULL) {
   }
 }
 
-EPP_helper_old <- function(granges,ignoreStrand=TRUE) {
+EPP_helper_old <- function(granges, ignoreStrand = TRUE) {
   tiles <- GenomicRanges::resize(granges, 3)
-  #granges <- granges[!duplicated(granges)]
-  hits <- IRanges::findOverlaps(tiles, granges,ignore.strand=ignoreStrand)
+  # granges <- granges[!duplicated(granges)]
+  hits <- IRanges::findOverlaps(tiles, granges, ignore.strand = ignoreStrand)
   agg <- aggregate(granges, hits, score = sum(score), coverage = sum(coverage))
   tiles <- data.table::as.data.table(tiles)
   tiles[, score2 := round((round(agg$score * agg$coverage, 0) / agg$coverage) * 1000, 0)]
@@ -73,6 +73,6 @@ EPP_helper <- function(granges) {
   tiles[, score2 := round((round(tiles$score * tiles$coverage, 0) / tiles$coverage) * 1000, 0)]
   tiles[, score := paste0(round(tiles$score * tiles$coverage, 0), "/", tiles$coverage)]
   tiles <- tiles[, .(seqnames, start, end, score, score2, strand)]
-  #tiles <- tiles %>% dplyr::select(seqnames, start, end, score, score2, strand)
+  # tiles <- tiles %>% dplyr::select(seqnames, start, end, score, score2, strand)
   return(tiles)
 }

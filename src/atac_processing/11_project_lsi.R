@@ -16,15 +16,15 @@ project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 mpal <- readRDS(mpal_dir) # Summarised experiment containing counts and metadata for the MPAL data
 # colData(mpal)$BioClassification <- sub(".*_", "", colData(mpal)$BioClassification)
 
-idxSample <- BiocGenerics::which(project$ClusterCellTypes %in% c("DC","Mono_CD14","Mono_CD16"))
+idxSample <- BiocGenerics::which(project$ClusterCellTypes %in% c("DC", "Mono_CD14", "Mono_CD16"))
 cellsSample <- project$cellNames[idxSample]
 project <- project[cellsSample, ]
 
-#save the project to the subdirectory
+# save the project to the subdirectory
 outputDir <- "/icbb/projects/igunduz/mono_subset/"
 saveArchRProject(project, outputDirectory = outputDir, load = TRUE)
 
-desired_bio_classes <- c("10_cDC","11_CD14.Mono.1","12_CD14.Mono.2","05_CMP.LMPP","01_HSC","08_GMP.Neut","07_GMP")
+desired_bio_classes <- c("10_cDC", "11_CD14.Mono.1", "12_CD14.Mono.2", "05_CMP.LMPP", "01_HSC", "08_GMP.Neut", "07_GMP")
 
 # Subset the object based on the BioClassification column
 subset_mpal <- mpal[, mpal$BioClassification %in% desired_bio_classes]
@@ -50,14 +50,14 @@ projected <- readRDS(file = paste0("/icbb/projects/igunduz/archr_project_011023/
 colData(mpal)$BioClassification <- sub(".*_", "", colData(mpal)$BioClassification)
 metadata <- as.data.frame(colData(mpal))
 metadata <- dplyr::select(metadata, BioClassification)
-metadata <- dplyr::filter(metadata, BioClassification %in% c("cDC","CD14.Mono.1","CD14.Mono.2","CMP.LMPP","HSC","GMP.Neut","GMP"))#!= "Unk")
+metadata <- dplyr::filter(metadata, BioClassification %in% c("cDC", "CD14.Mono.1", "CD14.Mono.2", "CMP.LMPP", "HSC", "GMP.Neut", "GMP")) # != "Unk")
 metadata$Type <- rownames(metadata)
 
 
 projected[[2]]$CellTypes <- project$ClusterCellTypes
 projected[[2]] <- as.data.frame(projected[[2]])
-projected[[2]] <- dplyr::filter(projected[[2]], CellTypes %in% c("Mono_CD14","Mono_CD16","DC"))#!= "Unk")
-projected[[2]] <- dplyr::select(projected[[2]], UMAP1, UMAP2,Type)
+projected[[2]] <- dplyr::filter(projected[[2]], CellTypes %in% c("Mono_CD14", "Mono_CD16", "DC")) # != "Unk")
+projected[[2]] <- dplyr::select(projected[[2]], UMAP1, UMAP2, Type)
 
 projected[[1]] <- merge(metadata, as.data.frame(projected[[1]]), by = "Type")
 projected[[1]] <- dplyr::select(projected[[1]], BioClassification, UMAP1, UMAP2)

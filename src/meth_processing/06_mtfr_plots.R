@@ -10,16 +10,16 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(muLogR)
   library(rescueR)
- # library(JASPAR2020)
-#  library(TFBSTools)
+  # library(JASPAR2020)
+  #  library(TFBSTools)
   library(ArchR)
   library(muRtools)
 })
 set.seed(42)
 
 logger.info("Starting analysis for Monocyte in chromVAR and methylTFR")
-mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updated_jaspar2020_121123"
-#mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/updated_ClustResults_121123"
+mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/mtfr_results_241123/jaspar2020_271123/"
+# mtfr_dir <-"/icbb/projects/igunduz/DARPA_analysis/mtfr_results_241123/altius/"
 cell <- "Monocyte"
 condition <- c("C19_ctrl", "C19_sev")
 ds_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/Mono_CD14/data/"
@@ -37,14 +37,16 @@ mtfr_devs <- rlist::list.cbind(lapply(condition, function(x) {
 mtfr_devs <- as.data.frame(mtfr_devs)
 logger.completed()
 
-#tf_bindsites <- readRDS("/icbb/projects/igunduz/annotation/methylTFRAnnotationHg38/inst/extdata/jaspar2020_tf_bindsites.rds")
-#rownames(mtfr_devs) <- names(tf_bindsites)
+# tf_bindsites <- readRDS("/icbb/projects/igunduz/annotation/methylTFRAnnotationHg38/inst/extdata/jaspar2020_tf_bindsites.rds")
+# rownames(mtfr_devs) <- names(tf_bindsites)
 logger.info("Reading sample annotation")
 sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
 groups <- sannot$C19_sev_vs_Ctrl
 logger.start("Computing differential deviations")
-diffm <- computeL2FCdevs(deviations = as.matrix(rev(mtfr_devs)), 
-computezscore = TRUE, group = groups,parametric=T)
+diffm <- computeL2FCdevs(
+  deviations = as.matrix(rev(mtfr_devs)),
+  computezscore = TRUE, group = groups, parametric = TRUE
+)
 logger.completed()
 
 
@@ -78,9 +80,11 @@ chromvar_mat <- chromVAR::deviations(cvd)
 chromvar_mat <- as.data.frame(chromvar_mat)
 # rownames(chromvar_mat) <- sub(".*_", "", rownames(chromvar_mat))
 groups <- ifelse(grepl("ctrl", colnames(chromvar_mat)), "C19_ctrl", "C19_sev")
-diff <- computeL2FCdevs(deviations = as.matrix(chromvar_mat), computezscore = TRUE,parametric=TRUE,
- #grp1name = "C19_ctrl", grp2name="C19_sev",
- group = groups)# ,chromvar_obj=cvd)
+diff <- computeL2FCdevs(
+  deviations = as.matrix(chromvar_mat), computezscore = TRUE, parametric = TRUE,
+  # grp1name = "C19_ctrl", grp2name="C19_sev",
+  group = groups, chromvar_obj = cvd
+)
 
 
 diff$isDiff_1 <- ifelse(diff$p_value_adjusted < 0.05, TRUE, FALSE)
@@ -89,6 +93,7 @@ diffm$isDiff_2 <- ifelse(diffm$p_value_adjusted < 0.05, TRUE, FALSE)
 # merge the two matrices
 diff <- diff[, c("motifs", "zDiff", "isDiff_1")]
 colnames(diff) <- c("name", "zDiff_chromvar", "isDiff_1")
+diff$name <- sub("_.*", "", diff$name)
 diffm <- diffm[, c("motifs", "zDiff", "isDiff_2")]
 colnames(diffm) <- c("name", "zDiff_methylTFR", "isDiff_2")
 merged <- merge(diff, diffm, by = "name")
@@ -97,13 +102,13 @@ merged_orig <- merged
 # organise motifnames in merged
 merged$name <- sub("_.*", "", merged$name)
 
-#organize motif names
+# organize motif names
 merged$name <- sub("\\.var.*", "", merged$name)
 merged$name <- sub(".*\\.\\.", "", merged$name)
 
-#set threshold for chromvar 
-#merged$zDiff_chromvar[abs(merged$zDiff_chromvar) > ] <- NA
-#merged <- merged[complete.cases(merged), ]
+# set threshold for chromvar
+# merged$zDiff_chromvar[abs(merged$zDiff_chromvar) > ] <- NA
+# merged <- merged[complete.cases(merged), ]
 
 # Call the plotScatterL2FC function with the merged data
 l2fcmc <- plotScatterL2FC(
@@ -114,30 +119,30 @@ l2fcmc <- plotScatterL2FC(
   group1 = "zDiff_chromvar",
   group2 = "zDiff_methylTFR",
   label = TRUE,
-  max_overlaps = 14# ,
+  max_overlaps = 15 # ,
   # textsize= 20,
   # bins=50
 )
-cor(merged$zDiff_chromvar, merged$zDiff_methylTFR)
+cor(merged$zDiff_chromvar, merged$zDiff_methylTFR) # -0.18
 logger.info("Plotting scatter plot")
 ggsave(paste0("/icbb/projects/igunduz/Figures/chromvar_mtfr_scatter_mono_jaspar2020.pdf"), l2fcmc, width = 10, height = 10)
 
-merged <- merged_orig
-#subset merged based on diffs
-merged <- merged[merged$isDiff_1 | merged$isDiff_2, ]
-#subset based on negative zdiff on chromvar positive on methylTFR
-merged_an <- merged[merged$zDiff_chromvar < 0 & merged$zDiff_methylTFR > 0, ]
-#subset based on positive zdiff on chromvar negative on methylTFR
-merged_an2 <- merged[merged$zDiff_chromvar > 0 & merged$zDiff_methylTFR < 0, ]
-#merge them together
-merged_an <- rbind(merged_an, merged_an2)
-motifs <- merged_an$name
+# merged <- merged_orig
+# subset merged based on diffs
+# merged <- merged[merged$isDiff_1 | merged$isDiff_2, ]
+# subset based on negative zdiff on chromvar positive on methylTFR
+# merged_an <- merged[merged$zDiff_chromvar < 0 & merged$zDiff_methylTFR > 0, ]
+# subset based on positive zdiff on chromvar negative on methylTFR
+# merged_an2 <- merged[merged$zDiff_chromvar > 0 & merged$zDiff_methylTFR < 0, ]
+# merge them together
+# merged_an <- rbind(merged_an, merged_an2)
+# motifs <- merged_an$name
 
-#sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
-#groups <- sannot$C19_sev_vs_Ctrl
-#diffm <- computeL2FCdevs_vs2(deviations = as.matrix(rev(mtfr_devs)), computezscore = TRUE, group = groups)
-#diffm$isDiff_2 <- ifelse(diffm$p_value_adjusted < 0.05, TRUE, FALSE)
-#motifs <- rownames(diffm)[diffm$isDiff_2]
+sannot <- data.table::fread(paste0("/icbb/projects/igunduz/DARPA/Generated/methylTFR/bed/Monocyte/C19_sev_vs_Ctrl/sample_methylation_summary.tsv"))
+groups <- sannot$C19_sev_vs_Ctrl
+diffm <- computeL2FCdevs(deviations = as.matrix(rev(mtfr_devs)), computezscore = TRUE, group = groups)
+diffm$isDiff_2 <- ifelse(diffm$p_value_adjusted < 0.05, TRUE, FALSE)
+motifs <- rownames(diffm)[diffm$isDiff_2]
 
 logger.start("Plotting the heatmap for methylTFR")
 # mtfr_devs <- mtfr_devs[motifs,]
@@ -151,7 +156,7 @@ mtfr_devs <- mtfr_devs[motifs, ]
 hm_mtfr <- deviationHeatmap(mtfr_devs, ann, cluster_rows = TRUE)
 logger.completed()
 
-logger.info("Plotting the heatmap for methylTFR") 
+logger.info("Plotting the heatmap for methylTFR")
 pdf(paste0(ds_dir, "mtfr_diff_pheatmap_only_mtfr.pdf"), width = 20, height = 20)
 draw(hm_mtfr$hm)
 dev.off()
@@ -160,7 +165,8 @@ dev.off()
 
 logger.start("Plotting the heatmap for chromVAR")
 logger.info("Subset chromVAR matrix for differentials")
-chromvar_mat <- chromVAR::deviationScores(cvd)#computeZScore(chromVAR::deviations(cvd))
+# chromvar_mat <- chromVAR::deviationScores(cvd)
+chromvar_mat <- computeZScore(chromVAR::deviations(cvd))
 chromvar_mat <- chromvar_mat[motifs, ]
 chromvar_mat <- as.data.frame(chromvar_mat)
 logger.info("Create a data frame for the samples' conditions")
@@ -206,8 +212,11 @@ outputDir <- "/icbb/projects/igunduz/archr_project_011023/"
 project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 
 # Subset arhr project for conditions
-idxSample <- BiocGenerics::which(project$sample_exposure_group %in% conditions)
-cellsSample <- project$cellNames[idxSample]
+cellAnnot_atac <- read.delim("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/filtered_cellAnnot_atac.tsv")
+rownames(cellAnnot_atac) <- cellAnnot_atac$cellId_archr
+cellsSample <- rownames(cellAnnot_atac)
+# idxSample <-BiocGenerics::which(project$sample_exposure_group %in% conditions)
+# cellsSample <- project$cellNames[idxSample]
 project <- project[cellsSample, ]
 
 logger.start("Looking into variable z-scores using chromVAR")
@@ -233,8 +242,14 @@ zmat[abs(round(zmat, 2)) > 5] <- NA
 zmat <- zmat[complete.cases(zmat), ]
 motifs <- rownames(zmat)
 
+# compute the rowwise variances
+v # ars <- matrixStats::rowVars(zmat)
+# rank based on variances
+# zmat <- zmat[order(vars,decreasing=T),]
+# zmat <- zmat[vars >= 0.5, ]
+
 heatmap_result <- deviationW2annotHeatmap(
-  mat = zmat,
+  mat = zmat[motifs, ],
   ann_df = ann,
   cluster_col = "Cell",
   fill_col_cell_type = at_cell_cols, # Assuming you have colors in ann$CellType
@@ -308,7 +323,7 @@ combinations <- expand.grid(Cell = cells, Condition = conditions)
 # Create the desired strings
 result <- paste0(combinations$Cell, "_", combinations$Condition, "_")
 
-mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/methyltfr_041023/ClustResults"
+mtfr_dir <- "/icbb/projects/igunduz/DARPA_analysis/mtfr_results_241123/altius"
 
 # Initialize data frames to store results
 cell <- condition <- list()
@@ -369,17 +384,17 @@ logger.completed()
 
 logger.start("Running z-score analysis using methylTFR")
 
-#logger.info("Dividing the matrix by the number of cells in each cluster")
-#nCells <- table(cell)
-#groupMat <- t(mtfr_devs) / as.vector(nCells)
-#groupMat <- as.data.frame(t(groupMat))
+# logger.info("Dividing the matrix by the number of cells in each cluster")
+# nCells <- table(cell)
+# groupMat <- t(mtfr_devs) / as.vector(nCells)
+# groupMat <- as.data.frame(t(groupMat))
 
 groupMat <- mtfr_devs
-#groupMat <- computeZScore(as.matrix(groupMat))
+# groupMat <- computeZScore(as.matrix(groupMat))
 groupMat <- as.data.frame(t(groupMat))
 
 groupMat$Cell <- cell
-groupMat <- aggregate(. ~ Cell, data = groupMat, FUN = sum)
+groupMat <- aggregate(. ~ Cell, data = groupMat, FUN = median)
 groupMat <- as.data.frame(t(groupMat))
 colnames(groupMat) <- groupMat[1, ]
 groupMat <- groupMat[-1, ]
@@ -393,15 +408,15 @@ ann <- data.frame(Cell = colnames(groupMat))
 rownames(ann) <- colnames(groupMat)
 
 heatmap_result <- deviationW2annotHeatmap(
-  mat = groupMat[motifs, ],
+  mat = groupMat, # [motifs, ],
   ann_df = ann,
   cluster_col = "Cell",
   fill_col_cell_type = cell_type_colors, # Assuming you have colors in ann$CellType
   # fill_col_condition = exposure_colors, # Assuming you have colors in ann$Condition
   colors = "cptcity.arendal_temperature",
   clustering_method = "within",
-  cluster_rows = TRUE,
-  row_order = motifs
+  cluster_rows = TRUE # ,
+  # row_order = motifs
 )
 
 # Plot the heatmap
@@ -413,7 +428,7 @@ logger.completed()
 logger.start("Correlation analysis between chromVAR and methylTFR")
 sub_mtfr <- groupMat # [motifs,]
 chromvar <- data.frame(
-  B_cell = zmat[, "B_mem"],#rowMeans(zmat[, c(1:2)]),
+  B_cell = rowMeans(zmat[, c(1:2)]), # zmat[, "B_mem"],
   Monocyte = rowMeans(zmat[, c(4:5)]),
   NK_cell = zmat[, "NK_CD16"],
   Tc_Mem = zmat[, "T_mem_CD8"],
@@ -436,7 +451,7 @@ cormat <- cor(chromvar, methyltfr)
 
 d <- data.frame(cor = diag(cormat))
 rownames(d) <- colnames(chromvar)
-neg_cor <- dplyr::filter(d, cor <= -0.5)
+neg_cor <- dplyr::filter(d, cor <= -0.2)
 c <- apply(chromvar, 2, as.numeric)
 m <- apply(methyltfr, 2, as.numeric)
 c <- c[, rownames(neg_cor)]
@@ -463,17 +478,17 @@ cell_type <- c(
   "T_naive" = "#888FB5"
 )
 
-#cs <- colpal.cont(9, "cb.Reds")
-#colors.cv <- ChrAccR::getConfigElement("colorSchemesCont")
-#colors.cv <- colors.cv[[".default.div"]]
-#csl <- circlize::colorRamp2(seq(round(min(ml))-1, round(max(ml))+1, length.out = length(colors.cv )), colors.cv )
+# cs <- colpal.cont(9, "cb.Reds")
+# colors.cv <- ChrAccR::getConfigElement("colorSchemesCont")
+# colors.cv <- colors.cv[[".default.div"]]
+# csl <- circlize::colorRamp2(seq(round(min(ml))-1, round(max(ml))+1, length.out = length(colors.cv )), colors.cv )
 
-cs_col <- colpal.cont(9,  "cptcity.jjg_misc_temperature")
-#cs <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
-#csl <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
+cs_col <- colpal.cont(9, "cptcity.jjg_misc_temperature")
+# cs <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
+# csl <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
 
-cs <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
-csl <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col )), cs_col )
+cs <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col)), cs_col)
+csl <- circlize::colorRamp2(seq(round(min(mr)), round(max(mr)), length.out = length(cs_col)), cs_col)
 
 ann <- data.frame(Cell = colnames(mr))
 rownames(ann) <- colnames(mr)
@@ -486,12 +501,12 @@ heatmap_result <- deviationW2annotHeatmap(
   # fill_col_condition = exposure_colors, # Assuming you have colors in ann$Condition
   colors = "cptcity.arendal_temperature",
   clustering_method = "within",
-  cluster_rows = FALSE#,
-  #row_order = motifs
+  cluster_rows = FALSE # ,
+  # row_order = motifs
 )
 
 # Plot the heatmap
-pdf("/icbb/projects/igunduz/mtfr_heatmap_zscore_vs2.pdf", width = 20, height = 20)
+pdf("/icbb/projects/igunduz/mtfr_heatmap_zscore_vs2_new.pdf", width = 20, height = 20)
 draw(heatmap_result$hm)
 dev.off()
 
@@ -505,7 +520,7 @@ heatmap_result <- deviationW2annotHeatmap(
   clustering_method = "within",
   cluster_rows = FALSE,
   package = "chromVAR"
-  #row_order = motifs
+  # row_order = motifs
 )
 
 # Plot the heatmap
@@ -524,9 +539,10 @@ colAnnot <- HeatmapAnnotation(
 hmap_cm <- diagDivCellHeatmap(ml, mr,
   top_annotation = colAnnot,
   name.l = "chromVAR",
-  name.r = "methylTFR",
-  ,col.r= cs,col.l = csl)
-#) # ,col.r = csr,col.l = cs)
+  name.r = "methylTFR", ,
+  col.r = cs, col.l = csl
+)
+# ) # ,col.r = csr,col.l = cs)
 
 pdf("/icbb/projects/igunduz/correlation_heatmap.pdf", width = 20, height = 20)
 draw(hmap_cm)
@@ -638,4 +654,3 @@ heatmap_result <- deviationW2annotHeatmap(
 pdf("/icbb/projects/igunduz/figure_1_mtfr_heatmap_zscore.pdf", width = 20, height = 20)
 draw(heatmap_result$hm)
 dev.off()
-

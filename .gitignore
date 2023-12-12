@@ -11,6 +11,7 @@
 
 # Example code in package build process
 *-Ex.R
+/icbb/projects/igunduz/exposure_atlas_manuscript/archive/
 
 # Output files from R CMD build
 /*.tar.gz

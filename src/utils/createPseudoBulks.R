@@ -80,7 +80,7 @@ createPseudoBulks <- function(sampleAnnot, filePathCol, sampleIdCol = NULL, numT
               # aggregate allcs
               aggregateALLCSamples(
                 files, excludeChr, singleCovOff, group, group2,
-                artemis:::mcParseR(mcType), outputDir, singleBP, regionGR, cl
+                mcParseR(mcType), outputDir, singleBP, regionGR, cl
               )
             }
           }
@@ -210,5 +210,50 @@ makeGRanges <- function(meth, group, group2, outputDir) {
   artemis:::cleanMem()
   if (dir.exists(paste0(outputDir, "/pseudobulkTemp/"))) {
     unlink(list.files(paste0(outputDir, "/pseudobulkTemp/"), full.names = TRUE), recursive = TRUE) # Remove the temp files.
+  }
+}
+
+mcParseR <- function(pattern) {
+  IUPAC_table <- c(
+    "A" = "A",
+    "T" = "T",
+    "C" = "C",
+    "G" = "G",
+    "R" = "AG",
+    "Y" = "CT",
+    "S" = "GC",
+    "W" = "AT",
+    "K" = "GT",
+    "M" = "AC",
+    "B" = "CGT",
+    "D" = "AGT",
+    "H" = "ATC",
+    "V" = "ACG",
+    "N" = "ATCGN"
+  )
+  if (pattern == "CGN") {
+    return(c("CGA", "CGC", "CGG", "CGT"))
+  } else {
+    positions <- vector()
+    pattern <- toupper(pattern)
+    pattern <- unlist(strsplit(pattern, split = ""))
+    for (base in pattern) {
+      pos <- as.character(IUPAC_table[base])
+      if (nchar(pos) > 3) {
+        positions <- c(positions, (unlist(strsplit(pos, split = ""))))
+      } else {
+        positions <- c(positions, pos)
+      }
+    }
+    if (NROW(positions) > 3) {
+      beg <- positions[1:2]
+      pos_list <- vector()
+      for (i in positions[-c(1:2)]) {
+        pos_list <- c(pos_list, stringr::str_flatten(beg, i))
+      }
+      return(pos_list)
+    } else {
+      return(stringr::str_flatten(positions))
+    }
   }
 }

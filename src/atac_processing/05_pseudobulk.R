@@ -120,7 +120,7 @@ lapply(cells,
   }
 )
 #####################################################################
-#cell-type specific pseudobulks for OP and HIV samples
+# cell-type specific pseudobulks for OP and HIV samples
 outputDir <- "/icbb/projects/igunduz/DARPA_analysis/BedFiles_final/Cell_Types/"
 if (!dir.exists(outputDir)) {
   dir.create(outputDir)
@@ -130,15 +130,15 @@ if (!dir.exists(outputDir)) {
 # save the fragments as BED file within a specific folder seperated by cells
 lapply(cells,
   FUN = function(cell) {
-      # save the fragments files of samples
-      lapply(names(fragments[[cell]]), function(sample) {
-        message("Creating a BED file for the cell type: ", paste0(cell), " and, sample ", paste(sample))
-        # export fragments as bed files
-        rtracklayer::export.bed(
-          object = fragments[[cell]][[sample]],
-          con = paste0(outputDir, cell, "_", sample, ".bed")
-        )
-      })
-    }
+    # save the fragments files of samples
+    lapply(names(fragments[[cell]]), function(sample) {
+      message("Creating a BED file for the cell type: ", paste0(cell), " and, sample ", paste(sample))
+      # export fragments as bed files
+      rtracklayer::export.bed(
+        object = fragments[[cell]][[sample]],
+        con = paste0(outputDir, cell, "_", sample, ".bed")
+      )
+    })
+  }
 )
 #####################################################################

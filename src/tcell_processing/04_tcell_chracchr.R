@@ -28,7 +28,7 @@ if (!dir.exists(rundir)) dir.create(rundir)
 
 # set the cell types and the comparisons
 # cells <- c("B_mem", "B_naive", "Mono_CD14","Mono_CD16", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive", "T_mix","T_naive","T_mait")
-cells <- c("Terminal_TE","Intermediate_TEx","Early_TEx","T_mem_CD8", "T_mem_CD4", "Activated_CD4T", "CD4T_mem", "CD4T_naive", "CD8T_mem", "CD8T_naive",  "Effector_CD8T",  "Other_T",  "Tfh1", "Tfh2", "Th1", "Th17", "Treg1", "Treg2", "Treg3", "Treg4")
+cells <- c("Terminal_TE", "Intermediate_TEx", "Early_TEx", "T_mem_CD8", "T_mem_CD4", "Activated_CD4T", "CD4T_mem", "CD4T_naive", "CD8T_mem", "CD8T_naive", "Effector_CD8T", "Other_T", "Tfh1", "Tfh2", "Th1", "Th17", "Treg1", "Treg2", "Treg3", "Treg4")
 diffCompNames <- c(
   "HIV_ctrl vs HIV_chr [sample_exposure_group]",
   "HIV_ctrl vs HIV_acu [sample_exposure_group]",

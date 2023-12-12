@@ -16,7 +16,11 @@ sampleAnnot <- data.table::fread("/icbb/projects/igunduz/DARPA/allc_sample_annot
   dplyr::select(!V1) %>%
   dplyr::filter(!cell_type == "Other-cell")
 
-dir.create("DARPA/data/pseudoBulks/perSample")
+perSample <- "DARPA/data/pseudoBulks/perSample"
+# perSample <-"/icbb/projects/igunduz/deneme_pseudobulks"
+if (!dir.exists(perSample)) {
+  dir.create(perSample)
+}
 outputDir <- "/icbb/projects/igunduz/DARPA/data/pseudoBulks/perSample"
 
 # Create single base-pair pseudobulks
@@ -27,6 +31,20 @@ createPseudoBulks(sampleAnnot,
   groupName2 = "Common_Minimal_Informative_ID", fileType = "allc", singleCovOff = 99999,
   indexed = FALSE, excludeChr = c("chrX", "chrY", "chrM", "chrL"), outputDir = outputDir
 )
+
+sampleAnnot
+filePathCol <- "allC_FilePathfull"
+sampleIdCol <- "Common_Minimal_Informative_ID"
+numThreads <- 6
+mcType <- "CGN"
+groupName <- "cell_type"
+singleBP <- TRUE
+groupName2 <- "Common_Minimal_Informative_ID"
+fileType <- "allc"
+singleCovOff <- 99999
+indexed <- FALSE
+excludeChr <- c("chrX", "chrY", "chrM", "chrL")
+outputDir <- outputDir
 
 # get the unique cell types
 cells <- names(table(sampleAnnot$cell_type))
@@ -79,16 +97,16 @@ for (cell in cells) {
 }
 
 #####################################################################
-    comparasions <- c(
-    "C19_mild_vs_Ctrl", "C19_sev_vs_Ctrl", "HIV_acu_vs_Ctrl", "Influenza_ctrl_vs_d30",
-    "HIV_chr_vs_Ctrl", "OP_high_vs_low", "OP_high_vs_med", "OP_low_vs_med"
-  )
-  
-  for (comp in comparasions) {
-    # write sampleannot as tsv
-    sampleann %>%
-      dplyr::select(Common_Minimal_Informative_ID, condition, bedFile, cell_type, dplyr::all_of(comp)) %>%
-      na.omit(comp) %>%
-      arrange(desc(row_number())) %>%
-      write.table(file = paste0(outputDir, "/", cell, "_", comp, "_sampleannot.tsv"), quote = FALSE, sep = "\t", col.names = T, row.names = FALSE)
-  }
+comparasions <- c(
+  "C19_mild_vs_Ctrl", "C19_sev_vs_Ctrl", "HIV_acu_vs_Ctrl", "Influenza_ctrl_vs_d30",
+  "HIV_chr_vs_Ctrl", "OP_high_vs_low", "OP_high_vs_med", "OP_low_vs_med"
+)
+
+for (comp in comparasions) {
+  # write sampleannot as tsv
+  sampleann %>%
+    dplyr::select(Common_Minimal_Informative_ID, condition, bedFile, cell_type, dplyr::all_of(comp)) %>%
+    na.omit(comp) %>%
+    arrange(desc(row_number())) %>%
+    write.table(file = paste0(outputDir, "/", cell, "_", comp, "_sampleannot.tsv"), quote = FALSE, sep = "\t", col.names = T, row.names = FALSE)
+}

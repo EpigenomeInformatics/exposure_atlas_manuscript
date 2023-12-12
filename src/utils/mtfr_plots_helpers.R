@@ -1,18 +1,18 @@
-computeL2FCdevs <- function(deviations,computezscore = FALSE, differential_deviation_test = TRUE,
-                          alternative = c("two.sided"), group = NULL, parametric = TRUE,chromvar_obj=NULL,grp1name=NULL,grp2name=NULL) {
-  if(is.null(row.names(deviations))){
+computeL2FCdevs <- function(deviations, computezscore = FALSE, differential_deviation_test = TRUE,
+                            alternative = c("two.sided"), group = NULL, parametric = TRUE, chromvar_obj = NULL, grp1name = NULL, grp2name = NULL) {
+  if (is.null(row.names(deviations))) {
     stop("Please provide motifs as rownames in deviations data.frame!")
   }
-  if(is.null(grp1name) & is.null(group)){
+  if (is.null(grp1name) & is.null(group)) {
     stop("Please provide at least one group names!")
   }
-  if(!is.null(grp1name)){
+  if (!is.null(grp1name)) {
     # Identify the columns corresponding to each group
-  sidx.grp1 <- grep(grp1name, colnames(deviations))
-  sidx.grp2 <- setdiff(1:ncol(deviations), sidx.grp1)
-  grp2name <- "group2"
+    sidx.grp1 <- grep(grp1name, colnames(deviations))
+    sidx.grp2 <- setdiff(1:ncol(deviations), sidx.grp1)
+    grp2name <- "group2"
   }
-  if(!is.logical(computezscore)){
+  if (!is.logical(computezscore)) {
     stop("Please provide a logical value for computezscore!")
   }
   if (!is.null(group)) {
@@ -27,7 +27,7 @@ computeL2FCdevs <- function(deviations,computezscore = FALSE, differential_devia
   colnames(diff) <- c("motifs", "p_value", "p_value_adjusted")
 
   # Subset the matrix based on the group columns
-  #deviations <- as.data.frame(deviations)
+  # deviations <- as.data.frame(deviations)
   m1 <- deviations[, sidx.grp1, drop = FALSE]
   m2 <- deviations[, sidx.grp2, drop = FALSE]
 
@@ -42,10 +42,10 @@ computeL2FCdevs <- function(deviations,computezscore = FALSE, differential_devia
 
   if (computezscore) {
     # Calculate the z-scores
-    #motifs <- rownames(deviations)
-    if(!is.null(chromvar_obj)){
-      deviations <-  chromVAR::deviationScores(chromvar_obj)
-    }else{
+    # motifs <- rownames(deviations)
+    if (!is.null(chromvar_obj)) {
+      deviations <- chromVAR::deviationScores(chromvar_obj)
+    } else {
       deviations <- computeZScore(deviations)
     }
     deviations <- as.data.frame(deviations)
@@ -107,32 +107,31 @@ deviationHeatmap <- function(
 }
 
 deviationW2annotHeatmap <- function(
-  mat, ann_df,
-  cluster_col = "CellType",
-  fill_col_cell_type = NULL,  # Colors for Cell Type
-  fill_col_condition = NULL,  # Colors for Condition
-  colors = "cptcity.arendal_temperature",
-  clustering_method = "within",
-  cluster_rows = TRUE,
-  package = "methylTFR",
-  row_order = NULL,
-  show_column_names = FALSE
-) {
+    mat, ann_df,
+    cluster_col = "CellType",
+    fill_col_cell_type = NULL, # Colors for Cell Type
+    fill_col_condition = NULL, # Colors for Condition
+    colors = "cptcity.arendal_temperature",
+    clustering_method = "within",
+    cluster_rows = TRUE,
+    package = "methylTFR",
+    row_order = NULL,
+    show_column_names = FALSE) {
   # Cluster rows and columns based on the selected method
-  if(!is.null(cluster_col) & is.character(cluster_col) & length(cluster_col) == 1){
+  if (!is.null(cluster_col) & is.character(cluster_col) & length(cluster_col) == 1) {
     if (clustering_method == "within") {
       dend_cols <- cluster_within_group(mat, ann_df[[cluster_col]])
     } else if (clustering_method == "between") {
       dend_cols <- cluster_between_groups(mat, ann_df[[cluster_col]])
     }
   }
-  
-  if(!is.null(fill_col_cell_type) & !is.null(fill_col_condition)){
+
+  if (!is.null(fill_col_cell_type) & !is.null(fill_col_condition)) {
     logger.info("Using more than one annotation for coloring the heatmap!")
     column_ha <- HeatmapAnnotation(
-      df = ann_df, col = list(Cell = fill_col_cell_type,Condition = fill_col_condition)
+      df = ann_df, col = list(Cell = fill_col_cell_type, Condition = fill_col_condition)
     )
-  }else{
+  } else {
     logger.info("Using only one annotation for coloring the heatmap!")
     column_ha <- HeatmapAnnotation(
       df = ann_df, col = list(Cell = fill_col_cell_type)
@@ -141,11 +140,11 @@ deviationW2annotHeatmap <- function(
   c <- if (package == "methylTFR") {
     muRtools::colpal.cont(nrow(ann_df), colors)
   } else {
-      colors.cv <- ChrAccR::getConfigElement("colorSchemesCont")
-      colors.cv <- colors.cv[[".default.div"]]
-    c <- grDevices::colorRampPalette( colors.cv)(nrow(ann_df))
+    colors.cv <- ChrAccR::getConfigElement("colorSchemesCont")
+    colors.cv <- colors.cv[[".default.div"]]
+    c <- grDevices::colorRampPalette(colors.cv)(nrow(ann_df))
 
-    #rev(muRtools::colpal.cont(nrow(ann_df), colors))
+    # rev(muRtools::colpal.cont(nrow(ann_df), colors))
   }
 
   if (!is.null(row_order)) {
@@ -160,8 +159,8 @@ deviationW2annotHeatmap <- function(
     top_annotation = column_ha,
     col = c,
     heatmap_legend_param = list(
-      title = paste0("TF Deviation Z-scores (", package, ")"),
-      at = c(-2,-1,0,1, 2)
+      title = paste0("TF Deviation Z-scores (", package, ")") # ,
+      # at = c(-2,-1,0,1, 2)
     ),
     show_column_names = FALSE
   )
@@ -173,47 +172,47 @@ deviationW2annotHeatmap <- function(
 }
 
 
-diagDivCellHeatmap <- function(ml, mr, col.l=NULL, col.r=NULL, name.l="Lower left", name.r="Upper right", ...){
-	require(ComplexHeatmap)
-	if (nrow(ml)!=nrow(mr)) stop("Numbers of rows of the two matrices must match")
-	if (ncol(ml)!=ncol(mr)) stop("Numbers of columns of the two matrices must match")
+diagDivCellHeatmap <- function(ml, mr, col.l = NULL, col.r = NULL, name.l = "Lower left", name.r = "Upper right", ...) {
+  require(ComplexHeatmap)
+  if (nrow(ml) != nrow(mr)) stop("Numbers of rows of the two matrices must match")
+  if (ncol(ml) != ncol(mr)) stop("Numbers of columns of the two matrices must match")
 
-	if (!is.function(col.l)) col.l <- getColorFun(ml, col.l)
-	if (!is.function(col.r)) col.r <- getColorFun(mr, col.r)
-	colPalLegend_l <- col.l
-	if (is.character(ml) || is.factor(ml)){
-		colPalLegend_l <- environment(col.l)[["mapVec"]]
-	}
-	colPalLegend_r <- col.r
-	if (is.character(mr) || is.factor(mr)){
-		colPalLegend_r <- environment(col.r)[["mapVec"]]
-	}
+  if (!is.function(col.l)) col.l <- getColorFun(ml, col.l)
+  if (!is.function(col.r)) col.r <- getColorFun(mr, col.r)
+  colPalLegend_l <- col.l
+  if (is.character(ml) || is.factor(ml)) {
+    colPalLegend_l <- environment(col.l)[["mapVec"]]
+  }
+  colPalLegend_r <- col.r
+  if (is.character(mr) || is.factor(mr)) {
+    colPalLegend_r <- environment(col.r)[["mapVec"]]
+  }
 
-	dummyColor <- circlize::colorRamp2(seq(0, 1, length.out=2), rep("grey", 2))
-	res <- Heatmap(ml,
-		col=colPalLegend_l, rect_gp=gpar(type="none"),
-		cell_fun = function(j, i, x, y, w, h, fill) {
-			#grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col="grey", fill="grey"))
-			grid.polygon(
-             unit.c(x - 0.5*w, x - 0.5*w, x + 0.5*w), 
-                unit.c(y - 0.5*h, y + 0.5*h, y - 0.5*h),
-				gp=gpar(col=NA, fill=col.l(ml[i, j]))
-			)
-			grid.polygon(
-                unit.c(x + 0.5*w, x + 0.5*w, x - 0.5*w), 
-                unit.c(y + 0.5*h, y - 0.5*h, y + 0.5*h),
-				gp=gpar(col=NA, fill=col.r(mr[i, j]))
-			)
-		},
-		name=name.l,
+  dummyColor <- circlize::colorRamp2(seq(0, 1, length.out = 2), rep("grey", 2))
+  res <- Heatmap(ml,
+    col = colPalLegend_l, rect_gp = gpar(type = "none"),
+    cell_fun = function(j, i, x, y, w, h, fill) {
+      # grid.rect(x=x, y=y, width=width, height=height, gp=gpar(col="grey", fill="grey"))
+      grid.polygon(
+        unit.c(x - 0.5 * w, x - 0.5 * w, x + 0.5 * w),
+        unit.c(y - 0.5 * h, y + 0.5 * h, y - 0.5 * h),
+        gp = gpar(col = NA, fill = col.l(ml[i, j]))
+      )
+      grid.polygon(
+        unit.c(x + 0.5 * w, x + 0.5 * w, x - 0.5 * w),
+        unit.c(y + 0.5 * h, y - 0.5 * h, y + 0.5 * h),
+        gp = gpar(col = NA, fill = col.r(mr[i, j]))
+      )
+    },
+    name = name.l,
     ...
-	)
-	# dummy heatmap for color legend
-	dummyM <- matrix(rep(NA, length.out=nrow(mr)), nrow=nrow(ml), ncol=1)
-	rownames(dummyM) <- rownames(ml)
-	dummyHm <- Heatmap(dummyM, col=colPalLegend_r, width=unit(0, "mm"), name=name.r)
+  )
+  # dummy heatmap for color legend
+  dummyM <- matrix(rep(NA, length.out = nrow(mr)), nrow = nrow(ml), ncol = 1)
+  rownames(dummyM) <- rownames(ml)
+  dummyHm <- Heatmap(dummyM, col = colPalLegend_r, width = unit(0, "mm"), name = name.r)
 
-	return(res + dummyHm)
+  return(res + dummyHm)
 }
 
 computeZScore <- function(mat) {
@@ -225,7 +224,7 @@ computeZScore <- function(mat) {
 
 ### Scatter plot of log2FoldChange per two group condition
 ### Written by: Irem B. Gündüz
-plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, textsize = 10, point_size = 3, label = FALSE, 
+plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, textsize = 10, point_size = 3, label = FALSE,
                             meth_label = "differential in METH", atac_label = "differential in ATAC", max_overlaps = 500) {
   p1 <- ggplot(datatable, aes(
     x = .data[[group1]], y = .data[[group2]],
@@ -250,7 +249,7 @@ plotScatterL2FC <- function(datatable, y_lab, x_lab, comb, group1, group2, texts
         aes(x = .data[[group1]], y = .data[[group2]], label = name),
         color = "black", size = textsize, box.padding = 0.5,
         segment.color = "black", segment.size = 0.1,
-        max.overlaps = max_overlaps  # Increase max.overlaps as needed
+        max.overlaps = max_overlaps # Increase max.overlaps as needed
       )
   }
   ChrAccR:::cleanMem()

@@ -15,7 +15,7 @@ suppressPackageStartupMessages({
 })
 set.seed(12) # set seed
 outputDir <- "/icbb/projects/igunduz/archr_project_011023"
-project <- ArchR::loadArchRProject(outputDir, showLogo=FALSE)
+project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 
 # read the sample annotation
 sampleannot <- read.delim("/icbb/projects/igunduz/sampleannot.tsv") %>%
@@ -25,8 +25,8 @@ sampleannot$fragmentFiles <- gsub(x = sampleannot$fragmentFiles, pattern = ".bed
 # set directory for the output
 bedDir <- "/icbb/projects/igunduz/DARPA_analysis/BedFiles_final/Cell_Types"
 rundir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_2023-10-27_cell_type"
-#paste0("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_", Sys.Date(), "_cell_type")
-#if (!dir.exists(rundir)) dir.create(rundir)
+# paste0("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_", Sys.Date(), "_cell_type")
+# if (!dir.exists(rundir)) dir.create(rundir)
 
 
 cellAnnot_atac <- read.delim("/icbb/projects/igunduz/artemis_run/final_moon_240823/cellColData.tsv")
@@ -67,24 +67,25 @@ cellAnnot_meth <- cellAnnot_meth[cellIds_meth, ]
 logger.completed()
 
 shared_atac_samples <- unique(cellAnnot_atac$sample_sampleId)
-sampleannot <- dplyr::filter(sampleannot,sampleIdCol %in% shared_atac_samples)
-cells <- c("B_mem", "B_naive","DC", "Mono_CD14","Mono_CD16", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_mix","T_naive","T_mait")
+sampleannot <- dplyr::filter(sampleannot, sampleIdCol %in% shared_atac_samples)
+cells <- c("B_mem", "B_naive", "DC", "Mono_CD14", "Mono_CD16", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_mix", "T_naive", "T_mait")
 
 # get the fragment files for the cell types
-all_pseudobulks <- list.files(bedDir,full.names=T)
-#all_pseudobulks <- rlist::list.rbind(unlist(lapply(cells,function(cell){list.files(paste0(bedDir,cell),full.names=T)})))
-#all_pseudobulks <- as.vector(all_pseudobulks)
+all_pseudobulks <- list.files(bedDir, full.names = T)
+# all_pseudobulks <- rlist::list.rbind(unlist(lapply(cells,function(cell){list.files(paste0(bedDir,cell),full.names=T)})))
+# all_pseudobulks <- as.vector(all_pseudobulks)
 
 # reassign the fragment file paths
-new_sampleannot <- lapply(cells,function(cell){
-    sampleannot$cell_type <- rep(cell,nrow(sampleannot))
-    sampleannot$full_sample_path <- paste0(bedDir,"/",cell,"_",sampleannot$fragmentFiles)
-    sampleannot$full_sample_path <- gsub(x = sampleannot$full_sample_path , pattern = ".tsv.gz", replacement = ".tsv.gz.bed")
-    return(sampleannot)})
+new_sampleannot <- lapply(cells, function(cell) {
+  sampleannot$cell_type <- rep(cell, nrow(sampleannot))
+  sampleannot$full_sample_path <- paste0(bedDir, "/", cell, "_", sampleannot$fragmentFiles)
+  sampleannot$full_sample_path <- gsub(x = sampleannot$full_sample_path, pattern = ".tsv.gz", replacement = ".tsv.gz.bed")
+  return(sampleannot)
+})
 new_sampleannot <- rlist::list.rbind(new_sampleannot)
-new_sampleannot <- dplyr::filter(new_sampleannot,full_sample_path %in% all_pseudobulks)
-new_sampleannot$chraccr_path <- gsub(x = new_sampleannot$full_sample_path , pattern = paste0(bedDir,"/"), replacement = "")
-new_sampleannot <- dplyr::select(new_sampleannot,full_sample_path,chraccr_path,cell_type,sample_exposure_type)
+new_sampleannot <- dplyr::filter(new_sampleannot, full_sample_path %in% all_pseudobulks)
+new_sampleannot$chraccr_path <- gsub(x = new_sampleannot$full_sample_path, pattern = paste0(bedDir, "/"), replacement = "")
+new_sampleannot <- dplyr::select(new_sampleannot, full_sample_path, chraccr_path, cell_type, sample_exposure_type)
 
 diffCompNames <- character(0)
 
@@ -99,48 +100,48 @@ for (i in 1:length(cells)) {
 }
 
 
-#lapply(diff, function(diffCompNames) {
-  # get the cell names
-  #cells <- unlist(strsplit(diff, " vs "))
-  #cells <- c(gsub(" \\[.*\\]", "", cells[1]),gsub(" \\[.*\\]", "", cells[2]) )
+# lapply(diff, function(diffCompNames) {
+# get the cell names
+# cells <- unlist(strsplit(diff, " vs "))
+# cells <- c(gsub(" \\[.*\\]", "", cells[1]),gsub(" \\[.*\\]", "", cells[2]) )
 
-  # reassign the fragment file paths
-  #sampleannot <- dplyr::filter(new_sampleannot,cell_type %in% cells)
+# reassign the fragment file paths
+# sampleannot <- dplyr::filter(new_sampleannot,cell_type %in% cells)
 
-  # get the peak set
-  peaks <- getPeakSet(project)
-  regionSetList <- list(
-    archr_peaks = sort(peaks)#,
-   # tiling200bp = muRtools::getTilingRegions("hg38", width = 200L, onlyMainChrs = TRUE)
+# get the peak set
+peaks <- getPeakSet(project)
+regionSetList <- list(
+  archr_peaks = sort(peaks) # ,
+  # tiling200bp = muRtools::getTilingRegions("hg38", width = 200L, onlyMainChrs = TRUE)
+)
+# set configuration elements
+setConfigElement("annotationColumns", c("full_sample_path", "sample_exposure_type", "cell_type"))
+setConfigElement("differentialColumns", c("cell_type"))
+# setConfigElement("filteringCovgCount", 1L)
+setConfigElement("filteringSexChroms", TRUE)
+# setConfigElement("filteringCovgReqSamples", 0.005)
+setConfigElement("differentialCutoffL2FC", 0.5)
+setConfigElement("normalizationMethod", "quantile")
+setConfigElement("differentialCompNames", diffCompNames)
+setConfigElement("lolaDbPaths", "/icbb/projects/igunduz/annotation/lolaDB/hg38/")
+
+# if the rundir exist continue with existing analysis
+if (!file.exists(rundir)) {
+  # run ChrAccR on the aggregated fragment files
+  ChrAccR::run_atac(
+    anaDir = rundir, genome = "hg38",
+    input = "full_sample_path", sampleAnnot = dplyr::distinct(new_sampleannot),
+    sampleIdCol = "full_sample_path", regionSets = regionSetList
   )
-  # set configuration elements
-  setConfigElement("annotationColumns", c("full_sample_path", "sample_exposure_type", "cell_type"))
-  setConfigElement("differentialColumns", c("cell_type"))
-  # setConfigElement("filteringCovgCount", 1L)
-  setConfigElement("filteringSexChroms", TRUE)
-  # setConfigElement("filteringCovgReqSamples", 0.005)
-  setConfigElement("differentialCutoffL2FC", 0.5)
-  setConfigElement("normalizationMethod", "quantile")
-  setConfigElement("differentialCompNames", diffCompNames)
-  setConfigElement("lolaDbPaths", "/icbb/projects/igunduz/annotation/lolaDB/hg38/")
-
-  # if the rundir exist continue with existing analysis
-  if (!file.exists(rundir)) {
-    # run ChrAccR on the aggregated fragment files
-    ChrAccR::run_atac(
-      anaDir = rundir, genome = "hg38",
-      input = "full_sample_path", sampleAnnot = dplyr::distinct(new_sampleannot),
-      sampleIdCol = "full_sample_path", regionSets = regionSetList
-    )
-  } else {
-    # run ChrAccR on the aggregated fragment files
-    ChrAccR::run_atac(
-      anaDir = rundir, genome = "hg38",
-      sampleAnnot = dplyr::distinct(new_sampleannot),
-      sampleIdCol = "full_sample_path", regionSets = regionSetList
-    )
-  }
-#})
+} else {
+  # run ChrAccR on the aggregated fragment files
+  ChrAccR::run_atac(
+    anaDir = rundir, genome = "hg38",
+    sampleAnnot = dplyr::distinct(new_sampleannot),
+    sampleIdCol = "full_sample_path", regionSets = regionSetList
+  )
+}
+# })
 
 
 #####################################################################

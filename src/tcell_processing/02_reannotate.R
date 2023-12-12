@@ -1,11 +1,11 @@
 suppressPackageStartupMessages({
-library(ArchR)
-library(dplyr)
-library(GenomicRanges)
-library(SummarizedExperiment)
-library(Seurat)
-library(ggplot2)
-library(rescueR)
+  library(ArchR)
+  library(dplyr)
+  library(GenomicRanges)
+  library(SummarizedExperiment)
+  library(Seurat)
+  library(ggplot2)
+  library(rescueR)
 })
 set.seed(12) # set seed
 
@@ -14,10 +14,10 @@ addArchRGenome("hg38") # set the reference genom
 # load the functions
 source("/icbb/projects/igunduz/sc_epigenome_pathogen_exposure/utils/jaccard.R")
 outputDir <- "/icbb/projects/igunduz/Tcell_subset/"
-project <- ArchR::loadArchRProject(outputDir,showLogo=FALSE)
+project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 
 
-#wget https://changseq.s3.amazonaws.com/Jeff/10x_ScATAC/scATAC_TME_TCells_SummarizedExperiment.final.rds
+# wget https://changseq.s3.amazonaws.com/Jeff/10x_ScATAC/scATAC_TME_TCells_SummarizedExperiment.final.rds
 tcell_se <- readRDS("/icbb/projects/igunduz/DARPA/scATAC_TME_TCells_SummarizedExperiment.final.rds")
 tcell_se_clean <- tcell_se[complete.cases(rowData(tcell_se)$SYMBOL), ]
 gene_names <- rowData(tcell_se_clean)$SYMBOL
@@ -75,7 +75,7 @@ project <- addIterativeLSI(
   dimsToUse = 1:30,
   saveIterations = TRUE,
   nPlot = 100000,
-  force=TRUE
+  force = TRUE
 )
 # perform harmony
 project <- addHarmony(
@@ -83,7 +83,8 @@ project <- addHarmony(
   reducedDims = "IterativeLSI_tcell_final",
   name = "Harmony_TCELL_final",
   force = TRUE,
-  groupBy = "sample_exposure_type")
+  groupBy = "sample_exposure_type"
+)
 
 # add clusters
 project <- addClusters(
@@ -103,23 +104,23 @@ project <- addUMAP(
   name = "UMAPTcell_final",
   nNeighbors = 40,
   minDist = 0.5,
-    force = TRUE,
+  force = TRUE,
   metric = "cosine",
 )
- 
+
 # integration
 project <- addGeneIntegrationMatrix(
-    ArchRProj = project, 
-    useMatrix = "GeneScoreMatrix",
-    matrixName = "tcellGeneIntegrationMatrix",
-    reducedDims = "IterativeLSI_tcell_final",
-    seRNA = seurat_obj,
-    addToArrow = FALSE,
-    force = TRUE,
-    groupRNA = "T_Cell_Cluster",
-    nameCell = "predicted_tcell_cluster_final",
-    nameGroup = "predictedGroup_tcell_final",
-    nameScore = "predictedScore_tcell_final"
+  ArchRProj = project,
+  useMatrix = "GeneScoreMatrix",
+  matrixName = "tcellGeneIntegrationMatrix",
+  reducedDims = "IterativeLSI_tcell_final",
+  seRNA = seurat_obj,
+  addToArrow = FALSE,
+  force = TRUE,
+  groupRNA = "T_Cell_Cluster",
+  nameCell = "predicted_tcell_cluster_final",
+  nameGroup = "predictedGroup_tcell_final",
+  nameScore = "predictedScore_tcell_final"
 )
 
 
@@ -132,36 +133,40 @@ dev.off()
 
 labelOld <- rownames(cM)
 labelNew <- colnames(cM)[apply(cM, 1, which.max)]
-#labelNew2 <- mapLabels(labelNew, oldLabels = names(remapClust), newLabels = remapClust)
+# labelNew2 <- mapLabels(labelNew, oldLabels = names(remapClust), newLabels = remapClust)
 project$TcellSub <- mapLabels(project$tcellClust_final, newLabels = labelNew, oldLabels = labelOld)
 table(project$TcellSub)
 
 
-cell <- as.data.frame(project@cellColData)%>%
-  dplyr::filter(!sample_exposure_group %in% c("BA_na","BA_vac")) 
-cell <- table(cell$predictedGroup_tcell_final,cell$sample_exposure_group)
+cell <- as.data.frame(project@cellColData) %>%
+  dplyr::filter(!sample_exposure_group %in% c("BA_na", "BA_vac"))
+cell <- table(cell$predictedGroup_tcell_final, cell$sample_exposure_group)
 cell <- as.matrix(cell)
-cell <- scale(cell, center=FALSE, scale=colSums(cell))
+cell <- scale(cell, center = FALSE, scale = colSums(cell))
 cell <- reshape2::melt(cell)
-colnames(cell) <- c("CellTypes","Exposure","FractionOfCells")
-cell$Exposure <-forcats::fct_reorder(cell$Exposure, cell$FractionOfCells,mean, .desc = T)
-#define the order
-cell$Exposure <- factor(cell$Exposure, levels=c("C19_ctrl","C19_mild","C19_mod","C19_sev",
-                            "HIV_ctrl","HIV_acu","HIV_chr","Influenza_ctrl",
-                            "Influenza_d3","Influenza_d6","Influenza_d30",
-                            "OP_low","OP_med","OP_high"))
+colnames(cell) <- c("CellTypes", "Exposure", "FractionOfCells")
+cell$Exposure <- forcats::fct_reorder(cell$Exposure, cell$FractionOfCells, mean, .desc = T)
+# define the order
+cell$Exposure <- factor(cell$Exposure, levels = c(
+  "C19_ctrl", "C19_mild", "C19_mod", "C19_sev",
+  "HIV_ctrl", "HIV_acu", "HIV_chr", "Influenza_ctrl",
+  "Influenza_d3", "Influenza_d6", "Influenza_d30",
+  "OP_low", "OP_med", "OP_high"
+))
 cell_type_colors <- c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#6b5b95", "#4f8f6f", "#ff6b6b", "#ffa07a", "#20b2aa", "#9370db", "#32cd32", "#ff1493")
 cell_type_colors <- c("#1f77b4", "#ff7f0e", "#e377c2", "#20b2aa", "#6b5b95", "#4f8f6f", "#2ca02c", "#32cd32", "#d62728", "#1f77b4", "#ff7f0e", "#9370db", "#ff6b6b", "#1f77b4", "#7f7f7f", "#2ca02c", "#e377c2", "#ff1493")
 
-#custom_palette <- c("#08519c", "#3182bd", "#6baed6", "#1b7837", "#5aae61", "#a6dba0", "#762a83", "#c2a5cf")
-stacked <- ggplot(cell, aes(fill=CellTypes, y=FractionOfCells, x=Exposure)) + 
-    geom_bar(position="fill", stat="identity")+
-    scale_fill_manual(values=cell_type_colors)+
-      labs(x = "Exposure Type",
-       y = "Cell Fractions")+ 
-     theme_minimal()+
+# custom_palette <- c("#08519c", "#3182bd", "#6baed6", "#1b7837", "#5aae61", "#a6dba0", "#762a83", "#c2a5cf")
+stacked <- ggplot(cell, aes(fill = CellTypes, y = FractionOfCells, x = Exposure)) +
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_manual(values = cell_type_colors) +
+  labs(
+    x = "Exposure Type",
+    y = "Cell Fractions"
+  ) +
+  theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-if(!dir.exists("/icbb/projects/igunduz/Tcell_subset/Plots/")){
+if (!dir.exists("/icbb/projects/igunduz/Tcell_subset/Plots/")) {
   dir.create("/icbb/projects/igunduz/Tcell_subset/Plots/")
 }
 pdf(paste0("/icbb/projects/igunduz/Tcell_subset/Plots/cellFraction_STACKED_plot2.pdf"), width = 15, height = 10)
@@ -177,16 +182,16 @@ df$Group <- project$TcellSub
 # Create UMAP plot with labels for each cluster
 umap_plot <- ggplot(df, aes(x = UMAP1, y = UMAP2, color = Group)) +
   geom_point() +
-  #geom_text(data = summary_df, aes(x = UMAP1, y = UMAP2, label = Group), 
+  # geom_text(data = summary_df, aes(x = UMAP1, y = UMAP2, label = Group),
   #           color = "black", size = 8, fontface = "bold", show.legend = FALSE) +
-  scale_color_manual(values=colpal.bgp2)+
+  scale_color_manual(values = colpal.bgp2) +
   xlab("UMAP 1") +
   ylab("UMAP 2") +
   theme_classic() +
   theme(legend.position = "bottom")
-ggsave(plot=umap_plot,"/icbb/projects/igunduz/Tcell_subset/Plots/umap2.pdf", width = 10, height = 10)
+ggsave(plot = umap_plot, "/icbb/projects/igunduz/Tcell_subset/Plots/umap2.pdf", width = 10, height = 10)
 
 
 # save the project
 saveArchRProject(project, outputDirectory = outputDir, load = FALSE)
-#table(predictedGroup_tcell_updated)
+# table(predictedGroup_tcell_updated)

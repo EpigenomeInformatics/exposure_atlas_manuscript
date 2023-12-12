@@ -128,7 +128,7 @@ rnbeadsDensityScatter <- function(cell, comp, path, region) {
       df2p$isDMP <- df2p[, "comb.p.adj.fdr"] < 0.05
       sparse.points <- 0.001
       dens.subsample <- TRUE
-      pp <- create.densityScatter(df2p[, c("mean.mean.g2","mean.mean.g1")],
+      pp <- create.densityScatter(df2p[, c("mean.mean.g2", "mean.mean.g1")],
         is.special = df2p$isDMP,
         dens.subsample = dens.subsample, sparse.points = sparse.points, add.text.cor = TRUE
       ) +
