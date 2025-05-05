@@ -22,7 +22,7 @@ sampleannot <- read.delim("/icbb/projects/igunduz/sampleannot.tsv") %>%
 sampleannot$fragmentFiles <- gsub(x = sampleannot$fragmentFiles, pattern = ".bed", replacement = ".tsv.gz")
 
 # read the batch info
-batch <- data.table::fread("/icbb/projects/igunduz/DARPA/ATAC_metadata_covid.csv") %>%
+batch <- data.table::fread("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/ATAC_metadata_covid.csv") %>%
   dplyr::mutate(fragmentFiles = paste0(arrow_name, "_fragments.tsv.gz")) %>%
   dplyr::mutate(processing_date = as.factor(processing_date))
 
