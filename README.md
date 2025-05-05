@@ -45,6 +45,11 @@ This section includes single-cell and pseudobulk-based ATAC-seq analysis. The wo
 
 This section includes pseudobulk methylation analysis focused on ATAC peaks.
 
+| Step | Script                        | Description |
+|------|-------------------------------|-------------|
+| 01   | `01_meth_pseudobulks.R`       | Create pseudobulks for methylation data |
+| 02   | `02_run_RnBeads.R`            | Run RnBeads analysis using the pseudobulks |
+---
 
 ## 3. 🧩 Integration 
 
