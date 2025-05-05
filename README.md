@@ -1,2 +1,4 @@
-# exposure_atlas_manuscript
-The repo for the manuscript "Epigenomic landscape of human peripheral blood cells upon exposure"
+# Dissecting the Epigenome Dynamics of Human Immune Cells Upon Viral and Chemical Exposure at Single-Cell Resolution
+
+Supporting repository for the manuscript of the same name. 
+

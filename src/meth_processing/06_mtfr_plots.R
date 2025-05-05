@@ -10,8 +10,6 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(muLogR)
   library(rescueR)
-  # library(JASPAR2020)
-  #  library(TFBSTools)
   library(ArchR)
   library(muRtools)
 })
