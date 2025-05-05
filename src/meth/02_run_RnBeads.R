@@ -25,7 +25,6 @@ cells <- sort(cells)
 data.dir <- "/icbb/projects/igunduz/DARPA/data/pseudoBulks/perSample"
 
 # Directory where the output should be written to
-# analysis.dir <- "/icbb/projects/igunduz/DARPA/Generated/RnBeadsRuns/"
 analysis.dir <- "/icbb/projects/igunduz/DARPA_analysis/rnbeads_run_061023/"
 
 if (!dir.exists(analysis.dir)) {
