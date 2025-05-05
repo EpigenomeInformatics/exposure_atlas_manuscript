@@ -2,6 +2,19 @@
 
 Supporting repository for the manuscript of the same name. 
 
+### 📁 Project Directory Structure
+
+```text
+figures/              # Output figures from the analysis
+sample_annots/        # Sample-level annotations and metadata
+
+src/
+├── atac/             # scATAC-seq analysis scripts
+├── meth/             # snmC-seq analysis scripts
+├── integration/      # scATAC-seq + snmC-seq integrative analysis scripts
+
+utils/                # Utility functions shared across pipelines
+```
 
 ## 🧬 Getting Started
 
@@ -37,19 +50,7 @@ This section includes pseudobulk methylation analysis focused on ATAC peaks.
 
 This section includes integration of single-cell methylation and chromatin accessibility data from overlapping samples, based on shared ATAC peaks.
 
-### 📁 Project Directory Structure
 
-```text
-figures/              # Output figures from the analysis
-sample_annots/        # Sample-level annotations and metadata
-
-src/
-├── atac/             # scATAC-seq analysis scripts
-├── meth/             # snmC-seq analysis scripts
-├── integration/      # scATAC-seq + snmC-seq integrative analysis scripts
-
-utils/                # Utility functions shared across pipelines
-```
 ## 📫 Contact
 
 For questions or contributions, feel free to reach out to the maintainer.
