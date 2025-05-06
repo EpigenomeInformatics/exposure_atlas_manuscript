@@ -13,7 +13,7 @@ suppressPackageStartupMessages({
   library(grid)
 })
 # extract unique cells
-cells <- data.table::fread("/icbb/projects/igunduz/DARPA/allc_sample_annot_final.csv") %>%
+cells <- data.table::fread("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/allc_sample_annot_final.csv") %>%
   dplyr::select(!V1) %>%
   dplyr::filter(!cell_type %in% c("Other-cell", "Tc-Eff", "Th-Eff"))
 
