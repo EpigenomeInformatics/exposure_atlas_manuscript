@@ -51,6 +51,10 @@ This section includes pseudobulk methylation analysis focused on ATAC peaks.
 | 02.1   | `02_1_run_RnBeads.R`        | Run RnBeads analysis using the pseudobulks |
 | 02.2   | `02_2_run_RnBeads_C19.R`    | Run RnBeads analysis for COVID-19 monocytes using the pseudobulks |
 | 03   | `03_RnBeads_plots.R`          | Generate visualizations from RnBeads outputs  |
+| 04   | `04_C19_pseudobulks.R`        | Generate pseudobulk per condition in C19 for mTFR visualizations  |
+| 05   | `05_C19_mfoot.R`              | Generate motif footprint plots for C19 |
+| 06   | `06_C19_mTFR.R`               | Generate methylTFR deviation scores for C19 |
+| 07   | `07_C19_mTFR_plots.R`         | Generate visualizations methylTFR deviation scores for C19 |
 
 ---
 

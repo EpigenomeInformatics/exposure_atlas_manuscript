@@ -5,9 +5,7 @@
 # created on 08-04-25 by Irem Gunduz
 # Run RnBeads vanilla analysis using pseudobulks for Mono_1, Mono_2 covid
 #####################################################################
-
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/plot_utils.R")
-
+# Load the functions
 set.seed(42)
 suppressPackageStartupMessages({
   library(RnBeads)

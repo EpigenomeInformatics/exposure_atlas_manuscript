@@ -16,7 +16,7 @@ suppressPackageStartupMessages({
 })
 
 # Load the functions
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/plot_utils.R")
+source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/rnbeads_helpers.R")
 source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/chraccr_plots.R")
 
 cells <- data.table::fread("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/allc_sample_annot_final.csv") %>%
