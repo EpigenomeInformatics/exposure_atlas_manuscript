@@ -36,7 +36,7 @@ This section includes single-cell and pseudobulk-based ATAC-seq analysis. The wo
 | 05   | `05_pseudobulk.R`             | Perform pseudobulk aggregation per cell-type |
 | 07.1 | `07_1_run_ChrAccR.R`          | Run ChrAccR analysis |
 | 07.2 | `07_2_run_ChrAccR_C19.R`      | Run ChrAccR analysis focused on COVID-19 samples |
-| 08.1 | `08_1_chraccR_plots.R`        | Generate visualizations from ChrAccR output |
+| 08.1 | `08_1_chraccR_plots.R`        | Generate visualizations from ChrAccR outputs |
 | 08.2 | `08_2_C19_trackplots.R`       | Create genome track plots for COVID-19 differential peaks in CD14+ Monocytes |
 | 09   | `09_gene_exp_vs_activity.R`   | Correlate gene expression with chromatin accessibility in CD14+ Monocytes for protein coding genes|
 ---
@@ -48,7 +48,10 @@ This section includes pseudobulk methylation analysis focused on ATAC peaks.
 | Step | Script                        | Description |
 |------|-------------------------------|-------------|
 | 01   | `01_meth_pseudobulks.R`       | Create pseudobulks for methylation data |
-| 02   | `02_run_RnBeads.R`            | Run RnBeads analysis using the pseudobulks |
+| 02.1   | `02_1_run_RnBeads.R`        | Run RnBeads analysis using the pseudobulks |
+| 02.2   | `02_2_run_RnBeads_C19.R`    | Run RnBeads analysis for COVID-19 monocytes using the pseudobulks |
+| 03   | `03_RnBeads_plots.R`          | Generate visualizations from RnBeads outputs  |
+
 ---
 
 ## 3. 🧩 Integration 
