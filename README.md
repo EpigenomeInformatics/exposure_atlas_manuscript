@@ -53,14 +53,24 @@ This section includes pseudobulk methylation analysis focused on ATAC peaks.
 | 03   | `03_RnBeads_plots.R`          | Generate visualizations from RnBeads outputs  |
 | 04   | `04_C19_pseudobulks.R`        | Generate pseudobulk per condition in C19 for mTFR visualizations  |
 | 05   | `05_C19_mfoot.R`              | Generate motif footprint plots for C19 |
-| 06   | `06_C19_mTFR.R`               | Generate methylTFR deviation scores for C19 |
+| 06   | `06_C19_mTFR.R`               | Run methylTFR algorithm to create deviation scores for C19 |
 | 07   | `07_C19_mTFR_plots.R`         | Generate visualizations methylTFR deviation scores for C19 |
-
 ---
 
-## 3. 🧩 Integration 
+## 3. 🧩 Integration
 
 This section includes integration of single-cell methylation and chromatin accessibility data from overlapping samples, based on shared ATAC peaks.
+
+| Step | Script                  | Description                                                   |
+|------|-------------------------|---------------------------------------------------------------|
+| 01   | `01_prepare_sampleannot.R` | Format sample annotation ready for aggregation               |
+| 02   | `02_aggregate_meth.R`      | Aggregate scMeth over peak regions                           |
+| 03   | `03_quality_check.R`       | Perform quality control on aggregated data                   |
+| 04   | `04_lsi.R`                 | Apply Latent Semantic Indexing (LSI) for dimensionality reduction |
+| 05   | `05_cca.R`                 | Run Canonical Correlation Analysis (CCA) for multi-omic alignment |
+| 06   | `06_plot_cca.R`            | Visualize results of CCA                                     |
+| 07   | `07_mTFR_run.R`            | Run methylTFR algorithm to create deviation scores           |
+| 08   | `08_cor_analysis.R`        | Correlation analysis of mTFR and cVAR matricies              |
 
 
 ## 📫 Contact
