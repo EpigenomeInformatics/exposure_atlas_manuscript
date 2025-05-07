@@ -71,7 +71,7 @@ This section includes integration of single-cell methylation and chromatin acces
 | 06   | `06_plot_cca.R`            | Visualize results of CCA                                     |
 | 07   | `07_mTFR_run.R`            | Run methylTFR algorithm to create deviation scores           |
 | 08   | `08_cor_analysis.R`        | Correlation analysis of mTFR and cVAR matricies              |
-
+| 09  | `09_mfoot.R`                | Generate motif footprint plots for T-cells                    |
 
 ## 📫 Contact
 
