@@ -15,7 +15,7 @@ suppressPackageStartupMessages({
   library(methylTFR)
 })
 
-shareddir <- "/icbb/projects/igunduz/mTFR_bias_fix_v3/all_pseudobulks_181124/"
+shareddir <- "/icbb/projects/igunduz/mTFR_bias_fix_v3/all_pseudobulks_310824/"
 if (!dir.exists(shareddir)) {
   dir.create(shareddir)
 }
