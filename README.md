@@ -90,4 +90,4 @@ This section includes integration of single-cell methylation and chromatin acces
 | 10 |`10_zdiff.R`                | Z-score difference plots for T-cells                    |
 ## 📫 Contact
 
-For questions or contributions, feel free to reach out to the maintainer.
+For questions or contributions, feel free to reach out to the [maintainer](https://github.com/igunduz).
