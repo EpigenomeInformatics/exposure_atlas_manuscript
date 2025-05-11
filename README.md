@@ -17,13 +17,18 @@ utils/                # Utility functions shared across pipelines
 ```
 
 ### 📦 Dependencies
-This repository requires the following R packages (tested on R ≥ 4.1):
-	•	RnBeads – DNA methylation analysis
-	•	ChrAccR – Chromatin accessibility analysis
-	•	ArchR – Single-cell ATAC-seq framework
-	•	dplyr – Data wrangling
-	•	ggplot2 – Plotting
-	•	ComplexHeatmap – Annotated heatmaps
+
+| Package           | Description                                     |
+|-------------------|-------------------------------------------------|
+| R ≥ 4.1           | Minimum required R version                      |
+| RnBeads           | DNA methylation analysis                        |
+| ChrAccR           | Chromatin accessibility analysis                |
+| ArchR             | Single-cell ATAC-seq analysis framework         |
+| dplyr             | Data manipulation and transformation            |
+| methylTFR         | Methylation based TF activities                 |
+| chromVAR         | Accessibility based TF activities                 |
+| ggplot2           | Data visualization                              |
+| ComplexHeatmap    | Complex heatmaps with annotations               |
 
 ## 🧬 Getting Started
 
