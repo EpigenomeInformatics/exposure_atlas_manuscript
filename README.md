@@ -16,6 +16,21 @@ src/
 utils/                # Utility functions shared across pipelines
 ```
 
+### 📦 Dependencies
+
+| Package           | Description                                     |
+|-------------------|-------------------------------------------------|
+| R ≥ 4.1           | Minimum required R version                      |
+| RnBeads           | DNA methylation analysis                        |
+| ChrAccR           | Chromatin accessibility analysis                |
+| ArchR             | Single-cell ATAC-seq analysis framework         |
+| dplyr             | Data manipulation and transformation            |
+| data.table        | Data manipulation and transformation            |
+| methylTFR         | Methylation based TF activities                 |
+| chromVAR         | Accessibility based TF activities                 |
+| ggplot2           | Data visualization                              |
+| ComplexHeatmap    | Complex heatmaps with annotations               |
+
 ## 🧬 Getting Started
 
 We separated the analysis into three main categories:
