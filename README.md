@@ -25,6 +25,7 @@ utils/                # Utility functions shared across pipelines
 | ChrAccR           | Chromatin accessibility analysis                |
 | ArchR             | Single-cell ATAC-seq analysis framework         |
 | dplyr             | Data manipulation and transformation            |
+| data.table        | Data manipulation and transformation            |
 | methylTFR         | Methylation based TF activities                 |
 | chromVAR         | Accessibility based TF activities                 |
 | ggplot2           | Data visualization                              |
