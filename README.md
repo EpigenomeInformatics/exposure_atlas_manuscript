@@ -7,7 +7,7 @@ Supporting repository for the manuscript of the same name.
 ```text
 figures/              # Output figures from the analysis
 sample_annots/        # Sample-level annotations and metadata
-
+data/                 # methylTFR objects
 src/
 ├── atac/             # scATAC-seq analysis scripts
 ├── meth/             # snmC-seq analysis scripts
