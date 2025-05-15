@@ -1,4 +1,4 @@
-# Dissecting the Epigenome Dynamics of Human Immune Cells Upon Viral and Chemical Exposure at Single-Cell Resolution
+# Integrated, multimodal, single-cell analysis of epigenetic dynamics in immune cells upon viral and chemical exposure
 
 Supporting repository for the manuscript of the same name. 
 
