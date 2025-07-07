@@ -45,6 +45,7 @@ for (cell in cells) {
 }
 
 
+
 #####################################################################
 # C19 plots
 #####################################################################
@@ -54,7 +55,8 @@ for (cell in cells) {
 global_peaklist <- readRDS("/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/regionsGR.rds") %>%
   data.table::as.data.table() %>%
   dplyr::select(!width & !strand) %>%
-  as.data.frame()
+  as.data.frame()%>%
+  dplyr::select(seqnames,start,end)
 
 outputDir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/" # atac directory
 analysis.dir <- "/icbb/projects/igunduz/DARPA_analysis/rnbeads_C19_monosub_080425_V2/Monocyte/C19_sev_vs_Ctrl/"

@@ -21,7 +21,7 @@ suppressPackageStartupMessages({
 
 
 # Set the paths
-fig_dir <- "/icbb/projects/igunduz/methylTFR_081124/Tcell_fp_041224_divided/"
+fig_dir <- "/icbb/projects/igunduz/methylTFR_081124/Tcell_fp_250625_divided/"
 if (!dir.exists(fig_dir)) dir.create(fig_dir)
 motifset <- "jaspar2020_distal"
 tfset <- if (motifset == "jaspar2020_distal") {
@@ -34,6 +34,7 @@ tf_bindsites <- getTFbindsites(motifSet = tfset)
 gc_dist <- getGenomeGC()
 enhancer <- readRDS("/icbb/projects/share/annotations/methylTFRAnnotationHg38/inst/extdata/distal_regions.RDS")
 filtered_names <- names(tf_bindsites)
+flankNorm <- 50
 
 # Define the paths to the methylome data for Th and Tc samples
 th_mem_sample <- "/icbb/projects/igunduz/new_scmeth_pseudobulks_070224/Th-Mem.bedGraph"
@@ -72,7 +73,7 @@ plot_and_save_difference <- function(groups, save_dir, obs_colors) {
       combined_data <- rbindlist(lapply(names(groups), function(group_name) {
         group_samples <- groups[[group_name]]
         rbindlist(lapply(names(group_samples), function(name) {
-          plot_data <- plotMotifFootprint(
+          plot_data <- plotExpectedFootprint(
             motif, tf_bindsites, group_samples[[name]]$sample,
             sample_name = group_samples[[name]]$name,
             gc_dist = gc_dist, gcfreqs = gcfreqs,
@@ -82,6 +83,12 @@ plot_and_save_difference <- function(groups, save_dir, obs_colors) {
           # Extract observed and expected data directly from plotDF
           difference_data <- plot_data$plotDF[, .(avg_methyl = avg_methyl[type == "Observed"] / avg_methyl[type == "Expected"]), by = x]
           difference_data[, type := paste("Observed divided Expected", group_samples[[name]]$name)]
+
+          # Now normalize the ratio by flanking region
+          flank <- max(abs(difference_data$x), na.rm = TRUE)
+          idx <- abs(difference_data$x) >= flank - flankNorm
+          norm_factor <- mean(difference_data$avg_methyl[idx], na.rm = TRUE)
+          difference_data[, avg_methyl := avg_methyl / norm_factor]
 
           return(difference_data)
         }))

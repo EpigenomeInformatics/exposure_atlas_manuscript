@@ -283,3 +283,15 @@ p1 <- p1 +
 ggsave(p1, filename = paste0(plot_dir, "protein_coding_diffs_wimmers_highlighted.pdf"), width = 10, height = 10, dpi = 300)
 
 ######################################################################
+
+# Select negative and positive fold-changes from RNA and ATAC 
+datatable_pos <- datatable[datatable$Log2FC_rna > 0 & datatable$Log2FC_atac > 0, ]
+datatable_pos <- datatable_pos[datatable_pos$isDiff_1 | datatable_pos$isDiff_2, ]
+datatable_neg <- datatable[datatable$Log2FC_rna < 0 & datatable$Log2FC_atac < 0, ]
+datatable_neg <- datatable_neg[datatable_neg$isDiff_1 | datatable_neg$isDiff_2, ]
+
+# Write the combined data to a CSV file
+write.csv(datatable_pos, file = paste0(sannot_dir, "protein_coding_datatable_pos.csv"), row.names = FALSE)
+write.csv(datatable_neg, file = paste0(sannot_dir, "protein_coding_datatable_neg.csv"), row.names = FALSE)
+
+######################################################################

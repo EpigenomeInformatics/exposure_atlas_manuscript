@@ -1,4 +1,4 @@
-# Integrated, multimodal, single-cell analysis of epigenetic dynamics in immune cells upon viral and chemical exposure
+# Dissecting the epigenome dynamics in human immune cells upon viral and chemical exposure by multimodal single-cell profiling
 
 Supporting repository for the manuscript of the same name. 
 

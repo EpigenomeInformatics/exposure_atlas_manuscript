@@ -17,6 +17,7 @@ suppressPackageStartupMessages({
   library(tidyr)
 })
 
+addArchRThreads(threads = 20) 
 
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 echo_full <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
@@ -152,11 +153,11 @@ ggsave(umap, file = paste0(fig_dir, "umap_tcell_subject.pdf"), width = 7, height
 
 
 project <- readRDS("/icbb/projects/igunduz/ArchR-Project-cd8t.rds")
-outputDir <- "/icbb/projects/igunduz/archr_300824/icbb/projects/igunduz/archr_project_011023/"
+outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 # Reorgnaize arrow file path
 arrows <- list.files(paste0(outputDir, "ArrowFiles"), full.names = TRUE)
 project@sampleColData <- DataFrame(ArrowFiles = arrows)
-rownames(project@sampleColData) <- gsub(x = gsub(x = arrows, ".arrow", ""), paste0(outputDir, "ArrowFile# Reorgnaize arrow file paths/"), "")
+rownames(project@sampleColData) <- arrows#gsub(x = gsub(x = arrows, ".arrow", ""), paste0(outputDir, "ArrowFile# Reorgnaize arrow file paths/"), "")
 
 p1 <- plotEmbedding(ArchRProj = project, colorBy = "cellColData", name = "Sample", embedding = "UMAP")
 p2 <- plotEmbedding(ArchRProj = project, colorBy = "cellColData", name = "Clusters", embedding = "UMAP")
@@ -199,16 +200,16 @@ markerGenes <- c(
   "HAVCR2", "CTLA4", "NCAM1", "ROBO2", "ROBO1", "TIGIT"
 )
 
-markerList <- getMarkers(markersGS, cutOff = "FDR <= 0.01 & Log2FC >= 1.25")
-
 # Get the marker genes
 markersGS <- getMarkerFeatures(
-  ArchRProj = projHeme2,
+  ArchRProj = project,
   useMatrix = "GeneScoreMatrix",
-  groupBy = "ClustersHIV",
+  groupBy = "Clusters",
   bias = c("TSSEnrichment", "log10(nFrags)"),
   testMethod = "wilcoxon"
 )
+
+markerList <- getMarkers(markersGS, cutOff = "FDR <= 0.01 & Log2FC >= 1.25")
 
 # Create the heatmap
 heatmapGS <- markerHeatmap(

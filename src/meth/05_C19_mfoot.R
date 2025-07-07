@@ -21,7 +21,7 @@ suppressPackageStartupMessages({
 })
 
 # Set the paths
-plot_dir <- "/icbb/projects/igunduz/C19_mFOOT_280425_monosub_jaspar2020_v2/"
+plot_dir <- "/icbb/projects/igunduz/C19_mFOOT_250625_monosub_jaspar2020_v2/"
 if (!dir.exists(plot_dir)) dir.create(plot_dir)
 motifset <- "jaspar2020_distal"
 
@@ -36,6 +36,7 @@ tf_bindsites <- getTFbindsites(motifSet = tfset)
 gc_dist <- readRDS("/icbb/projects/igunduz/annotation/genome_wide_GC.RDS")
 enhancer <- readRDS("/icbb/projects/share/annotations/methylTFRAnnotationHg38/inst/extdata/distal_regions.RDS")
 filtered_names <- names(tf_bindsites)
+flankNorm <- 50
 
 # Define the paths to the methylome data for COVID-19 samples
 covid_samples <- list(
@@ -50,15 +51,16 @@ covid_samples <- lapply(covid_samples, function(s) {
   return(s)
 })
 
+publication <- c("SPIB","CEBPD","RELA","CREB1","CEBPA","JUN","BATF","REL","BATF::JUN","SPIC","FOSB::JUN")
 # Function to generate and save a plot for all COVID-19 samples
 plot_and_save_difference_covid <- function(samples, save_dir, obs_colors) {
-  for (motif in "FOSL2::JUN(var.2)") {
+  for (motif in publication) {
     if (!file.exists(file.path(save_dir, paste0("TF_footprint_diff_", motif, "_covid.pdf")))) {
       logger.start(paste("Processing motif", motif, "for COVID-19 samples"))
 
       # Generate plot data and calculate the difference
       combined_data <- rbindlist(lapply(names(samples), function(name) {
-        plot_data <- plotMotifFootprint(
+        plot_data <- plotExpectedFootprint(
           motif, tf_bindsites, samples[[name]]$sample,
           sample_name = samples[[name]]$name,
           gc_dist = gc_dist, gcfreqs = gcfreqs,
@@ -68,6 +70,12 @@ plot_and_save_difference_covid <- function(samples, save_dir, obs_colors) {
         difference_data <- plot_data$plotDF[, .(avg_methyl = avg_methyl[type == "Observed"] / avg_methyl[type == "Expected"]), by = x]
         difference_data[, type := paste("Observed divided Expected", samples[[name]]$name)]
 
+        # Now normalize the ratio by flanking region
+        flank <- max(abs(difference_data$x), na.rm = TRUE)
+        idx <- abs(difference_data$x) >= flank - flankNorm
+        norm_factor <- mean(difference_data$avg_methyl[idx], na.rm = TRUE)
+        difference_data[, avg_methyl := avg_methyl / norm_factor]
+        
         return(difference_data)
       }))
       logger.completed()
@@ -104,3 +112,4 @@ obs_colors <- c(
 plot_and_save_difference_covid(covid_samples, plot_dir, obs_colors)
 
 #####################################################################
+
