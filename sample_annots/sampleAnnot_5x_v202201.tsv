@@ -1,0 +1,120 @@
+sampleId	exposure_type	exposure_group	exposure_grouping	id_trunc	arrow_name	record_id	supplier	processing_institution	tss_cutoff	log10frags_cutoff
+C19_mod_055	C19	C19_mod	moderate	055	ATAC_055_fragments.tsv.gz	4	Stanford	Stanford	7	3.7
+C19_mild_057	C19	C19_mild	mild	057	ATAC_057_fragments.tsv.gz	2	Stanford	Stanford	7	3.5
+C19_mild_132D0	C19	C19_mild	mild	132D0	ATAC_132D0_fragments.tsv.gz	3	Stanford	Stanford	7	3.8
+C19_mild_52	C19	C19_mild	mild	52	ATAC_52_fragments.tsv.gz	2	Stanford	Stanford	8	3.7
+C19_mod_555_1	C19	C19_mod	moderate	555_1	ATAC_555_1_fragments.tsv.gz	5	Stanford	Stanford	7	3.6
+C19_sev_555_2	C19	C19_sev	severe	555_2	ATAC_555_2_fragments.tsv.gz	7	Stanford	Stanford	7	3.8
+C19_mod_556	C19	C19_mod	moderate	556	ATAC_556_fragments.tsv.gz	4	Stanford	Stanford	8	3.5
+C19_sev_557	C19	C19_sev	severe	557	ATAC_557_fragments.tsv.gz	7	Stanford	Stanford	6	3.5
+C19_sev_558	C19	C19_sev	severe	558	ATAC_558_fragments.tsv.gz	7	Stanford	Stanford	8	3.2
+C19_mod_559	C19	C19_mod	moderate	559	ATAC_559_fragments.tsv.gz	4	Stanford	Stanford	7	3.2
+C19_sev_560	C19	C19_sev	severe	560	ATAC_560_fragments.tsv.gz	7	Stanford	Stanford	5	3.5
+C19_sev_564A	C19	C19_sev	severe	564A	ATAC_564A_fragments.tsv.gz	6	Stanford	Stanford	6	3.7
+C19_sev_564B	C19	C19_sev	severe	564B	ATAC_564B_fragments.tsv.gz	6	Stanford	Stanford	6	3.5
+C19_mild_66D0	C19	C19_mild	mild	66D0	ATAC_66D0_fragments.tsv.gz	2	Stanford	Stanford	7	3.8
+C19_mild_66D7	C19	C19_mild	mild	66D7	ATAC_66D7_fragments.tsv.gz	2	Stanford	Stanford	8	3.6
+C19_mild_67	C19	C19_mild	mild	67	ATAC_67_fragments.tsv.gz	2	Stanford	Stanford	8	3.6
+C19_mild_83	C19	C19_mild	mild	83	ATAC_83_fragments.tsv.gz	2	Stanford	Stanford	6	3.7
+C19_mild_86	C19	C19_mild	mild	86	ATAC_86_fragments.tsv.gz	2	Stanford	Stanford	8	3.8
+C19_ctrl_EV08	C19	C19_ctrl	healthy	EV08	ATAC_EV08_fragments.tsv.gz	0	Stanford	Stanford	6	3.8
+Influenza_ctrl_flu01_1	Influenza	Influenza_ctrl	healthy	flu01_1	ATAC_flu01_1_fragments.tsv.gz	right before challenge	vaxart	Stanford	8	3.4
+Influenza_d3_flu01_2	Influenza	Influenza_d3	day3	flu01_2	ATAC_flu01_2_fragments.tsv.gz	day 3 after challenge	vaxart	Stanford	9	3.5
+Influenza_d6_flu01_3	Influenza	Influenza_d6	day6	flu01_3	ATAC_flu01_3_fragments.tsv.gz	day 6 after challenge	vaxart	Stanford	7	3.3
+Influenza_d30_flu01_4	Influenza	Influenza_d30	day30	flu01_4	ATAC_flu01_4_fragments.tsv.gz	day 30 after challenge	vaxart	Stanford	8	3.4
+Influenza_ctrl_flu02_1	Influenza	Influenza_ctrl	healthy	flu02_1	ATAC_flu02_1_fragments.tsv.gz	right before challenge	vaxart	Stanford	8	3.3
+Influenza_d3_flu02_2	Influenza	Influenza_d3	day3	flu02_2	ATAC_flu02_2_fragments.tsv.gz	day 3 after challenge	vaxart	Stanford	10	3.4
+Influenza_d6_flu02_3	Influenza	Influenza_d6	day6	flu02_3	ATAC_flu02_3_fragments.tsv.gz	day 6 after challenge	vaxart	Stanford	9	3.4
+Influenza_d30_flu02_4	Influenza	Influenza_d30	day30	flu02_4	ATAC_flu02_4_fragments.tsv.gz	day 30 after challenge	vaxart	Stanford	10	3.3
+Influenza_ctrl_flu03_1	Influenza	Influenza_ctrl	healthy	flu03_1	ATAC_flu03_1_fragments.tsv.gz	right before challenge	vaxart	Stanford	10	3.8
+Influenza_d3_flu03_2	Influenza	Influenza_d3	day3	flu03_2	ATAC_flu03_2_fragments.tsv.gz	day 3 after challenge	vaxart	Stanford	10	4
+Influenza_d6_flu03_3	Influenza	Influenza_d6	day6	flu03_3	ATAC_flu03_3_fragments.tsv.gz	day 6 after challenge	vaxart	Stanford	10	3.7
+Influenza_d30_flu03_4	Influenza	Influenza_d30	day30	flu03_4	ATAC_flu03_4_fragments.tsv.gz	day 30 after challenge	vaxart	Stanford	10	3.7
+Influenza_ctrl_flu206_1	Influenza	Influenza_ctrl	healthy	flu206_1	ATAC_flu206_1_fragments.tsv.gz	right before challenge	vaxart	Stanford	10	3.8
+Influenza_d3_flu206_2	Influenza	Influenza_d3	day3	flu206_2	ATAC_flu206_2_fragments.tsv.gz	day 3 after challenge	vaxart	Stanford	10	3.8
+Influenza_d6_flu206_3	Influenza	Influenza_d6	day6	flu206_3	ATAC_flu206_3_fragments.tsv.gz	day 6 after challenge	vaxart	Stanford	10	3.8
+Influenza_d30_flu206_4	Influenza	Influenza_d30	day30	flu206_4	ATAC_flu206_4_fragments.tsv.gz	day 30 after challenge	vaxart	Stanford	10	3.8
+Influenza_ctrl_flu341_1	Influenza	Influenza_ctrl	healthy	flu341_1	ATAC_flu341_1_fragments.tsv.gz	right before challenge	vaxart	Stanford	10	3.8
+Influenza_d3_flu341_2	Influenza	Influenza_d3	day3	flu341_2	ATAC_flu341_2_fragments.tsv.gz	day 3 after challenge	vaxart	Stanford	10	3.7
+Influenza_d6_flu341_3	Influenza	Influenza_d6	day6	flu341_3	ATAC_flu341_3_fragments.tsv.gz	day 6 after challenge	vaxart	Stanford	8	3.8
+Influenza_d30_flu341_4	Influenza	Influenza_d30	day30	flu341_4	ATAC_flu341_4_fragments.tsv.gz	day 30 after challenge	vaxart	Stanford	8	3.8
+C19_ctrl_HIP02_frozen	C19	C19_ctrl	healthy	HIP02_frozen	ATAC_HIP02_frozen_fragments.tsv.gz	0	Stanford	Stanford	7	3.3
+C19_ctrl_HIP023_frozen	C19	C19_ctrl	healthy	HIP023_frozen	ATAC_HIP023_frozen_fragments.tsv.gz	0	Stanford	Stanford	10	3.8
+C19_ctrl_HIP043	C19	C19_ctrl	healthy	HIP043	ATAC_HIP043_fragments.tsv.gz	0	Stanford	Stanford	10	3.5
+C19_ctrl_HIP044	C19	C19_ctrl	healthy	HIP044	ATAC_HIP044_fragments.tsv.gz	0	Stanford	Stanford	8	3.3
+C19_ctrl_HIP045	C19	C19_ctrl	healthy	HIP045	ATAC_HIP045_fragments.tsv.gz	0	Stanford	Stanford	10	3.6
+C19_ctrl_HIP15_frozen	C19	C19_ctrl	healthy	HIP15_frozen	ATAC_HIP15_frozen_fragments.tsv.gz	0	Stanford	Stanford	8	3.5
+BA_na_BAM0005	BA	BA_na	NA	BAM0005	BAM0005_fragments.tsv.gz	NA	Battelle	Stanford	10	3.6
+BA_na_BAM0009	BA	BA_na	NA	BAM0009	BAM0009.tsv.gz	NA	Battelle	Stanford	9	3.7
+OP_med_OP_10	OP	OP_med	medium	OP_10	Bei_ATAC_OP_10.tsv.gz	NA	DU	Stanford	10	3.7
+OP_high_OP_11	OP	OP_high	high	OP_11	Bei_ATAC_OP_11.tsv.gz	NA	DU	Stanford	10	3.8
+OP_high_OP_12	OP	OP_high	high	OP_12	Bei_ATAC_OP_12.tsv.gz	NA	DU	Stanford	10	3.6
+OP_high_OP_13	OP	OP_high	high	OP_13	Bei_ATAC_OP_13.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_OP_14	OP	OP_high	high	OP_14	Bei_ATAC_OP_14.tsv.gz	NA	DU	Stanford	10	3.7
+OP_high_OP_15	OP	OP_high	high	OP_15	Bei_ATAC_OP_15.tsv.gz	NA	DU	Stanford	10	3.7
+OP_high_OP_16	OP	OP_high	high	OP_16	Bei_ATAC_OP_16.tsv.gz	NA	DU	Stanford	10	3.7
+OP_med_OP_18	OP	OP_med	medium	OP_18	Bei_ATAC_OP_18.tsv.gz	NA	DU	Stanford	10	3.7
+OP_low_OP_19	OP	OP_low	low	OP_19	Bei_ATAC_OP_19.tsv.gz	NA	DU	Stanford	10	3.5
+OP_med_OP_2	OP	OP_med	medium	OP_2	Bei_ATAC_OP_2.tsv.gz	NA	DU	Stanford	10	3.3
+OP_low_OP_20	OP	OP_low	low	OP_20	Bei_ATAC_OP_20.tsv.gz	NA	DU	Stanford	10	3.6
+OP_high_OP_21	OP	OP_high	high	OP_21	Bei_ATAC_OP_21.tsv.gz	NA	DU	Stanford	10	3.6
+OP_low_OP_22	OP	OP_low	low	OP_22	Bei_ATAC_OP_22.tsv.gz	NA	DU	Stanford	10	3.6
+OP_low_OP_23	OP	OP_low	low	OP_23	Bei_ATAC_OP_23.tsv.gz	NA	DU	Stanford	10	3.8
+OP_high_OP_24	OP	OP_high	high	OP_24	Bei_ATAC_OP_24.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_OP_3	OP	OP_high	high	OP_3	Bei_ATAC_OP_3.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_OP_4	OP	OP_high	high	OP_4	Bei_ATAC_OP_4.tsv.gz	NA	DU	Stanford	10	3.5
+OP_low_OP_5	OP	OP_low	low	OP_5	Bei_ATAC_OP_5.tsv.gz	NA	DU	Stanford	10	3.3
+OP_low_OP_6	OP	OP_low	low	OP_6	Bei_ATAC_OP_6.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_OP_7	OP	OP_high	high	OP_7	Bei_ATAC_OP_7.tsv.gz	NA	DU	Stanford	10	3.5
+OP_med_OP_8	OP	OP_med	medium	OP_8	Bei_ATAC_OP_8.tsv.gz	NA	DU	Stanford	8	3.5
+OP_high_OP_9	OP	OP_high	high	OP_9	Bei_ATAC_OP_9.tsv.gz	NA	DU	Stanford	10	3.8
+BA_vac_BMI0047	BA	BA_vac	vaccinated	BMI0047	BMI0047.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BMI0049	BA	BA_vac	vaccinated	BMI0049	BMI0049.tsv.gz	NA	Battelle	Stanford	10	3.3
+BA_vac_BMI0057	BA	BA_vac	vaccinated	BMI0057	BMI0057.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BMI0058	BA	BA_vac	vaccinated	BMI0058	BMI0058.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BMI0061	BA	BA_vac	vaccinated	BMI0061	BMI0061.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BMI0067	BA	BA_vac	vaccinated	BMI0067	BMI0067.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BMI0083	BA	BA_vac	vaccinated	BMI0083	BMI0083.tsv.gz	NA	Battelle	Stanford	10	3.5
+BA_vac_BMI0100	BA	BA_vac	vaccinated	BMI0100	BMI0100.tsv.gz	NA	Battelle	Stanford	10	3.3
+BA_vac_BMI0103	BA	BA_vac	vaccinated	BMI0103	BMI0103.tsv.gz	NA	Battelle	Stanford	10	3.6
+BA_vac_BWJ0002	BA	BA_vac	vaccinated	BWJ0002	BWJ0002.tsv.gz	NA	Battelle	Stanford	10	3.5
+BA_vac_BWJ0003	BA	BA_vac	vaccinated	BWJ0003	BWJ0003.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BWJ0004	BA	BA_vac	vaccinated	BWJ0004	BWJ0004.tsv.gz	NA	Battelle	Stanford	10	3.5
+BA_vac_BWJ0005	BA	BA_vac	vaccinated	BWJ0005	BWJ0005.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BWJ0006	BA	BA_vac	vaccinated	BWJ0006	BWJ0006.tsv.gz	NA	Battelle	Stanford	10	3.5
+BA_vac_BWJ0007	BA	BA_vac	vaccinated	BWJ0007	BWJ0007.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BWJ0009	BA	BA_vac	vaccinated	BWJ0009	BWJ0009.tsv.gz	NA	Battelle	Stanford	10	3.4
+BA_vac_BWJ0011	BA	BA_vac	vaccinated	BWJ0011	BWJ0011.tsv.gz	NA	Battelle	Stanford	10	3.5
+BA_vac_BWJ0013	BA	BA_vac	vaccinated	BWJ0013	BWJ0013.tsv.gz	NA	Battelle	Stanford	10	3.8
+BA_vac_BWJ0014	BA	BA_vac	vaccinated	BWJ0014	BWJ0014_fragments.tsv.gz	NA	Battelle	Stanford	10	3.3
+BA_vac_BWJ0015	BA	BA_vac	vaccinated	BWJ0015	BWJ0015.tsv.gz	NA	Battelle	Stanford	10	3.9
+BA_vac_BWJ0017	BA	BA_vac	vaccinated	BWJ0017	BWJ0017_fragments.tsv.gz	NA	Battelle	Stanford	10	3.7
+BA_vac_BWJ0018	BA	BA_vac	vaccinated	BWJ0018	BWJ0018.tsv.gz	NA	Battelle	Stanford	10	3.8
+BA_vac_BWJ0028	BA	BA_vac	vaccinated	BWJ0028	BWJ0028.tsv.gz	NA	Battelle	Stanford	8	3.5
+BA_vac_BWJ0029	BA	BA_vac	vaccinated	BWJ0029	BWJ0029.tsv.gz	NA	Battelle	Stanford	9	3.7
+BA_vac_BWJ0030	BA	BA_vac	vaccinated	BWJ0030	BWJ0030.tsv.gz	NA	Battelle	Stanford	10	3.6
+OP_high_01S0004460	OP	OP_high	high	01S0004460	DU19-01S0004460.tsv.gz	NA	DU	Stanford	10	3.5
+OP_low_01S0004478	OP	OP_low	low	01S0004478	DU19-01S0004478.tsv.gz	NA	DU	Stanford	10	3.3
+OP_high_01S0004484	OP	OP_high	high	01S0004484	DU19-01S0004484.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_01S0004508	OP	OP_high	high	01S0004508	DU19-01S0004508.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_01S0004526	OP	OP_high	high	01S0004526	DU19-01S0004526.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_01S0004538	OP	OP_high	high	01S0004538	DU19-01S0004538.tsv.gz	NA	DU	Stanford	10	3.5
+OP_med_01S0004676	OP	OP_med	medium	01S0004676	DU19-01S0004676.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_01S0004700	OP	OP_high	high	01S0004700	DU19-01S0004700.tsv.gz	NA	DU	Stanford	10	3.5
+OP_high_01S0004718	OP	OP_high	high	01S0004718	DU19-01S0004718.tsv.gz	NA	DU	Stanford	10	3.3
+OP_high_01S0004754	OP	OP_high	high	01S0004754	DU19-01S0004754.tsv.gz	NA	DU	Stanford	10	3.4
+OP_low_01S0004784	OP	OP_low	low	01S0004784	DU19-01S0004784.tsv.gz	NA	DU	Stanford	10	3.6
+OP_low_01S0004814	OP	OP_low	low	01S0004814	DU19-01S0004814.tsv.gz	NA	DU	Stanford	10	3.8
+OP_med_01S0004826	OP	OP_med	medium	01S0004826	DU19-01S0004826.tsv.gz	NA	DU	Stanford	10	3.5
+HIV_acu_hiv1	HIV	HIV_acu	acute	hiv1	hiv1_fragments.tsv.gz	NA	DU	Stanford	10	3.6
+HIV_ctrl_hiv10	HIV	HIV_ctrl	healthy	hiv10	hiv10_fragments.tsv.gz	NA	DU	Stanford	10	3.4
+HIV_acu_hiv11	HIV	HIV_acu	acute	hiv11	hiv11_fragments.tsv.gz	NA	DU	Stanford	10	3.5
+HIV_chr_hiv12	HIV	HIV_chr	chronic	hiv12	hiv12_fragments.tsv.gz	NA	DU	Stanford	10	3.5
+HIV_ctrl_hiv2	HIV	HIV_ctrl	healthy	hiv2	hiv2_fragments.tsv.gz	NA	DU	Stanford	10	3.8
+HIV_chr_hiv3	HIV	HIV_chr	chronic	hiv3	hiv3_fragments.tsv.gz	NA	DU	Stanford	10	3.8
+HIV_acu_hiv4	HIV	HIV_acu	acute	hiv4	hiv4_fragments.tsv.gz	NA	DU	Stanford	10	3.5
+HIV_chr_hiv5	HIV	HIV_chr	chronic	hiv5	hiv5_fragments.tsv.gz	NA	DU	Stanford	10	3.5
+HIV_ctrl_hiv6	HIV	HIV_ctrl	healthy	hiv6	hiv6_fragments.tsv.gz	NA	DU	Stanford	10	3.6
+HIV_acu_hiv7	HIV	HIV_acu	acute	hiv7	hiv7_fragments.tsv.gz	NA	DU	Stanford	10	3.6
+HIV_ctrl_hiv8	HIV	HIV_ctrl	healthy	hiv8	hiv8_fragments.tsv.gz	NA	DU	Stanford	10	3.6
+HIV_chr_hiv9	HIV	HIV_chr	chronic	hiv9	hiv9_fragments.tsv.gz	NA	DU	Stanford	10	3.4

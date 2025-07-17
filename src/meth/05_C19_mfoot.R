@@ -21,7 +21,7 @@ suppressPackageStartupMessages({
 })
 
 # Set the paths
-plot_dir <- "/icbb/projects/igunduz/C19_mFOOT_250625_monosub_jaspar2020_v2/"
+plot_dir <- "/icbb/projects/igunduz/C19_mFOOT_140725_mono1_jaspar2020_v2/"
 if (!dir.exists(plot_dir)) dir.create(plot_dir)
 motifset <- "jaspar2020_distal"
 
@@ -54,7 +54,7 @@ covid_samples <- lapply(covid_samples, function(s) {
 publication <- c("SPIB","CEBPD","RELA","CREB1","CEBPA","JUN","BATF","REL","BATF::JUN","SPIC","FOSB::JUN")
 # Function to generate and save a plot for all COVID-19 samples
 plot_and_save_difference_covid <- function(samples, save_dir, obs_colors) {
-  for (motif in publication) {
+  for (motif in filtered_names) {
     if (!file.exists(file.path(save_dir, paste0("TF_footprint_diff_", motif, "_covid.pdf")))) {
       logger.start(paste("Processing motif", motif, "for COVID-19 samples"))
 
