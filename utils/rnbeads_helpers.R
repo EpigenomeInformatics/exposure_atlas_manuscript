@@ -141,3 +141,128 @@ rnbeadsDensityScatter <- function(cell, comp, path, region) {
   }
   return(pp)
 }
+
+
+custom.densityScatter <- function(df2p, is.special = NULL,
+                                  dens.subsample = FALSE, sparse.points = 0.01,
+                                  dens.n = 100, add.text.cor = TRUE,
+                                  color.by.direction = NULL, color.map = NULL) {
+    if (!is.null(is.special)) {
+        is.special[is.na(is.special)] <- FALSE
+        df2p$is.special <- is.special
+    }
+
+    df2p <- na.omit(df2p)
+    if (nrow(df2p) < 1) return(ggplot() + ggtitle("No data"))
+
+    # Density estimation
+    stable.bandwidth.fun <- function(x, eps = 1e-04) {
+        r <- quantile(x, c(0.25, 0.75))
+        h <- (r[2] - r[1]) / 1.34
+        if (h == 0) h <- eps
+        4 * 1.06 * min(sqrt(var(x)), h) * length(x)^(-1/5)
+    }
+    stable.h <- c(
+        stable.bandwidth.fun(df2p[, 1]),
+        stable.bandwidth.fun(df2p[, 2])
+    )
+
+    # Base plot with density
+    pp <- ggplot(df2p, aes(x = !!sym(colnames(df2p)[1]), y = !!sym(colnames(df2p)[2]))) +
+        stat_density2d(geom = "tile",
+                       aes(alpha = after_stat(density)^0.25),
+                       contour = FALSE, n = dens.n, h = stable.h, fill = "lightblue") +
+        scale_alpha(range = c(0, 1))
+
+    # Add sparse points (non-DMPs, low density)
+    if (sparse.points > 0) {
+        dens.ranks <- muRtools:::densRanks(df2p[, 1], df2p[, 2])
+        thres <- if (sparse.points <= 1) ceiling(nrow(df2p) * sparse.points) else sparse.points
+        df2p.loose <- df2p[dens.ranks <= thres, ]
+        pp <- pp + geom_point(data = df2p.loose,
+                              aes(x = !!sym(colnames(df2p)[1]), y = !!sym(colnames(df2p)[2])),
+                              color = "1F78B4", size = 0.4)
+    }
+
+    # Add differential points with custom coloring
+    if (!is.null(is.special) && any(is.special)) {
+        df2p.special <- df2p[df2p$is.special, ]
+
+        # If user supplied coloring variable
+        if (!is.null(color.by.direction) && !is.null(color.map)) {
+            df2p.special$direction <- color.by.direction[is.special]
+            pp <- pp + geom_point(
+                data = df2p.special,
+                aes(x = !!sym(colnames(df2p)[1]), y = !!sym(colnames(df2p)[2]), color = direction),
+                size = 1
+            ) +
+            scale_color_manual(values = color.map, name = "DMP direction")
+        } else {
+            # fallback: single color
+            pp <- pp + geom_point(
+                data = df2p.special,
+                aes(x = !!sym(colnames(df2p)[1]), y = !!sym(colnames(df2p)[2])),
+                color = "red", size = 1
+            )
+        }
+    }
+
+    # Add correlation text
+    if (add.text.cor) {
+        cc <- cor(df2p[, 1], df2p[, 2], use = "pairwise.complete.obs")
+        txt.cor <- paste0("rho==", round(cc, 4))
+        pp <- pp + annotate("text", x = max(df2p[, 1], na.rm = TRUE),
+                            y = min(df2p[, 2], na.rm = TRUE),
+                            label = txt.cor, parse = TRUE,
+                            hjust = 1, vjust = 1, size = 4)
+    }
+
+    return(pp + coord_fixed() + theme_classic())
+}
+
+rnbeadsDensityScatter_sub <- function(diffMeth, region, plot_path, color_mapping) {
+    plot_list <- list()
+
+    for (i in seq_along(get.comparisons(diffMeth))) {
+        cc <- names(get.comparisons(diffMeth))[i]
+        ccc <- get.comparisons(diffMeth)[[cc]]
+        dmt <- get.table(diffMeth, ccc, region, return.data.frame = TRUE)
+        ccn <- ifelse(RnBeads:::is.valid.fname(cc), cc, paste0("cmp", i))
+        grp.names <- get.comparison.grouplabels(diffMeth)[ccc, ]
+        ChrAccR:::cleanMem()
+
+        if ("comb.p.adj.fdr" %in% colnames(dmt)) {
+            dmt$isDMP <- dmt$comb.p.adj.fdr <= 0.05
+
+            # Define DMP direction
+            dmt$direction <- NA
+            dmt$direction[dmt$isDMP & dmt$mean.mean.g1 > dmt$mean.mean.g2] <- paste0(grp.names[1], " higher")
+            dmt$direction[dmt$isDMP & dmt$mean.mean.g1 < dmt$mean.mean.g2] <- paste0(grp.names[2], " higher")
+
+            # Build color map from global color_mapping
+            group_labels <- c(
+                paste0(grp.names[1], " higher"),
+                paste0(grp.names[2], " higher")
+            )
+
+            group_colors <- setNames(
+                c(color_mapping[grp.names[1]], color_mapping[grp.names[2]]),
+                group_labels
+            )
+
+            # Create plot
+            pp <- custom.densityScatter(
+                dmt[, c("mean.mean.g2", "mean.mean.g1")],
+                is.special = dmt$isDMP,
+                color.by.direction = dmt$direction,
+                color.map = group_colors
+            ) 
+
+            plot_list[[ccn]] <- pp
+            pdf_file <- file.path(plot_path, paste0(ccn, "_density_scatter.pdf"))
+            ggsave(pdf_file, plot = pp, width = 8, height = 6)
+        }
+    }
+
+    return(plot_list)
+}

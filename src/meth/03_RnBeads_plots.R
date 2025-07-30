@@ -45,7 +45,6 @@ for (cell in cells) {
 }
 
 
-
 #####################################################################
 # C19 plots
 #####################################################################
@@ -90,7 +89,20 @@ for (i in 1:length(dmrs)) {
 
 # Plot the density scatter plot for comparasions
 plot_path <- "/icbb/projects/igunduz/exposure_atlas_manuscript/src/meth_processing/Fig_5_sub_080425/plots/"
-rnbeadsDensityScatter_sub(diffMeth, "archr_peaks", plot_path)
+color_mapping <- c(
+    "CommercialControl_healthy" = "#4F619D",
+    "C19_ctrl" = "#4F619D",
+    "C19_sev_mono2" = "#006400",
+    "C19_sev_mono1"  = "#006400",
+    "COVID_severe"="red",
+    "C19_mild"="#8FBC8F"
+)
+rnbeadsDensityScatter_sub(diffMeth, "archr_peaks", plot_path,color_mapping)
+
+# For C19 mild vs control
+analysis.dir <- "/icbb/projects/igunduz/DARPA_analysis/RnBeads_0111023/Monocyte/C19_mild_vs_Ctrl/"
+mild_diffMeth <- load.rnb.diffmeth(paste0(analysis.dir, "/reports/differential_methylation_data/differential_rnbDiffMeth/"))
+rnbeadsDensityScatter_sub(diffMeth, "archr_peaks", plot_path,color_mapping)
 
 # load loladb database
 lolaDb <- "/icbb/projects/share/annotations/lolaDB/hg38/"

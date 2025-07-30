@@ -84,6 +84,10 @@ plot_and_save_difference <- function(groups, save_dir, obs_colors) {
           difference_data <- plot_data$plotDF[, .(avg_methyl = avg_methyl[type == "Observed"] / avg_methyl[type == "Expected"]), by = x]
           difference_data[, type := paste("Observed divided Expected", group_samples[[name]]$name)]
 
+      # Check if the motif is IRF4 and adjust the normalization factor
+      if (motif == "IRF4") {
+       flankNorm <- 150
+      }
           # Now normalize the ratio by flanking region
           flank <- max(abs(difference_data$x), na.rm = TRUE)
           idx <- abs(difference_data$x) >= flank - flankNorm
@@ -97,8 +101,14 @@ plot_and_save_difference <- function(groups, save_dir, obs_colors) {
 
       logger.info("Plotting combined difference data for all groups")
 
+      # Filter data for IRF4 motif and x-axis range 100 to 199
+      if (motif == "IRF4") {
+        combined_data2 <- combined_data[x >= -150 & x <= 150]
+        #combined_data <- combined_data[avg_methyl >= 0.4]
+      }
+
       # Plot the combined difference data for all groups
-      p_combined <- ggplot(combined_data, aes(x = x, y = avg_methyl, color = type)) +
+      p_combined <- ggplot(combined_data2, aes(x = x, y = avg_methyl, color = type)) +
         geom_line() + # Add lines for each type
         # geom_point() +  # Add points for each type
         xlab("Distance from motif center") +
@@ -116,6 +126,8 @@ plot_and_save_difference <- function(groups, save_dir, obs_colors) {
     }
   }
 }
+
+
 
 
 # Define observed colors for all groups (since expected is subtracted, we don't need exp_colors)
