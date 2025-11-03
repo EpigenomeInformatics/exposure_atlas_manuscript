@@ -12,7 +12,7 @@ prepareDMRforPlot <- function(cell, comp, path, global_peaklist, region, changeM
   # load the rnbset object
   rnb <- load.rnb.set(paste0(path, cell, "/", comp, "/reports/data_import_data/rnb.set_preprocessed/"))
   # load the annotation
-  aa <- annotation(rnb, type = region, add.names = FALSE, include.regions = FALSE)
+  aa <- annotation(rnb, type = "archr_peaks", add.names = FALSE, include.regions = FALSE)
 
   # get the rank cuts
   rank.cuts.auto <- lapply(1:length(get.comparisons(diffMeth)), FUN = function(i) {
@@ -144,7 +144,7 @@ rnbeadsDensityScatter <- function(cell, comp, path, region) {
 
 
 custom.densityScatter <- function(df2p, is.special = NULL,
-                                  dens.subsample = FALSE, sparse.points = 0.01,
+                                  dens.subsample = FALSE, sparse.points = 0.0001,
                                   dens.n = 100, add.text.cor = TRUE,
                                   color.by.direction = NULL, color.map = NULL) {
     if (!is.null(is.special)) {
@@ -266,3 +266,4 @@ rnbeadsDensityScatter_sub <- function(diffMeth, region, plot_path, color_mapping
 
     return(plot_list)
 }
+

@@ -78,7 +78,6 @@ lapply(cells, function(cell) {
   setConfigElement("differentialColumns", c("sample_exposure_group"))
   setConfigElement("filteringSexChroms", TRUE)
   setConfigElement("differentialCutoffL2FC", 0.5)
-  setConfigElement("normalizationMethod", "quantile")
   setConfigElement("differentialCompNames", diffCompNames)
   setConfigElement("lolaDbPaths", "/icbb/projects/igunduz/annotation/lolaDB/hg38/")
 

@@ -76,6 +76,10 @@ atac <- prepareDARforPlot("Mono_CD14", outputDir, 3, "archrPeaks")
 # Get differentially methylated regions
 dmrs <- prepareDMRforPlot(rnb_set, diffMeth, global_peaklist, "archr_peaks", changeMethod = "meandiff")
 
+# Save as a tsv file
+sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+write.table(dmrs, file = paste0(sannot_dir, "/Mono_CD14_dmr.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+
 for (i in 1:length(dmrs)) {
   # filter methylation by overlapped regions of atac
   datatable <- prepareScatterMethAtac(atac, dmrs[[i]], threshold = 10)
@@ -88,21 +92,30 @@ for (i in 1:length(dmrs)) {
 
 
 # Plot the density scatter plot for comparasions
-plot_path <- "/icbb/projects/igunduz/exposure_atlas_manuscript/src/meth_processing/Fig_5_sub_080425/plots/"
+plot_path <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+if (!dir.exists(plot_path)) {
+  dir.create(plot_path)
+}
+
 color_mapping <- c(
     "CommercialControl_healthy" = "#4F619D",
     "C19_ctrl" = "#4F619D",
     "C19_sev_mono2" = "#006400",
-    "C19_sev_mono1"  = "#006400",
+    "C19_sev_mono1"  = "#D95F02",
     "COVID_severe"="red",
-    "C19_mild"="#8FBC8F"
+    "C19_mild"="#D95F02"
 )
 rnbeadsDensityScatter_sub(diffMeth, "archr_peaks", plot_path,color_mapping)
+
 
 # For C19 mild vs control
 analysis.dir <- "/icbb/projects/igunduz/DARPA_analysis/RnBeads_0111023/Monocyte/C19_mild_vs_Ctrl/"
 mild_diffMeth <- load.rnb.diffmeth(paste0(analysis.dir, "/reports/differential_methylation_data/differential_rnbDiffMeth/"))
-rnbeadsDensityScatter_sub(diffMeth, "archr_peaks", plot_path,color_mapping)
+plot_path <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/C19/"
+if (!dir.exists(plot_path)) {
+  dir.create(plot_path)
+}
+rnbeadsDensityScatter_sub(mild_diffMeth, "archr_peaks", plot_path,color_mapping)
 
 # load loladb database
 lolaDb <- "/icbb/projects/share/annotations/lolaDB/hg38/"
