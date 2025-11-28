@@ -303,15 +303,16 @@ condition_colors <- c(
   "Influenza_d30" = "#d95f0e",  # Day 28/30 (Dark Orange/Red)
 
   # HIV (Purples)
-  "HIV_ctrl"      = "#c994c7",  # Control (Lavender/Pink)
-  "HIV_chr"       = "#df65b0",  # Chronic (Medium Purple)
-  "HIV_acu"       = "#ce1256",  # Acute (Dark Magenta)
+  "HIV_ctrl"      = "#4F619D",  # Control (Lavender/Pink)
+  "HIV_chr"       = "#825CA3",  # Chronic (Medium Purple)
+  "HIV_acu"       = "#893368",  # Acute (Dark Magenta)
 
   # Organophosphate (Blues)
   "OP_low"        = "#9ecae1",  # Low (Light Blue)
   "OP_med"        = "#4292c6",  # Medium (Medium Blue)
   "OP_high"       = "#08519c"   # High (Dark Blue)
 )
+
 
 # Heatmap Z-score Colors (Red-White-Blue)
 colors.cv <- tryCatch({
