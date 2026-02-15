@@ -14,6 +14,8 @@ suppressPackageStartupMessages({
   library(stringr)
   library(ComplexHeatmap)
   library(circlize)
+  library(stringr)
+  library(grid)
   library(RColorBrewer)
 })
 set.seed(12)
@@ -56,7 +58,7 @@ project <- addCellColData(
 )
 
 # Get the chromVAR matrix
-pseudo_chrom <- ArchR::getGroupSE(project, "jaspar2020Matrix", groupBy = "exposure_cell", divideN = TRUE)
+pseudo_chrom <- ArchR::getGroupSE(project, "altiusMatrix", groupBy = "exposure_cell", divideN = TRUE)
 
 # Select z-scores and create chromVAR object
 seZ <- pseudo_chrom[rowData(pseudo_chrom)$seqnames == "z", ]
@@ -120,6 +122,7 @@ if (sum(is.na(colData(dev)$Cell_Type)) > 0) {
 
 # Save the cleaned object
 saveRDS(dev, file = file.path(save_dir, "/atac_chromvar_deviations_exposure_celltype.rds"))
+dev <- readRDS(file.path(save_dir, "/atac_chromvar_deviations_exposure_celltype.rds"))
 
 # -------------------------------------------------------------------
 # 4. Differential Analysis (Per Comparison AND Per Cell Type)
@@ -238,7 +241,6 @@ if (exists("final_merged_results")) {
   top_hits <- final_merged_results %>%
     as.data.frame() %>%
     filter(p_value_adjusted < 0.05) %>%
-    arrange(desc(abs(meanDiff))) %>%
     pull(Motif_ID) %>%
     unique()
   
@@ -258,7 +260,7 @@ project <- addCellColData(
 )
 
 # Get the chromVAR matrix
-pseudo_chrom <- ArchR::getGroupSE(project, "jaspar2020Matrix", groupBy = "condition_cell", divideN = TRUE)
+pseudo_chrom <- ArchR::getGroupSE(project, "altiusMatrix", groupBy = "condition_cell", divideN = TRUE)
 
 # Select z-scores and create chromVAR object
 seZ <- pseudo_chrom[rowData(pseudo_chrom)$seqnames == "z", ]
@@ -270,24 +272,6 @@ devmat <- zmat[top_hits, ]
 # -------------------------------------------------------------------
 # 6. Heatmap with Figure 1A Color Matching
 # -------------------------------------------------------------------
-
-suppressPackageStartupMessages({
-  library(ComplexHeatmap)
-  library(circlize)
-  library(stringr)
-  library(RColorBrewer)
-})
-
-# 1. Parse Metadata
-cn <- colnames(devmat_sub)
-anno_df <- data.frame(ID = cn, stringsAsFactors = FALSE)
-
-# Sort cell types by length to ensure correct matching
-sorted_types <- names(cell_type_colors)[order(nchar(names(cell_type_colors)), decreasing = TRUE)]
-regex_pattern <- paste0("_(", paste(sorted_types, collapse = "|"), ")$")
-
-anno_df$Cell_Type <- str_extract(cn, regex_pattern) %>% str_remove("^_")
-anno_df$Condition <- str_remove(cn, regex_pattern)
 
 condition_colors <- c(
   # COVID-19 (Greens)
@@ -313,6 +297,17 @@ condition_colors <- c(
   "OP_high"       = "#08519c"   # High (Dark Blue)
 )
 
+# Parse Metadata
+cn <- colnames(devmat) 
+anno_df <- data.frame(ID = cn, stringsAsFactors = FALSE)
+sorted_conds <- names(condition_colors)[order(nchar(names(condition_colors)), decreasing = TRUE)]
+cond_pattern <- paste0("^(", paste(sorted_conds, collapse = "|"), ")")
+anno_df$Condition <- str_extract(cn, cond_pattern)
+sorted_types <- names(cell_type_colors)[order(nchar(names(cell_type_colors)), decreasing = TRUE)]
+ct_pattern <- paste0("_(", paste(sorted_types, collapse = "|"), ")(_|$)" )
+anno_df$Cell_Type <- str_extract(cn, ct_pattern)
+anno_df$Cell_Type <- str_remove_all(anno_df$Cell_Type, "^_|_$")
+
 
 # Heatmap Z-score Colors (Red-White-Blue)
 colors.cv <- tryCatch({
@@ -336,7 +331,7 @@ col_ha <- HeatmapAnnotation(
 pdf(file.path(save_dir, "differential_motifs_heatmap_fig1_colors.pdf"), width = 14, height = 10)
 
 Heatmap(
-  matrix = devmat_sub,
+  matrix = devmat,
   name = "z-score",
   col = col_fun, 
   top_annotation = col_ha,
@@ -352,5 +347,95 @@ Heatmap(
   column_title = "Differential Deviations",
   use_raster = TRUE
 )
+
+dev.off()
+
+# -------------------------------------------------------------------
+# Individual cell-type heatmaps
+# -------------------------------------------------------------------
+dend_global <- hclust(dist(devmat), method = "ward.D2")
+global_row_order <- dend_global$order
+
+# --- 3. Setup Colors ---
+colors.cv <- tryCatch({
+  ChrAccR::getConfigElement("colorSchemesCont")[[".default.div"]]
+}, error = function(e) {
+  c("#2166AC", "white", "#B2182B") 
+})
+col_fun <- colorRamp2(seq(-5, 5, length.out = length(colors.cv)), colors.cv)
+
+# --- 4. Define Grid Layout Parameters ---
+unique_types <- sort(unique(anno_df$Cell_Type))
+n_plots <- length(unique_types)
+
+# Define grid dimensions (e.g., 3 columns wide)
+ncol_grid <- 3 
+nrow_grid <- ceiling(n_plots / ncol_grid)
+
+# Create PDF with enough size for the grid
+pdf(file.path(save_dir, "differential_motifs_heatmap_grid_layout.pdf"), width = 20, height = 5 * nrow_grid)
+
+# Create the Grid Page
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nrow_grid, ncol_grid)))
+
+# --- 5. Loop and Draw ---
+for (i in seq_along(unique_types)) {
+  
+  ct <- unique_types[i]
+  
+  # A. Subset Data
+  idx <- which(anno_df$Cell_Type == ct)
+  sub_mat <- devmat[, idx, drop = FALSE]
+  sub_anno_df <- anno_df[idx, , drop = FALSE]
+  
+  # B. Create Annotation
+  col_ha_sub <- HeatmapAnnotation(
+    df = sub_anno_df[, "Condition", drop = FALSE],
+    col = list(Condition = condition_colors),
+    show_legend = FALSE, # Hide annotation legend to save space
+    simple_anno_size = unit(0.3, "cm"),
+    show_annotation_name = FALSE
+  )
+  
+  # C. Create Heatmap Object
+  ht <- Heatmap(
+    matrix = sub_mat,
+    name = "z-score",
+    col = col_fun,
+    top_annotation = col_ha_sub,
+    
+    # 1. Clustering Columns WITHIN groups
+    # Split by condition, KEEP condition order (e.g. Ctrl then Disease), CLUSTER samples inside
+    column_split = sub_anno_df$Condition, 
+    cluster_column_slices = FALSE, 
+    cluster_columns = TRUE,        
+    
+    # 2. Consistent Row Ordering
+    cluster_rows = FALSE,          # Disable internal clustering
+    row_order = global_row_order,  # Enforce the global order
+    
+    # 3. Aesthetics
+    column_title = ct,
+    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+    show_column_names = FALSE,
+    
+    show_row_names = TRUE, # We need row names on all since they are in a grid
+    row_names_gp = gpar(fontsize = 6),
+    
+    show_heatmap_legend = (i == 1),
+    use_raster = TRUE
+  )
+  
+  row_idx <- ceiling(i / ncol_grid)
+  col_idx <- (i - 1) %% ncol_grid + 1
+  
+  pushViewport(viewport(layout.pos.row = row_idx, layout.pos.col = col_idx))
+  draw(ht, newpage = FALSE) 
+  popViewport()
+}
+
+lgd_cond = Legend(title = "Condition", at = names(condition_colors), legend_gp = gpar(fill = condition_colors))
+draw(lgd_cond, x = unit(0.95, "npc"), y = unit(0.05, "npc"), just = c("right", "bottom"))
 
 dev.off()
