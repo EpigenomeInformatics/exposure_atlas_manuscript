@@ -246,6 +246,23 @@ dev.off()
 ##################################################################################
 logger.start("Plotting mTFR vs chromVAR scatter plots")
 
+# Reload Data for Heatmaps (Ensuring Clean State)
+mtfr_devs <- list.files(mtfr_dir, pattern = "Monocyte", full.names = TRUE)
+mtfr_devs <- list.cbind(lapply(condition, function(x) {
+  methylTFR::deviations(readRDS(mtfr_devs[grepl(x, mtfr_devs)]))
+}))
+mtfr_devs <- as.data.frame(mtfr_devs)
+
+# Filter Outliers and Compute Z-scores
+mtfr_devs <- mtfr_devs[, !colnames(mtfr_devs) %in% outliers]
+mtfr_devs_z <- methylTFR:::computeRowZScore(as.matrix(mtfr_devs))
+
+chromvar_mat <- readRDS(paste0(ds_dir, "chromvar_jaspar2020_101224_corrected_zscores.rds"))
+rownames(chromvar_mat) <- sub(".*_", "", rownames(chromvar_mat))
+
+# Set max min to 5 and -5 for scatter
+chromvar_mat <- pmin(pmax(chromvar_mat, -5), 5)
+
 # --- Data Prep for Scatter ---
 # Re-aligning data (using full datasets for scatter calculation)
 # Note: Reuse mtfr_devs_z_sub (mono1 vs ctrl) or calculate fresh if "groups" variable changed
@@ -257,6 +274,7 @@ groups_scatter <- groups[groups == "C19_ctrl" | groups == "C19_sev_mono1"]
 common_motifs <- intersect(rownames(mtfr_scatter_sub), rownames(chromvar_mat))
 mtfr_sub <- mtfr_scatter_sub[common_motifs, ]
 cvar_sub <- chromvar_mat[common_motifs, ]
+
 
 # Setup Annotation for Calculation
 cvar_groups <- ifelse(grepl("ctrl", colnames(cvar_sub)), "C19_ctrl", "C19_sev")
@@ -433,3 +451,106 @@ print(p2)
 dev.off()
 
 logger.completed()
+
+############################################################
+# SELEX based coloring
+###################################################################
+
+selex <- read.csv("/icbb/projects/igunduz/exposure_atlas_manuscript/sample_annots/Selex_data.csv", skip = 20, header = 21, sep = ";")[, c(1, 2, 3, 4, 6)]
+motifs <- rownames(mtfr_devs_z) # Use the same motifs as in the heatmap (mono1 vs ctrl)
+plot_cor <- cor(df_scatter$mTFR_diff, df_scatter$cVAR_diff, use = "complete.obs", method = "spearman") 
+
+# Add a new annotation column based on selex$Call
+# Ensure the order of `motifs` matches the heatmap rows
+selex_annotation <- data.frame(
+  Call = ifelse(motifs %in% selex$TF.name,
+    selex$Call[match(motifs, selex$TF.name)],
+    "Inconclusive"
+  ) # Replace NA with "Inconclusive"
+)
+rownames(selex_annotation) <- motifs
+selex_annotation$Call[is.na(selex_annotation$Call)] <- "Inconclusive"
+selex_annotation$TF <- rownames(selex_annotation)
+
+clean_selex <- function(x) {
+  # 1. Fix known typos
+  x <- gsub("Mehyl", "Methyl", x)
+  
+  # 2. Convert to lowercase for easier matching
+  x_lower <- tolower(x)
+  
+  # 3. Default to Inconclusive
+  res <- rep("Inconclusive", length(x))
+  
+  # 4. Assign categories (Order matters for priority)
+  
+  # 'Little effect' -> Little effect
+  res[grep("little effect", x_lower)] <- "Little effect"
+  
+  # 'MethylMinus' -> MethylMinus (overwrites "Little effect and MethylMinus")
+  res[grep("methylminus", x_lower)] <- "MethylMinus"
+  
+  # 'MethylPlus' -> MethylPlus (overwrites "Little effect and MethylPlus")
+  res[grep("methylplus", x_lower)] <- "MethylPlus"
+  
+  # 'Mixed' -> If both Plus and Minus are present
+  mixed_idx <- grep("methylplus", x_lower)
+  mixed_idx <- intersect(mixed_idx, grep("methylminus", x_lower))
+  res[mixed_idx] <- "Mixed"
+  
+  # 'Inconclusive' explicitly
+  res[grep("inconclusive", x_lower)] <- "Inconclusive"
+  
+  return(res)
+}
+
+df_scatter$Selex_Call <- selex_annotation$Call[match(df_scatter$Motif, selex_annotation$TF)]
+df_scatter$Selex_Call_Clean <- clean_selex(df_scatter$Selex_Call)
+selex_colors <- c(
+  "MethylPlus"    = "#D55E00",  # Red/Orange
+  "MethylMinus"   = "#0072B2",  # Blue
+  "Mixed"         = "#CC79A7",  # Purple
+  "Little effect" = "#009E73",  # Green
+  "Inconclusive"  = "grey85"    # Light Grey
+)
+
+p3 <- ggplot(df_scatter, aes(x = mTFR_diff, y = cVAR_diff)) +
+  # Points colored by cleaned SELEX call
+  geom_point(aes(color = Selex_Call_Clean), alpha = 0.8, size = 2.5) +
+  
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
+  
+  scale_color_manual(values = selex_colors) +
+  
+  # Label top candidates (Unfiltered)
+  geom_text_repel(aes(label = Label_Top), 
+                  size = 3, 
+                  max.overlaps = Inf, 
+                  box.padding = 0.5,
+                  point.padding = 0.5,
+                  segment.color = NA, 
+                  force = 2) +        
+  
+  annotate("text", x = max(df_scatter$mTFR_diff, na.rm=TRUE) * 0.75, 
+           y = max(df_scatter$cVAR_diff, na.rm=TRUE) * 0.95, 
+           label = sprintf("Correlation: %.2f", plot_cor), size = 5) +
+  
+  labs(
+    title = "Monocytes (SELEX Coloring)",
+    x = "mTFR z-score difference (Control - Severe)",
+    y = "chromVAR z-score difference (Control - Severe)",
+    color = "SELEX Call" 
+  ) +
+  
+  theme_classic(base_size = 16) +
+  theme(
+    legend.position = "bottom",
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key = element_rect(fill = "transparent", color = NA),
+    plot.title = element_text(hjust = 0.05, face = "bold", margin = margin(b = 15))
+  )
+
+pdf(paste0(plot_dir, "mTFR_vs_chromVAR_scatter_wilcox_selex.pdf"), width = 10, height = 10)
+print(p3)
+dev.off()

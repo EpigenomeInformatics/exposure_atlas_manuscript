@@ -53,7 +53,7 @@ mtfr_dir <- "/icbb/projects/igunduz/methylTFR_081124/all_pseudobulks_121124/jasp
 
 # Load the project
 outputDir <- "/icbb/projects/igunduz/archr_300824/icbb/projects/igunduz/archr_project_011023/"
-plot_dir <- "/icbb/projects/igunduz/methylTFR_081124/Figure_4_heatmaps_051224/"
+plot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 if (!dir.exists(plot_dir)) {
   dir.create(plot_dir)
 }
