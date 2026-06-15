@@ -387,6 +387,7 @@ for (i in seq_along(unique_types)) {
   # A. Subset Data
   idx <- which(anno_df$Cell_Type == ct)
   sub_mat <- devmat[, idx, drop = FALSE]
+  #sub_mat <- methylTFR:::computeRowZScore(as.matrix(sub_mat)) # Check if re-normalizing fixes anything
   sub_anno_df <- anno_df[idx, , drop = FALSE]
   
   # B. Create Annotation

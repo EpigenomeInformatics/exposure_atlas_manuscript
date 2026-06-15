@@ -189,6 +189,50 @@ umap_hiv <- ggplot(df, aes(x = UMAP1, y = UMAP2, color = TimePoint)) +
 
 ggsave(umap_hiv, file = paste0(fig_dir, "umap_tcell_timepoint.pdf"), width = 7, height = 7)
 
+
+#####################################################################
+# HIV Stage/exhaustion associations
+#####################################################################
+
+# Define Status and create the contingency table
+df$Status <- ifelse(df$Clusters %in% c("C1","C2"), "Tex", "Other")
+status_time_table <- table(df$Status, df$TimePoint)
+
+# This function compares every column against every other column
+run_pairwise_fisher <- function(tbl) {
+  stages <- colnames(tbl)
+  pairs <- combn(stages, 2, simplify = FALSE)
+  
+  results <- data.frame()
+  
+  for (pair in pairs) {
+    g1 <- pair[1]
+    g2 <- pair[2]
+    current_matrix <- tbl[, c(g1, g2)]
+    ft <- fisher.test(current_matrix)
+    
+    # Store results
+    results <- rbind(results, data.frame(
+      Comparison = paste(g1, "vs", g2),
+      Odds_Ratio = round(ft$estimate, 2),
+      P_Value = ft$p.value
+    ))
+  }
+  
+  # Apply Bonferroni correction for multiple testing
+  results$P_Adj <- p.adjust(results$P_Value, method = "bonferroni")
+  
+  # Add significance stars
+  results$Signif <- symnum(results$P_Adj, corr = FALSE, na = FALSE, 
+                           cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1), 
+                           symbols = c("***", "**", "*", ".", " "))
+  
+  return(results)
+}
+
+pairwise_results <- run_pairwise_fisher(status_time_table)
+write.csv(pairwise_results, file = paste0(fig_dir, "fisher_test_results.csv"), row.names = FALSE)
+
 ###########################################################################################
 
 # Subject | Pre | Acute | Chronic
@@ -275,6 +319,21 @@ dev.off()
 
 
 #####################################################################
+# Add peak matrix and motif annotations
+#####################################################################
+project$TexClusters <- ifelse(project$ClustersHIV %in% c("C1","C2"), "Tex", project$ClustersHIV)
+
+project <- addGroupCoverages(ArchRProj = project, groupBy = "TexClusters", threads = 30, force = TRUE)
+pathToMacs2 <- findMacs2()
+project <- addReproduciblePeakSet(
+    ArchRProj = project, 
+    groupBy = "TexClusters", maxPeaks = 300000,
+    pathToMacs2 = pathToMacs2, threads = 30
+)
+project <- addPeakMatrix(project, threads = 30, force = TRUE)
+project <- addBgdPeaks(project, force = TRUE)
+
+#####################################################################
 # Marker testing
 #####################################################################
 # Rename clusters as Tex and others
@@ -344,19 +403,6 @@ ggDo <- ggplot(df, aes(rank, mlog10Padj, color = mlog10Padj)) +
 ggsave(ggDo, file = paste0(fig_dir, "motif_depletion_tex.pdf"), width = 6, height = 5)
 
 #####################################################################
-# Add peak matrix and motif annotations
-#####################################################################
-project$TexClusters <- ifelse(project$ClustersHIV %in% c("C1","C2"), "Tex", project$ClustersHIV)
-
-project <- addGroupCoverages(ArchRProj = project, groupBy = "TexClusters", threads = 30, force = TRUE)
-pathToMacs2 <- findMacs2()
-project <- addReproduciblePeakSet(
-    ArchRProj = project, 
-    groupBy = "TexClusters", maxPeaks = 300000,
-    pathToMacs2 = pathToMacs2, threads = 30
-)
-project <- addPeakMatrix(project, threads = 30, force = TRUE)
-project <- addBgdPeaks(project, force = TRUE)
 
 data("human_pwms_v2")
 motifs <- human_pwms_v2
@@ -371,6 +417,7 @@ motif_positions <- motifmatchr::matchMotifs(
   out = "matches"
 )
 diff_peaks_gr <- getMarkers(markerTest, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE)$Tex
+saveRDS(diff_peaks_gr, file = paste0(outputDir, "diff_peaks_tex.rds"))
 
 peaks_matched <- list(
   cCREs = getPeakSet(project),
@@ -400,47 +447,3 @@ plotPDF(
   ArchRProj = project,
   addDOC = FALSE, width = 5, height = 5
 )
-
-#####################################################################
-# HIV Stage/exhaustion associations
-#####################################################################
-
-# 1. Define Status and create the contingency table
-df$Status <- ifelse(df$Clusters %in% c("C1","C2"), "Tex", "Other")
-status_time_table <- table(df$Status, df$TimePoint)
-
-# This function compares every column against every other column
-run_pairwise_fisher <- function(tbl) {
-  stages <- colnames(tbl)
-  pairs <- combn(stages, 2, simplify = FALSE)
-  
-  results <- data.frame()
-  
-  for (pair in pairs) {
-    g1 <- pair[1]
-    g2 <- pair[2]
-    current_matrix <- tbl[, c(g1, g2)]
-    ft <- fisher.test(current_matrix)
-    
-    # Store results
-    results <- rbind(results, data.frame(
-      Comparison = paste(g1, "vs", g2),
-      Odds_Ratio = round(ft$estimate, 2),
-      P_Value = ft$p.value
-    ))
-  }
-  
-  # 3. Apply Bonferroni correction for multiple testing
-  results$P_Adj <- p.adjust(results$P_Value, method = "bonferroni")
-  
-  # Add significance stars
-  results$Signif <- symnum(results$P_Adj, corr = FALSE, na = FALSE, 
-                           cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1), 
-                           symbols = c("***", "**", "*", ".", " "))
-  
-  return(results)
-}
-
-pairwise_results <- run_pairwise_fisher(status_time_table)
-print("Pairwise Fisher's Exact Test Results:")
-print(pairwise_results)

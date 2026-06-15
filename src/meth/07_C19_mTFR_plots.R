@@ -255,7 +255,6 @@ mtfr_devs <- as.data.frame(mtfr_devs)
 
 # Filter Outliers and Compute Z-scores
 mtfr_devs <- mtfr_devs[, !colnames(mtfr_devs) %in% outliers]
-mtfr_devs_z <- methylTFR:::computeRowZScore(as.matrix(mtfr_devs))
 
 chromvar_mat <- readRDS(paste0(ds_dir, "chromvar_jaspar2020_101224_corrected_zscores.rds"))
 rownames(chromvar_mat) <- sub(".*_", "", rownames(chromvar_mat))
@@ -265,9 +264,9 @@ chromvar_mat <- pmin(pmax(chromvar_mat, -5), 5)
 
 # --- Data Prep for Scatter ---
 # Re-aligning data (using full datasets for scatter calculation)
-# Note: Reuse mtfr_devs_z_sub (mono1 vs ctrl) or calculate fresh if "groups" variable changed
 # Recalculating strict Mono1 vs Ctrl environment for scatter
-mtfr_scatter_sub <- mtfr_devs_z[, groups == "C19_ctrl" | groups == "C19_sev_mono1"]
+mtfr_scatter_sub <- mtfr_devs[, groups == "C19_ctrl" | groups == "C19_sev_mono1"]
+mtfr_scatter_sub <- methylTFR:::computeRowZScore(as.matrix(mtfr_scatter_sub))
 groups_scatter <- groups[groups == "C19_ctrl" | groups == "C19_sev_mono1"]
 
 # Ensure ChromVAR matches
@@ -289,8 +288,8 @@ cvar_sev_means  <- rowMeans(cvar_sub[, cvar_groups == "C19_sev", drop = FALSE], 
 
 df_scatter <- data.frame(
   Motif = common_motifs,
-  mTFR_diff = mtfr_ctrl_means - mtfr_sev_means,
-  cVAR_diff = cvar_ctrl_means - cvar_sev_means
+  mTFR_diff = mtfr_sev_means - mtfr_ctrl_means,
+  cVAR_diff = cvar_sev_means - cvar_ctrl_means
 )
 
 # --- Run Wilcoxon Tests ---
@@ -326,6 +325,7 @@ df_scatter$Status <- factor(df_scatter$Status,
                                        "Differential in mTFR", "Not Differential"))
 
 plot_cor <- cor(df_scatter$mTFR_diff, df_scatter$cVAR_diff, use = "complete.obs", method = "pearson")
+logger.info(sprintf("Correlation between mTFR_diff and cVAR_diff: %.2f", plot_cor))
 
 # --- Ranking Logic (P-value Based) ---
 # Combined P-value for "Both" group (max of the pair)
@@ -400,8 +400,8 @@ p1 <- ggplot(df_scatter, aes(x = mTFR_diff, y = cVAR_diff)) +
            label = sprintf("Correlation: %.2f", plot_cor), size = 5) +
   labs(
     title = "Monocytes (Targeted Labels)",
-    x = "mTFR z-score difference (Control - Severe)",
-    y = "chromVAR z-score difference (Control - Severe)",
+    x = "mTFR z-score difference (Severe - Control)",
+    y = "chromVAR z-score difference (Severe - Control)",
     color = NULL 
   ) +
   theme_classic(base_size = 16) +
@@ -434,8 +434,8 @@ p2 <- ggplot(df_scatter, aes(x = mTFR_diff, y = cVAR_diff)) +
            label = sprintf("Correlation: %.2f", plot_cor), size = 5) +
   labs(
     title = "Monocytes (Top Significant Labels)",
-    x = "mTFR z-score difference (Control - Severe)",
-    y = "chromVAR z-score difference (Control - Severe)",
+    x = "mTFR z-score difference (Severe - Control)",
+    y = "chromVAR z-score difference (Severe - Control)",
     color = NULL 
   ) +
   theme_classic(base_size = 16) +
@@ -538,8 +538,8 @@ p3 <- ggplot(df_scatter, aes(x = mTFR_diff, y = cVAR_diff)) +
   
   labs(
     title = "Monocytes (SELEX Coloring)",
-    x = "mTFR z-score difference (Control - Severe)",
-    y = "chromVAR z-score difference (Control - Severe)",
+    x = "mTFR z-score difference (Severe - Control)",
+    y = "chromVAR z-score difference (Severe - Control)",
     color = "SELEX Call" 
   ) +
   

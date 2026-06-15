@@ -17,7 +17,7 @@ if (!dir.exists(plotDir)) dir.create(plotDir, recursive = TRUE)
 sensitivity_limit <- 0.5 
 
 cells <- c("B_mem", "B_naive", "Mono_CD14", "Mono_CD16", "NK_CD16", 
-           "T_mem_CD8", "T_mem_CD4", "T_naive", "T_mix", "T_mait")
+           "T_mem_CD8", "T_mem_CD4", "T_naive", "T_mait")
 
 main_comps <- c(
 "HIV_ctrl vs HIV_chr",
