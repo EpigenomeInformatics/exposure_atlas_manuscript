@@ -3,8 +3,16 @@
 #####################################################################
 # 10_tcells.R
 # Created on 28-04-2025 by Irem B. Gunduz, written by Bei Wei
-# Last modified on 28-04-2025
+# Last modified (revision) on 2025 by I.B.G.
 # This script is used to analyze T cells
+#
+# REVISION NOTES (reviewer response):
+#  (R1/R2/R3) Replaced pooled Fisher's exact test on cell counts with a
+#             subject-level differential abundance test (donor as unit).
+#  (R2/R3)    Replaced FOXP2/FOXP3-only motif matching with all FOXP-family
+#             motifs; report as family, not FOXP2-specific.
+#  (R2/R3)    Added CD4/CD8A/CD8B and Treg-marker (FOXP3/IL2RA) gene-activity
+#             panels to support CD8 identity and exclude Treg contamination.
 #####################################################################
 
 ## Load Libraries
@@ -194,44 +202,106 @@ ggsave(umap_hiv, file = paste0(fig_dir, "umap_tcell_timepoint.pdf"), width = 7, 
 # HIV Stage/exhaustion associations
 #####################################################################
 
-# Define Status and create the contingency table
+# Define Status
 df$Status <- ifelse(df$Clusters %in% c("C1","C2"), "Tex", "Other")
-status_time_table <- table(df$Status, df$TimePoint)
 
-# This function compares every column against every other column
-run_pairwise_fisher <- function(tbl) {
-  stages <- colnames(tbl)
-  pairs <- combn(stages, 2, simplify = FALSE)
-  
-  results <- data.frame()
-  
-  for (pair in pairs) {
-    g1 <- pair[1]
-    g2 <- pair[2]
-    current_matrix <- tbl[, c(g1, g2)]
-    ft <- fisher.test(current_matrix)
-    
-    # Store results
-    results <- rbind(results, data.frame(
-      Comparison = paste(g1, "vs", g2),
-      Odds_Ratio = round(ft$estimate, 2),
-      P_Value = ft$p.value
-    ))
-  }
-  
-  # Apply Bonferroni correction for multiple testing
-  results$P_Adj <- p.adjust(results$P_Value, method = "bonferroni")
-  
-  # Add significance stars
-  results$Signif <- symnum(results$P_Adj, corr = FALSE, na = FALSE, 
-                           cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1), 
-                           symbols = c("***", "**", "*", ".", " "))
-  
-  return(results)
+## <<< REVISION (R1/R2/R3): subject-level differential abundance ---------------
+## Previously, Tex accumulation was tested with a Fisher's exact test on a
+## pooled cell-count contingency table (df$Status x df$TimePoint). That treats
+## individual cells as independent observations and ignores donor structure
+## (pseudoreplication). All three reviewers flagged this. We instead compute
+## the per-subject Tex proportion at each stage and test the change across the
+## four subjects, so the donor is the unit of analysis.
+
+# Per-subject, per-timepoint Tex proportion
+subj_prop <- df %>%
+  dplyr::group_by(Subject, TimePoint) %>%
+  dplyr::summarise(
+    n_tex   = sum(Status == "Tex"),
+    n_total = dplyr::n(),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(tex_prop = n_tex / n_total)
+
+# Wide format: one row per subject, one column per stage
+subj_prop_wide <- subj_prop %>%
+  dplyr::select(Subject, TimePoint, tex_prop) %>%
+  tidyr::pivot_wider(names_from = TimePoint, values_from = tex_prop)
+
+write.csv(subj_prop_wide,
+          file = paste0(fig_dir, "tex_proportion_per_subject.csv"),
+          row.names = FALSE)
+
+# Paired, subject-level tests across stages (N = 4 subjects).
+# Wilcoxon signed-rank is used as the nonparametric paired test; with n = 4 the
+# p-values are necessarily coarse, so we report them alongside the per-subject
+# values rather than as standalone significance. We also report the paired
+# t-test for reference.
+run_subject_level_paired <- function(wide, g1, g2) {
+  x <- wide[[g1]]
+  y <- wide[[g2]]
+  keep <- is.finite(x) & is.finite(y)
+  x <- x[keep]; y <- y[keep]
+  wt <- suppressWarnings(wilcox.test(x, y, paired = TRUE))
+  tt <- suppressWarnings(t.test(x, y, paired = TRUE))
+  data.frame(
+    Comparison   = paste(g1, "vs", g2),
+    n_subjects   = length(x),
+    mean_diff    = round(mean(y - x), 4),
+    Wilcoxon_P   = signif(wt$p.value, 3),
+    Paired_t_P   = signif(tt$p.value, 3)
+  )
 }
 
-pairwise_results <- run_pairwise_fisher(status_time_table)
-write.csv(pairwise_results, file = paste0(fig_dir, "fisher_test_results.csv"), row.names = FALSE)
+subject_level_results <- rbind(
+  run_subject_level_paired(subj_prop_wide, "pre",   "acute"),
+  run_subject_level_paired(subj_prop_wide, "acute", "chronic"),
+  run_subject_level_paired(subj_prop_wide, "pre",   "chronic")
+)
+
+write.csv(subject_level_results,
+          file = paste0(fig_dir, "tex_subject_level_test.csv"),
+          row.names = FALSE)
+
+# Per-subject Tex-proportion trajectory (visual support for the subject-level test)
+subj_prop_plot <- subj_prop %>%
+  dplyr::mutate(Stage = factor(TimePoint, levels = c("pre", "acute", "chronic")))
+
+tex_traj <- ggplot(subj_prop_plot,
+                   aes(x = Stage, y = tex_prop, color = Subject, group = Subject)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  labs(x = "Stage", y = "Tex proportion (per subject)") +
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  scale_color_manual(values = colorPalette)
+
+ggsave(tex_traj, file = paste0(fig_dir, "tex_proportion_trajectory.pdf"),
+       width = 6, height = 5)
+
+## NOTE: the previous pooled Fisher test is retained below but commented out,
+## so the change from the original submission is transparent. Do not use for
+## the manuscript claim.
+# status_time_table <- table(df$Status, df$TimePoint)
+# run_pairwise_fisher <- function(tbl) {
+#   stages <- colnames(tbl)
+#   pairs <- combn(stages, 2, simplify = FALSE)
+#   results <- data.frame()
+#   for (pair in pairs) {
+#     g1 <- pair[1]; g2 <- pair[2]
+#     current_matrix <- tbl[, c(g1, g2)]
+#     ft <- fisher.test(current_matrix)
+#     results <- rbind(results, data.frame(
+#       Comparison = paste(g1, "vs", g2),
+#       Odds_Ratio = round(ft$estimate, 2),
+#       P_Value = ft$p.value))
+#   }
+#   results$P_Adj <- p.adjust(results$P_Value, method = "bonferroni")
+#   results
+# }
+# pairwise_results <- run_pairwise_fisher(status_time_table)
+# write.csv(pairwise_results, file = paste0(fig_dir, "fisher_test_results.csv"), row.names = FALSE)
+## <<< END REVISION -----------------------------------------------------------
 
 ###########################################################################################
 
@@ -265,10 +335,20 @@ lp <- ggplot(df_long, aes(x = Stage, y = Viral_Load, color = Subject, group = Su
 ggsave(lp, file = paste0(fig_dir, "viral_load_subject.pdf"), width = 7, height = 7)
 
 
-# Exhaustion markers
+## <<< REVISION (R2/R3): CD8 identity + Treg-exclusion markers -----------------
+## Reviewers asked (a) how CD4 vs CD8 T cells were distinguished, and (b) that
+## the possibility of CD4 Treg / activated-CD4 contamination in the Tex clusters
+## be excluded, since CTLA4 is also a Treg marker. We add lineage markers
+## (CD4, CD8A, CD8B) and canonical Treg markers (FOXP3, IL2RA) to the exhaustion
+## panel so the Tex clusters can be shown to be CD8+ and FOXP3-/IL2RA-low.
+
+# Exhaustion markers (original) + lineage and Treg markers (added)
 markerGenes <- c(
-  "HAVCR2", "CTLA4", "NCAM1", "ROBO2", "ROBO1", "TIGIT"
+  "HAVCR2", "CTLA4", "NCAM1", "ROBO2", "ROBO1", "TIGIT",  # exhaustion (original)
+  "CD8A", "CD8B", "CD4",                                   # lineage (added)
+  "FOXP3", "IL2RA"                                         # Treg (added)
 )
+## <<< END REVISION -----------------------------------------------------------
 
 # Get the marker genes
 markersGS <- getMarkerFeatures(
@@ -316,6 +396,46 @@ p2 <- lapply(p, function(x) {
 pdf(file = paste0(fig_dir, "exhaustion_markers_umap.pdf"), width = 10, height = 10)
 do.call(cowplot::plot_grid, c(list(ncol = 3), p2))
 dev.off()
+
+## <<< REVISION (R2/R3): dedicated lineage/Treg UMAP panel ---------------------
+## A separate, clearly labelled panel for the CD8-identity / Treg-exclusion
+## markers, so it can be cited directly in the annotation-justification text.
+lineage_treg_genes <- c("CD8A", "CD8B", "CD4", "FOXP3", "IL2RA")
+p_lin <- plotEmbedding(
+  ArchRProj = project,
+  colorBy = "GeneScoreMatrix",
+  name = lineage_treg_genes,
+  embedding = "UMAP_HIV",
+  quantCut = c(0.01, 0.95)
+)
+p_lin2 <- lapply(p_lin, function(x) {
+  x + guides(color = FALSE, fill = FALSE) +
+    theme_ArchR(baseSize = 6.5) +
+    theme(plot.margin = unit(c(0, 0, 0, 0), "cm")) +
+    theme(
+      axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+      axis.text.y = element_blank(), axis.ticks.y = element_blank()
+    )
+})
+pdf(file = paste0(fig_dir, "lineage_treg_markers_umap.pdf"), width = 9, height = 6)
+do.call(cowplot::plot_grid, c(list(ncol = 3), p_lin2))
+dev.off()
+
+# Quantitative check: mean gene-activity of lineage/Treg markers in Tex vs Other,
+# to state numerically that Tex clusters are CD8+ and FOXP3-/IL2RA-low.
+gsm <- getMatrixFromProject(project, useMatrix = "GeneScoreMatrix")
+gs_rownames <- rowData(gsm)$name
+want <- intersect(lineage_treg_genes, gs_rownames)
+gs_sub <- assay(gsm)[match(want, gs_rownames), , drop = FALSE]
+rownames(gs_sub) <- want
+status_vec <- ifelse(project$ClustersHIV %in% c("C1","C2"), "Tex", "Other")
+tex_summary <- sapply(want, function(g) {
+  tapply(gs_sub[g, ], status_vec, mean)
+})
+tex_summary <- t(tex_summary)  # rows = gene, cols = Tex/Other
+write.csv(as.data.frame(tex_summary),
+          file = paste0(fig_dir, "tex_lineage_treg_meanactivity.csv"))
+## <<< END REVISION -----------------------------------------------------------
 
 
 #####################################################################
@@ -407,9 +527,16 @@ ggsave(ggDo, file = paste0(fig_dir, "motif_depletion_tex.pdf"), width = 6, heigh
 data("human_pwms_v2")
 motifs <- human_pwms_v2
 
-#interesting_motifs <- names(motifs)[grepl("FOXP", names(motifs), ignore.case = TRUE)]
-# Select FOXP2 and FOXP3 motifs
-foxp <- names(motifs)[grepl("FOXP2|FOXP3", names(motifs), ignore.case = TRUE)]
+## <<< REVISION (R2/R3): match the full FOXP family, not FOXP2/FOXP3 only ------
+## Reviewers noted that FOXP-family motifs are highly similar and effectively
+## indistinguishable, and that singling out FOXP2 is misleading (FOXP2 is not a
+## canonical T-cell TF; FOXP3 is the canonical Treg factor). We therefore match
+## ALL FOXP-family motifs and display them as a family in the browser track,
+## rather than restricting to FOXP2/FOXP3. Individual members are still captured
+## for completeness but interpreted at the family level in the text.
+foxp <- names(motifs)[grepl("FOXP", names(motifs), ignore.case = TRUE)]
+message("FOXP-family motifs matched: ", paste(foxp, collapse = ", "))
+
 motif_positions <- motifmatchr::matchMotifs(
   pwms = motifs[foxp],
   subject = getPeakSet(project),
@@ -419,15 +546,20 @@ motif_positions <- motifmatchr::matchMotifs(
 diff_peaks_gr <- getMarkers(markerTest, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE)$Tex
 saveRDS(diff_peaks_gr, file = paste0(outputDir, "diff_peaks_tex.rds"))
 
+# Collapse all FOXP-family motif matches into a single family-level peak set,
+# so the browser track shows "FOXP family" rather than one arbitrary member.
+foxp_cols <- seq_len(ncol(motif_positions))
+foxp_any  <- Reduce(`|`, lapply(foxp_cols, function(j) assay(motif_positions)[, j]))
+foxp_family_peaks <- getPeakSet(project)[foxp_any]
+
 peaks_matched <- list(
-  cCREs = getPeakSet(project),
-  FOXP3 = getPeakSet(project)[assay(motif_positions)[, grep("FOXP3", colnames(motif_positions), ignore.case = TRUE)[1]]],
-  FOXP2 = getPeakSet(project)[assay(motif_positions)[, grep("FOXP2", colnames(motif_positions), ignore.case = TRUE)[1]]],
-  DiffPeaks = diff_peaks_gr # This adds the "Tex" enriched peaks as a new row in the track
+  cCREs       = getPeakSet(project),
+  FOXP_family = foxp_family_peaks,  # all FOXP members, union of matches
+  DiffPeaks   = diff_peaks_gr
 )
+## <<< END REVISION -----------------------------------------------------------
 
-
-genes <- c("CTLA4","HAVCR2", "FOXP2")
+genes <- c("CTLA4","HAVCR2")  # removed FOXP2 as a highlighted "gene"; family shown in track
 plot <- plotBrowserTrack(
   ArchRProj = project,
   features = peaks_matched,
@@ -443,7 +575,7 @@ plot <- plotBrowserTrack(
 
 plotPDF(
   plotList = plot,
-  name = "Plot-Motif-HIV-CD8T-FOXP3.pdf",
+  name = "Plot-Motif-HIV-CD8T-FOXPfamily.pdf",
   ArchRProj = project,
   addDOC = FALSE, width = 5, height = 5
 )

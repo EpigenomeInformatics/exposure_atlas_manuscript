@@ -1,0 +1,4 @@
+"Comparison","n_subjects","mean_diff","Wilcoxon_P","Paired_t_P"
+"pre vs acute",4,0.1268,0.125,0.263
+"acute vs chronic",4,0.0195,0.875,0.567
+"pre vs chronic",4,0.1462,0.125,0.141
