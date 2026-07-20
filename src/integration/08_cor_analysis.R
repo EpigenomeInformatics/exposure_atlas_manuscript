@@ -419,7 +419,7 @@ methylTFR <- methylTFR[rownames(zmat), ]
 
 # Calculate row-wise correlation
 row_correlation <- sapply(seq_len(nrow(zmat)), function(i) {
-  cor(zmat[i, ], methylTFR[i, ]) # ), use = "complete.obs")  # Only use rows with complete observations
+  cor(zmat[i, ], methylTFR[i, ], use = "complete.obs")
 })
 
 # Convert to a data frame for better readability
@@ -476,3 +476,27 @@ ggsave(
 )
 
 #######################################################################
+
+#######################################################################
+# Statistical test of the methylMinus vs methylPlus skew (R3 minor 1)
+#######################################################################
+mm <- row_correlation_df$Correlation[row_correlation_df$methyl.SELEX.call == "MethylMinus"]
+mp <- row_correlation_df$Correlation[row_correlation_df$methyl.SELEX.call == "MethylPlus"]
+mm <- mm[is.finite(mm)]; mp <- mp[is.finite(mp)]
+
+wt <- wilcox.test(mm, mp, alternative = "less")
+c(n_mm=length(mm), n_mp=length(mp),
+  med_mm=median(mm), med_mp=median(mp), p=signif(wt$p.value,3))
+
+selex_test <- data.frame(
+  n_methylMinus  = length(mm),
+  n_methylPlus   = length(mp),
+  median_mMinus  = round(median(mm), 3),
+  median_mPlus   = round(median(mp), 3),
+  Wilcoxon_W     = unname(wt$statistic),
+  Wilcoxon_p     = signif(wt$p.value, 3)
+)
+print(selex_test)
+write.csv(selex_test,
+          file = paste0(plot_dir, "selex_skew_test.csv"),
+          row.names = FALSE)

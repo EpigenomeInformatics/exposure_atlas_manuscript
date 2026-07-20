@@ -1,0 +1,23 @@
+Cluster	Final_CellType	Top_predicted_scRNA	Top_Jaccard	Second_predicted_scRNA	Second_Jaccard	N_cells	Ambiguous
+C22	B_mem	B_mem	0.4947	Plasma	0.1978	15182	
+C20	B_naive	B_naive	0.0036	B_mem	0.0014	70	yes
+C21	B_naive	B_naive	0.7468	B_mem	0.0327	13230	
+C1	DC	DC	0.475	Megakaryocytes	0.0263	2286	
+C3	Mono_CD14	Mono_CD14	0.6182	Megakaryocytes	0.1398	41797	
+C4	Mono_CD14	Mono_CD14	0.1061	Mono_CD16	0.023	5848	yes
+C5	Mono_CD14	Mono_CD14	0.139	Megakaryocytes	4e-04	7077	yes
+C2	Mono_CD16	Mono_CD16	0.7742	Mono_CD14	0.0331	13591	
+C15	NK_CD16	NK_CD16	0.179	T_mem_CD8	0.1427	16719	yes
+C16	NK_CD16	NK_CD16	0.5882	T_mem_CD8	0.0039	25344	
+C19	Plasma	Plasmablasts	0.2029	Plasma	0.1155	755	yes
+C12	T_mait	T_mait	0.4809	T_mem_CD4	0.0172	4507	
+C10	T_mem_CD4	T_mem_CD4	0.4382	T_naive	0.0998	26891	
+C11	T_mem_CD4	T_mem_CD4	0.0811	T_mait	0.0499	9015	yes
+C9	T_mem_CD4	T_mem_CD4	0.1097	T_mix	0.0268	4926	yes
+C14	T_mem_CD8	T_mem_CD8	0.059	NK_CD16	0.0473	5392	yes
+C17	T_mem_CD8	T_mem_CD8	0.1181	NK_CD16	0.0721	9440	yes
+C18	T_mem_CD8	T_mem_CD8	0.4978	Cycling_T_NK	0.0456	29292	
+C13	T_mix	T_mait	0.0039	T_mem_CD8	0.0035	425	yes
+C6	T_mix	T_mix	0.2147	T_naive	0.0941	7575	
+C7	T_naive	T_naive	0.3454	T_mem_CD4	0.002	12383	
+C8	T_naive	T_naive	0.2707	T_mem_CD4	0.1463	19554	
