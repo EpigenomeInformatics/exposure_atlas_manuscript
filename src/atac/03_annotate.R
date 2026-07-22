@@ -23,6 +23,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(mclust)
   library(reshape2)
+  library(openxlsx)
   library(plyr)
   library(ggplot2)
   library(tidyr)
@@ -231,7 +232,7 @@ final_label_map <- setNames(labelNew2, labelOld)
 final_labels <- final_label_map[rownames(jacc_out)]
 n_cells      <- rowSums(cM_counts)
 
-# assemble: Cluster | Final_CellType | N_cells | <one column per predicted label>
+# assemble: Cluster | Final_CellType | N_cells | 
 jacc_df <- data.frame(
   Cluster        = rownames(jacc_out),
   Final_CellType = unname(final_labels),
@@ -244,10 +245,18 @@ jacc_df <- data.frame(
 # order by final cell type then cluster for readability
 jacc_df <- jacc_df[order(jacc_df$Final_CellType, jacc_df$Cluster), ]
 
+# Save tsv
 write.table(
   jacc_df,
   file = file.path(sannot_dir, "cluster_jaccard_matrix.tsv"),
   sep = "\t", row.names = FALSE, quote = FALSE
 )
 
+# Excel format
+write.xlsx(
+  jacc_df,
+  file = file.path(sannot_dir, "cluster_jaccard_matrix.xlsx"),
+  rowNames = FALSE,
+  overwrite = TRUE
+)
 #####################################################################
