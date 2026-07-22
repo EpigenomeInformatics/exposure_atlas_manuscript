@@ -29,6 +29,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(pheatmap)
   library(ComplexHeatmap)
+  library(rescueR)
 })
 
 # load the functions
@@ -196,87 +197,57 @@ hm <- BORHeatmap(
 pdf(paste0(fig_dir, "jaccard_heatmap.pdf"), width = 6, height = 6)
 draw(hm)
 dev.off()
-
 #####################################################################
-# REVISION (R2.3/R2.4): export per-cluster annotation mapping table
+# REVISION (R2.3/R2.4): export the FULL cluster x cell-type Jaccard matrix
 #
-# Builds one row per graph-based cluster (Clusters_0.8) with:
-#   - final assigned cell-type label (ClusterCellTypes / labelNew2)
-#   - top predicted scRNA label (highest confusion-matrix count)
-#   - Jaccard similarity of the cluster to its top predicted label
-#   - number of cells in the cluster
-#   - an ambiguity flag (top Jaccard below a threshold, or top-2 close)
+# R2 asked for the Jaccard similarities of each cluster to the predicted
+# scRNA labels. We therefore export the complete Jaccard matrix (the values
+# underlying jaccard_heatmap.pdf), one row per graph-based cluster and one
+# column per predicted scRNA cell type, plus the final assigned label and
+# cell count per cluster. 
 #####################################################################
 
-# 1. Confusion matrix: rows = clusters (Clusters_0.8), cols = predicted scRNA groups
-cM_counts <- confusionMatrix(
+# Confusion matrix: rows = clusters (Clusters_0.8), cols = predicted scRNA groups
+cM_counts <- as.matrix(confusionMatrix(
   project$Clusters_0.8,
   project$predictedGroupAtlas
-)
-cM_counts <- as.matrix(cM_counts)
+))
 
-# 2. Jaccard index matrix 
+# Full Jaccard matrix (clusters x predicted labels), same orientation
 jacc_mat <- as.matrix(
   computeJaccardIndex(as.data.frame(cM_counts), heatmap = FALSE)
 )
-
-# FIX: Transpose jacc_mat if the rows/cols are inverted compared to cM_counts
-if (nrow(jacc_mat) == ncol(cM_counts) && ncol(jacc_mat) == nrow(cM_counts)) {
+# make sure orientation matches (clusters as rows)
+if (!all(rownames(jacc_mat) %in% rownames(cM_counts))) {
   jacc_mat <- t(jacc_mat)
 }
+jacc_mat <- jacc_mat[rownames(cM_counts), , drop = FALSE]
 
-# align jaccard matrix to the confusion matrix orientation (clusters as rows)
-if (!all(rownames(jacc_mat) == rownames(cM_counts))) {
-  jacc_mat <- jacc_mat[rownames(cM_counts), colnames(cM_counts), drop = FALSE]
-}
+# round for readability
+jacc_out <- round(jacc_mat, 4)
 
-# 3. Map final labels (labelNew2) to clusters, in the row order of cM_counts
-final_label_map <- setNames(labelNew2, labelOld)   # labelOld = rownames(cM) earlier
+# final label and cell count per cluster
+final_label_map <- setNames(labelNew2, labelOld)
+final_labels <- final_label_map[rownames(jacc_out)]
+n_cells      <- rowSums(cM_counts)
 
-# 4. Assemble per-cluster rows
-clusters <- rownames(cM_counts)
-mapping <- lapply(clusters, function(cl) {
-  counts_row <- cM_counts[cl, ]
-  jacc_row   <- jacc_mat[cl, ]
-
-  # top predicted scRNA label by Jaccard (fall back to counts if ties)
-  ord_j <- order(jacc_row, decreasing = TRUE)
-  top1_label <- colnames(cM_counts)[ord_j[1]]
-  top1_jacc  <- round(jacc_row[ord_j[1]], 4)
-  top2_label <- colnames(cM_counts)[ord_j[2]]
-  top2_jacc  <- round(jacc_row[ord_j[2]], 4)
-
-  n_cells <- sum(counts_row)
-  final   <- final_label_map[cl]
-
-  # ambiguity flag: top Jaccard low, or top-2 Jaccard within 0.1 of each other
-  ambiguous <- (top1_jacc < 0.2) | ((top1_jacc - top2_jacc) < 0.1)
-
-  data.frame(
-    Cluster              = cl,
-    Final_CellType       = unname(final),
-    Top_predicted_scRNA  = top1_label,
-    Top_Jaccard          = top1_jacc,
-    Second_predicted_scRNA = top2_label,
-    Second_Jaccard       = top2_jacc,
-    N_cells              = n_cells,
-    Ambiguous            = ifelse(ambiguous, "yes", ""),
-    stringsAsFactors     = FALSE
-  )
-})
-mapping_df <- do.call(rbind, mapping)
+# assemble: Cluster | Final_CellType | N_cells | <one column per predicted label>
+jacc_df <- data.frame(
+  Cluster        = rownames(jacc_out),
+  Final_CellType = unname(final_labels),
+  N_cells        = n_cells,
+  jacc_out,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
 
 # order by final cell type then cluster for readability
-mapping_df <- mapping_df[order(mapping_df$Final_CellType, mapping_df$Cluster), ]
+jacc_df <- jacc_df[order(jacc_df$Final_CellType, jacc_df$Cluster), ]
 
-# 5. Write TSV for the supplementary tables
 write.table(
-  mapping_df,
-  file = file.path(sannot_dir, "cluster_annotation_mapping.tsv"),
+  jacc_df,
+  file = file.path(sannot_dir, "cluster_jaccard_matrix.tsv"),
   sep = "\t", row.names = FALSE, quote = FALSE
 )
-message("Wrote cluster annotation mapping: ",
-        file.path(sannot_dir, "cluster_annotation_mapping.tsv"))
-print(mapping_df)
 
 #####################################################################
