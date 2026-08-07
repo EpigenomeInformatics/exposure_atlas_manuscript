@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 #####################################################################
-# 02_quality_control.R
+# 01_quality_control.R
 # created on 2023-08-24 by Irem Gunduz
 # Subset ArchR project and perform quality control
 #####################################################################
@@ -161,5 +161,3 @@ ggsave(p2, filename = "/icbb/projects/igunduz/QC-NFragments.pdf", units = "in", 
 plotPDF(p4, name = "QC-Sample-Statistics-TSS-Enrichment.pdf", ArchRProj = project, addDOC = FALSE, width = 10, height = 10)
 ggsave(p4, filename = "/icbb/projects/igunduz/QC-TSS-Enrichment-Final.pdf", width = 10, height = 10, units = "in", dpi = 300)
 
-
-#####################################################################
