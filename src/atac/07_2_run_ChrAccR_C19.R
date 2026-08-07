@@ -41,7 +41,9 @@ cells <- c("Mono_CD16", "Mono_CD14", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_nai
 diffCompNames <- c(
   "C19_mild vs C19_ctrl [sample_exposure_group]",
   "C19_mod vs C19_ctrl [sample_exposure_group]",
-  "C19_sev vs C19_ctrl [sample_exposure_group]"
+  "C19_sev vs C19_ctrl [sample_exposure_group]",
+  # direct moderate-vs-severe comparison (for the 3-way DAR overlap, R3.4)
+  "C19_sev vs C19_mod [sample_exposure_group]"
 )
 
 lapply(cells, function(cell) {

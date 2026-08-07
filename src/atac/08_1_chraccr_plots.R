@@ -309,3 +309,58 @@ print(summary_r34)
 write.csv(summary_r34,
           file = paste0(plot_dir, "moderate_vs_severe_DAR_summary.csv"),
           row.names = FALSE)
+
+###############################################################################
+# R3.4 (revision): 3-way DAR overlap as UpSet plots, split by direction
+# Sets: control-vs-moderate, control-vs-severe, moderate-vs-severe.
+# Requires the "C19_sev vs C19_mod" comparison to have been run in
+# 07_2_run_ChrAccR_C19.R (added as comparison index 4).
+# Direction convention follows ChrAccR: log2FC > 0 = higher accessibility in the
+# more severe / disease group of each comparison, so "up" = gained accessibility
+# with increasing severity across all three comparisons.
+###############################################################################
+suppressPackageStartupMessages(library(UpSetR))
+
+# comparison indices in diffCompNames: 1=mild/ctrl, 2=mod/ctrl, 3=sev/ctrl, 4=sev/mod
+idx_ctrl_mod <- 2
+idx_ctrl_sev <- 3
+idx_mod_sev  <- 4
+
+get_dar <- function(index) {
+  tab <- prepareDARforPlot(cell, outputDir, index, "archrPeaks")
+  tab$Start <- tab$Start + 1
+  tab$id <- paste0(tab$Chromosome, ":", tab$Start, "-", tab$End)
+  tab[tab$isDiff == TRUE, c("id", "log2FC")]
+}
+
+dar_cm <- get_dar(idx_ctrl_mod) # moderate vs control
+dar_cs <- get_dar(idx_ctrl_sev) # severe vs control
+dar_ms <- get_dar(idx_mod_sev)  # severe vs moderate
+
+up_ids   <- function(d) d$id[d$log2FC > 0]
+down_ids <- function(d) d$id[d$log2FC < 0]
+
+up_sets <- list(
+  `control-moderate` = up_ids(dar_cm),
+  `control-severe`   = up_ids(dar_cs),
+  `moderate-severe`  = up_ids(dar_ms)
+)
+down_sets <- list(
+  `control-moderate` = down_ids(dar_cm),
+  `control-severe`   = down_ids(dar_cs),
+  `moderate-severe`  = down_ids(dar_ms)
+)
+
+pdf(paste0(plot_dir, "DAR_3way_upset_up.pdf"), width = 7, height = 5)
+print(UpSetR::upset(fromList(up_sets), nsets = 3, order.by = "freq",
+  mainbar.y.label = "Hyper-accessible DARs (shared/specific)",
+  sets.x.label = "DARs per comparison"))
+dev.off()
+
+pdf(paste0(plot_dir, "DAR_3way_upset_down.pdf"), width = 7, height = 5)
+print(UpSetR::upset(fromList(down_sets), nsets = 3, order.by = "freq",
+  mainbar.y.label = "Hypo-accessible DARs (shared/specific)",
+  sets.x.label = "DARs per comparison"))
+dev.off()
+
+message("Wrote 3-way UpSet plots (up/down) to ", plot_dir)

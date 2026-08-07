@@ -304,6 +304,20 @@ assoc_supp <- assoc_df %>%
   )
 
 wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
+
+# Append predicted sex (and the raw chrY/chrX signal) to the Table S1 sheet.
+# covar is in the same row order as Table S1 (it was read from that sheet and
+# only left-joined onto), so we can write the new columns directly.
+s1_ncol <- ncol(openxlsx::readWorkbook(wb, sheet = "Table S1"))
+openxlsx::writeData(wb, "Table S1", x = "Sex_predicted",
+  startCol = s1_ncol + 1, startRow = 1)
+openxlsx::writeData(wb, "Table S1", x = as.character(covar$Sex_predicted),
+  startCol = s1_ncol + 1, startRow = 2)
+openxlsx::writeData(wb, "Table S1", x = "chrY_chrX_ratio",
+  startCol = s1_ncol + 2, startRow = 1)
+openxlsx::writeData(wb, "Table S1", x = round(covar$chrY_chrX_ratio, 4),
+  startCol = s1_ncol + 2, startRow = 2)
+
 sheet_name <- "Table S1B" # per-PC association results
 if (sheet_name %in% names(wb)) openxlsx::removeWorksheet(wb, sheet_name)
 openxlsx::addWorksheet(wb, sheet_name)
