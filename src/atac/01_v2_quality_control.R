@@ -73,6 +73,33 @@ pc_assoc <- function(y, x) {
   c(r2 = summary(fit)$r.squared, p = unname(p), n = n)
 }
 
+## ---- Helper: cohort-ADJUSTED association of one PC with one covariate --------
+# Tests the covariate (x) while controlling for cohort, i.e. compares
+#   lm(y ~ cohort)  vs  lm(y ~ cohort + x)
+# via a nested F-test, and reports the PARTIAL R^2 (extra variance explained
+# by x beyond cohort). This separates a genuine Age/Sex effect from the
+# cohort confounding, since Age/Sex are only available for OP + HIV.
+pc_assoc_adj <- function(y, x, cohort) {
+  keep <- !is.na(y) & !is.na(x) & !is.na(cohort)
+  y <- y[keep]
+  cohort <- droplevels(cohort[keep])
+  if (is.factor(x)) x <- droplevels(x[keep]) else x <- x[keep]
+  n <- length(y)
+  ok <- n >= 4 && (if (is.factor(x)) nlevels(x) >= 2 else stats::sd(x) > 0)
+  if (!ok) {
+    return(c(r2_partial = NA_real_, p = NA_real_, n = n))
+  }
+  # reduced model: cohort only (fall back to intercept if <2 cohorts present)
+  reduced <- if (nlevels(cohort) >= 2) stats::lm(y ~ cohort) else stats::lm(y ~ 1)
+  full <- stats::update(reduced, . ~ . + x)
+  an <- stats::anova(reduced, full)
+  p <- an[["Pr(>F)"]][2L]
+  rss_r <- sum(stats::resid(reduced)^2)
+  rss_f <- sum(stats::resid(full)^2)
+  r2_partial <- (rss_r - rss_f) / rss_r
+  c(r2_partial = r2_partial, p = unname(p), n = n)
+}
+
 ## ---- Run per embedding ------------------------------------------------------
 assoc_results <- list()
 
@@ -111,14 +138,22 @@ for (emb in embeddings_to_test) {
   res <- do.call(rbind, lapply(seq_len(k), function(i) {
     do.call(rbind, lapply(names(covariate_cols), function(cn) {
       a <- pc_assoc(pcs[, i], covariate_cols[[cn]])
+      # cohort-adjusted partial test (not meaningful for Cohort itself)
+      adj <- if (cn == "Cohort") {
+        c(r2_partial = NA_real_, p = NA_real_, n = a[["n"]])
+      } else {
+        pc_assoc_adj(pcs[, i], covariate_cols[[cn]], cv$exposure_type)
+      }
       data.frame(
         embedding = emb,
         PC = paste0("PC", i),
         pc_index = i,
         var_explained = var_explained[i],
         covariate = cn,
-        r2 = a[["r2"]],
-        p = a[["p"]],
+        r2 = a[["r2"]], # marginal variance explained
+        p = a[["p"]], # marginal p
+        r2_partial_adjCohort = adj[["r2_partial"]], # variance beyond cohort
+        p_adjCohort = adj[["p"]], # cohort-adjusted p
         n = a[["n"]],
         stringsAsFactors = FALSE
       )
@@ -130,10 +165,32 @@ for (emb in embeddings_to_test) {
 assoc_df <- dplyr::bind_rows(assoc_results)
 
 # BH-adjust p-values within each embedding x covariate family
+# (both the marginal test and the cohort-adjusted test)
 assoc_df <- assoc_df %>%
   dplyr::group_by(embedding, covariate) %>%
-  dplyr::mutate(p_adj = p.adjust(p, method = "BH")) %>%
+  dplyr::mutate(
+    p_adj = p.adjust(p, method = "BH"),
+    p_adjCohort_bh = p.adjust(p_adjCohort, method = "BH")
+  ) %>%
   dplyr::ungroup()
+
+## ---- Variance-weighted summary ----------------------------------------------
+# Total sample-level variance associated with each covariate =
+#   sum over PCs of (variance explained by covariate in that PC) x (PC's share
+#   of total variance). Gives one interpretable number per covariate/embedding.
+var_summary <- assoc_df %>%
+  dplyr::group_by(embedding, covariate) %>%
+  dplyr::summarise(
+    total_var_marginal = sum(r2 * var_explained, na.rm = TRUE),
+    total_var_adjCohort = sum(r2_partial_adjCohort * var_explained, na.rm = TRUE),
+    .groups = "drop"
+  )
+message("Total sample-level variance associated with each covariate:")
+print(as.data.frame(var_summary))
+write.csv(var_summary,
+  file = file.path(repo_dir, "figures/pc_covariate_variance_summary.csv"),
+  row.names = FALSE
+)
 
 # write the results table
 write.csv(assoc_df,
@@ -168,7 +225,15 @@ ggsave(p_assoc,
 )
 
 # quick console summary of any significant confounder associations
-message("Significant PC-covariate associations (adj. p < 0.05):")
-print(subset(assoc_df, p_adj < 0.05, select = c(embedding, PC, covariate, r2, p_adj, n)))
+message("Significant MARGINAL PC-covariate associations (adj. p < 0.05):")
+print(subset(assoc_df, p_adj < 0.05,
+  select = c(embedding, PC, covariate, r2, p_adj, n)
+))
+
+# Key check for the rebuttal: does Age/Sex survive once cohort is controlled for?
+message("Significant COHORT-ADJUSTED associations for Age/Sex (adj. p < 0.05):")
+print(subset(assoc_df, covariate %in% c("Age", "Sex") & p_adjCohort_bh < 0.05,
+  select = c(embedding, PC, covariate, r2_partial_adjCohort, p_adjCohort_bh, n)
+))
 
 #####################################################################

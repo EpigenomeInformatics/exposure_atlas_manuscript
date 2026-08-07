@@ -1,0 +1,7 @@
+"embedding","covariate","total_var_marginal","total_var_adjCohort"
+"Harmony","Age",0.0523579775492128,0.0258940141803672
+"Harmony","Cohort",0.0675707158071057,0
+"Harmony","Sex",0.00782374889347981,0.0134039064940348
+"IterativeLSI","Age",0.0519547138077476,0.0305100074612045
+"IterativeLSI","Cohort",0.396738148272195,0
+"IterativeLSI","Sex",0.0259285985854329,0.0123982352319812
