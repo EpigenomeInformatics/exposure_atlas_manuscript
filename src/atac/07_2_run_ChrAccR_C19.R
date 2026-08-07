@@ -141,11 +141,25 @@ ms_dir <- paste0(existing_run, cell_ms, "_mod_vs_sev/")
 if (!dir.exists(ms_dir)) dir.create(ms_dir, recursive = TRUE)
 run_atac_differential(ds, ms_dir)
 
-# read the resulting DAR table (single comparison -> index 1) with the same
-# helper, cutoff and id convention as the 3-way overlap in 08_1_chraccr_plots.R
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/chraccr_plots.R")
-mod_sev_tab <- prepareDARforPlot(paste0(cell_ms, "_mod_vs_sev"), existing_run, 1, "archrPeaks")
-mod_sev_tab$Start <- mod_sev_tab$Start + 1
+# read the resulting DAR table. We search for the diffTab file recursively so we can find it even if the subdir structure changes in future versions of ChrAccR.
+source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R") # cutL0.5fc2Padj05
+
+diff_files <- list.files(ms_dir, pattern = "diffTab.*\\.tsv$", recursive = TRUE, full.names = TRUE)
+message("diffTab files found under ", ms_dir, ": ", paste(basename(diff_files), collapse = ", "))
+stopifnot(length(diff_files) >= 1)
+
+dm <- read.delim(diff_files[1])
+isDiff <- cutL0.5fc2Padj05(dm[, c("log2FoldChange", "padj")])
+isDiff[is.na(isDiff)] <- FALSE
+mod_sev_tab <- data.frame(
+  Chromosome = dm$chrom,
+  Start = dm$chromStart + 1, # BED 0-based -> 1-based, matches get_dar() ids
+  End = dm$chromEnd,
+  log2FC = dm$log2FoldChange,
+  padj = dm$padj,
+  isDiff = isDiff,
+  stringsAsFactors = FALSE
+)
 mod_sev_tab$id <- paste0(mod_sev_tab$Chromosome, ":", mod_sev_tab$Start, "-", mod_sev_tab$End)
 
 message("moderate-vs-severe DARs (|log2FC|>0.5, padj<0.05): ", sum(mod_sev_tab$isDiff))

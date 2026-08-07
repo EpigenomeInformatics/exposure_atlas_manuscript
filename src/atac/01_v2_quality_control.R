@@ -75,16 +75,16 @@ qc_by_sample <- getCellColData(project,
 covar <- dplyr::left_join(covar, qc_by_sample, by = c("arrow_name" = "Sample"))
 
 ## ---- Predict donor sex from chrY and XIST accessibility ---------------------
-# chrY/chrX alone was unreliable across processing batches: chrX depth varies,
-# and a subset of samples carries a chrY read floor, so recorded females can
-# land at male-level chrY/chrX. We therefore combine two DEPTH-NORMALISED
-# features and fit a logistic classifier on the samples with RECORDED sex:
-#   - chrY fragment fraction   (male marker; chrY reads / total fragments)
-#   - XIST-locus accessibility (female marker; XIST is accessible from the
-#     inactive X in XX donors and silent in XY donors)
-# XIST is independent of the chrY artifact, so it disambiguates samples where
-# the chrY signal is unreliable. Concordance and a per-cohort breakdown are
-# printed so the prediction can be validated before use.
+# Two orthogonal, depth-normalised molecular features:
+#   chrY_frac : chrY fragments / total fragments  (HIGH in XY / male)
+#   xist_frac : XIST-locus accessibility / total  (HIGH in XX / female; XIST is
+#               accessible from the inactive X in XX donors, silent in XY)
+# The two features are INTERNALLY CONSISTENT (high chrY co-occurs with low XIST
+# and vice versa), so we call sex UNSUPERVISED from the molecular signal and do
+# NOT train on recorded sex. Recorded labels contain errors that would corrupt a
+# supervised model (they did: training inverted the chrY->male direction); we
+# therefore use recorded sex ONLY to validate the prediction and to flag samples
+# whose recorded sex disagrees with the data.
 xist_gr <- GenomicRanges::GRanges(
   "chrX", IRanges::IRanges(start = 73820651, end = 73852753)
 ) # XIST gene, hg38
@@ -122,34 +122,48 @@ sex_metrics <- dplyr::left_join(sex_metrics,
   by = c("Sample" = "arrow_name")
 )
 
-# logistic classifier on the labelled subset (features on log scale)
+# UNSUPERVISED molecular sex call: 2-cluster k-means on the standardised log
+# features (no recorded labels used); the cluster with the higher chrY fraction
+# is Male. Because chrY and XIST agree, the two clusters are well separated.
 sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + 1e-8)
 sex_metrics$log_xist <- log10(sex_metrics$xist_frac + 1e-8)
-lab <- !is.na(sex_metrics$Sex)
-train <- sex_metrics[lab, ]
-train$is_male <- as.integer(train$Sex == "Male")
-fit <- stats::glm(is_male ~ log_chrY + log_xist, data = train, family = "binomial")
-sex_metrics$p_male <- stats::predict(fit, newdata = sex_metrics, type = "response")
+featZ <- scale(sex_metrics[, c("log_chrY", "log_xist")])
+set.seed(12)
+km <- stats::kmeans(featZ, centers = 2, nstart = 25)
+male_cluster <- which.max(tapply(sex_metrics$chrY_frac, km$cluster, mean))
 sex_metrics$Sex_predicted <- factor(
-  ifelse(sex_metrics$p_male >= 0.5, "Male", "Female"),
+  ifelse(km$cluster == male_cluster, "Male", "Female"),
   levels = c("Female", "Male")
 )
+# monotone confidence: higher chrY relative to XIST -> more male
+score <- as.numeric(scale(sex_metrics$log_chrY - sex_metrics$log_xist))
+sex_metrics$p_male <- 1 / (1 + exp(-score))
 
-# validate against recorded labels: overall concordance + per-cohort breakdown
+# use recorded sex ONLY to validate and to flag likely metadata errors
+lab <- !is.na(sex_metrics$Sex)
 val <- sex_metrics[lab, ]
 message(sprintf(
-  "Sex prediction concordance on %d labelled samples: %.1f%%",
-  nrow(val), 100 * mean(val$Sex_predicted == val$Sex)
+  "Molecular sex vs recorded sex: %.1f%% concordant (%d labelled samples)",
+  100 * mean(val$Sex_predicted == val$Sex), nrow(val)
 ))
-print(table(observed = val$Sex, predicted = val$Sex_predicted))
-message("Median signal by cohort x recorded sex (diagnostic):")
-print(aggregate(cbind(chrY_frac, xist_frac, chrY_chrX_ratio) ~ exposure_type + Sex,
-  data = val, FUN = median
-))
+print(table(recorded = val$Sex, predicted = val$Sex_predicted))
+sex_metrics$sex_flag <- ifelse(
+  lab & sex_metrics$Sex_predicted != sex_metrics$Sex, "check_metadata", ""
+)
+disc <- sex_metrics[sex_metrics$sex_flag == "check_metadata",
+  c("Sample", "exposure_type", "Sex", "Sex_predicted", "chrY_frac", "xist_frac")
+]
+message("Recorded sex disagrees with the molecular call for ", nrow(disc),
+  " sample(s) (verify metadata):"
+)
+print(disc)
 
-# add inferred sex, confidence, and raw signals to the covariate table
+# add inferred sex, confidence, raw signals and the flag to the covariate table
 covar <- dplyr::left_join(covar,
-  dplyr::select(sex_metrics, Sample, chrY_chrX_ratio, xist_frac, p_male, Sex_predicted),
+  dplyr::select(
+    sex_metrics, Sample, chrY_chrX_ratio, xist_frac, p_male,
+    Sex_predicted, sex_flag
+  ),
   by = c("arrow_name" = "Sample")
 )
 
@@ -328,6 +342,7 @@ s1_ncol <- ncol(openxlsx::readWorkbook(wb, sheet = "Table S1"))
 new_cols <- data.frame(
   Sex_predicted = as.character(covar$Sex_predicted),
   Sex_pred_prob_male = round(covar$p_male, 3),
+  Sex_metadata_flag = covar$sex_flag,
   chrY_chrX_ratio = round(covar$chrY_chrX_ratio, 4),
   xist_frac = signif(covar$xist_frac, 3),
   stringsAsFactors = FALSE
