@@ -26,6 +26,7 @@
 ## Load Libraries
 suppressPackageStartupMessages({
   library(readxl)
+  library(openxlsx)
   library(ArchR)
   library(dplyr)
   library(ggplot2)
@@ -53,6 +54,88 @@ covar <- readxl::read_excel(suppTables, sheet = "Table S1") %>%
     Sex = factor(Sex),
     Age = as.numeric(Age)
   )
+
+## ---- Per-sample QC metrics (technical covariates) ---------------------------
+# The reviewer/PI also wants technical quality tested as a potential driver of
+# global structure. We summarise the key single-cell QC metrics to the sample
+# level (mean over the cells retained in the project) and treat them as
+# continuous covariates in the association test below.
+qc_by_sample <- getCellColData(project,
+  select = c("Sample", "TSSEnrichment", "nFrags", "FRIP")
+) %>%
+  as.data.frame() %>%
+  dplyr::group_by(Sample) %>%
+  dplyr::summarise(
+    n_cells = dplyr::n(),
+    mean_TSS = mean(TSSEnrichment, na.rm = TRUE),
+    mean_log10_nFrags = mean(log10(nFrags), na.rm = TRUE),
+    mean_FRIP = mean(FRIP, na.rm = TRUE),
+    .groups = "drop"
+  )
+covar <- dplyr::left_join(covar, qc_by_sample, by = c("arrow_name" = "Sample"))
+
+## ---- Predict donor sex from chrY vs chrX fragments --------------------------
+# Rationale: XX donors carry essentially no chrY signal. We count chrY and chrX
+# fragments per sample (project cells only), use the chrY/chrX ratio as a sex
+# signal, and calibrate a threshold on the samples with RECORDED sex (OP + HIV).
+# This lets us report an inferred sex for all cohorts (incl. COVID-19 and
+# influenza) and test it across all 92 samples.
+# CAUTION: validate the concordance printed below before trusting predicted
+# labels. Pseudoautosomal regions and multi-mapping reads put a small floor on
+# chrY in XX donors, so calibration on the labelled set is important.
+arrowFiles <- ArchR::getArrowFiles(project)
+cell_sample_all <- getCellColData(project, select = "Sample", drop = TRUE)
+all_cellNames <- project$cellNames
+
+sex_metrics <- do.call(rbind, lapply(arrowFiles, function(af) {
+  samp <- gsub("\\.arrow$", "", basename(af))
+  cells <- all_cellNames[cell_sample_all == samp]
+  if (length(cells) == 0) {
+    return(NULL)
+  }
+  nY <- length(ArchR::getFragmentsFromArrow(af, chr = "chrY", cellNames = cells, verbose = FALSE))
+  nX <- length(ArchR::getFragmentsFromArrow(af, chr = "chrX", cellNames = cells, verbose = FALSE))
+  data.frame(
+    Sample = samp, chrY = nY, chrX = nX,
+    chrY_chrX_ratio = nY / nX, stringsAsFactors = FALSE
+  )
+}))
+rownames(sex_metrics) <- NULL
+
+# attach recorded sex, calibrate threshold on the labelled samples
+sex_metrics <- dplyr::left_join(sex_metrics,
+  dplyr::select(covar, arrow_name, Sex),
+  by = c("Sample" = "arrow_name")
+)
+metric <- log10(sex_metrics$chrY_chrX_ratio + 1e-6)
+lab <- !is.na(sex_metrics$Sex)
+if (sum(lab) > 0 && dplyr::n_distinct(sex_metrics$Sex[lab]) == 2) {
+  lo <- max(metric[lab][sex_metrics$Sex[lab] == "Female"]) # highest female
+  hi <- min(metric[lab][sex_metrics$Sex[lab] == "Male"]) # lowest male
+  sex_threshold <- mean(c(lo, hi))
+} else {
+  km <- stats::kmeans(metric, centers = 2)
+  sex_threshold <- mean(tapply(metric, km$cluster, mean))
+}
+sex_metrics$Sex_predicted <- factor(
+  ifelse(metric >= sex_threshold, "Male", "Female"),
+  levels = c("Female", "Male")
+)
+
+# validate against recorded labels
+val <- sex_metrics[lab, ]
+concordance <- mean(val$Sex_predicted == val$Sex)
+message(sprintf(
+  "Sex prediction: threshold log10(chrY/chrX) = %.2f; concordance on %d labelled samples = %.1f%%",
+  sex_threshold, nrow(val), 100 * concordance
+))
+print(table(observed = val$Sex, predicted = val$Sex_predicted))
+
+# add inferred sex (and the raw signal) to the covariate table
+covar <- dplyr::left_join(covar,
+  dplyr::select(sex_metrics, Sample, chrY_chrX_ratio, Sex_predicted),
+  by = c("arrow_name" = "Sample")
+)
 
 ## ---- Helper: association of one PC with one covariate ------------------------
 # Returns variance explained (R^2), F-test p-value and the usable n.
@@ -131,8 +214,13 @@ for (emb in embeddings_to_test) {
   # test each PC against each covariate
   covariate_cols <- list(
     Cohort = cv$exposure_type, # all samples
-    Sex = cv$Sex, # OP + HIV subset (rest NA)
-    Age = cv$Age # OP + HIV subset (rest NA)
+    Age = cv$Age, # OP + HIV subset (recorded)
+    Sex_observed = cv$Sex, # OP + HIV subset (recorded)
+    Sex_predicted = cv$Sex_predicted, # all samples (chrY/chrX inference)
+    QC_nCells = cv$n_cells, # technical QC (all samples)
+    QC_meanTSS = cv$mean_TSS, # technical QC
+    QC_meanLog10Frags = cv$mean_log10_nFrags, # technical QC
+    QC_meanFRIP = cv$mean_FRIP # technical QC
   )
 
   res <- do.call(rbind, lapply(seq_len(k), function(i) {
@@ -192,6 +280,42 @@ write.csv(var_summary,
   row.names = FALSE
 )
 
+## ---- Write the association results as a new sheet (Table S1B) ---------------
+# Added as its own sheet alongside the existing metadata (Table S1). We save to
+# a COPY of the workbook so the master file is never overwritten; rename it to
+# All_Supplementary_Tables.xlsx once you are happy, or set
+# out_xlsx <- suppTables to write in place.
+assoc_supp <- assoc_df %>%
+  dplyr::transmute(
+    Embedding = embedding,
+    PC = PC,
+    `PC variance (%)` = round(100 * var_explained, 2),
+    Covariate = covariate,
+    `R2 (marginal)` = round(r2, 3),
+    `p (marginal, BH)` = signif(p_adj, 3),
+    `Partial R2 (cohort-adjusted)` = round(r2_partial_adjCohort, 3),
+    `p (cohort-adjusted, BH)` = signif(p_adjCohort_bh, 3),
+    `n samples` = n
+  ) %>%
+  dplyr::arrange(
+    Embedding,
+    factor(PC, levels = paste0("PC", seq_len(n_pc))),
+    Covariate
+  )
+
+wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
+sheet_name <- "Table S1B" # per-PC association results
+if (sheet_name %in% names(wb)) openxlsx::removeWorksheet(wb, sheet_name)
+openxlsx::addWorksheet(wb, sheet_name)
+openxlsx::writeData(wb, sheet_name, assoc_supp,
+  withFilter = TRUE, headerStyle = openxlsx::createStyle(textDecoration = "bold")
+)
+openxlsx::setColWidths(wb, sheet_name, cols = seq_along(assoc_supp), widths = "auto")
+
+out_xlsx <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables_updated.xlsx")
+openxlsx::saveWorkbook(wb, out_xlsx, overwrite = TRUE)
+message("Wrote association results to sheet '", sheet_name, "' in: ", out_xlsx)
+
 # write the results table
 write.csv(assoc_df,
   file = file.path(repo_dir, "figures/pc_covariate_association.csv"),
@@ -213,7 +337,7 @@ p_assoc <- ggplot(
   scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
   labs(
     title = "Association of sample-level PCs with known covariates",
-    subtitle = "tile label = variance explained (R^2); Sex/Age tested on OP+HIV subset",
+    subtitle = "tile label = variance explained (R^2); Age & observed Sex on OP+HIV subset, predicted Sex & QC on all samples",
     x = NULL, y = NULL
   ) +
   theme_classic() +
@@ -230,9 +354,10 @@ print(subset(assoc_df, p_adj < 0.05,
   select = c(embedding, PC, covariate, r2, p_adj, n)
 ))
 
-# Key check for the rebuttal: does Age/Sex survive once cohort is controlled for?
-message("Significant COHORT-ADJUSTED associations for Age/Sex (adj. p < 0.05):")
-print(subset(assoc_df, covariate %in% c("Age", "Sex") & p_adjCohort_bh < 0.05,
+# Key check for the rebuttal: does any covariate survive once cohort is
+# controlled for (Age, Sex, and the technical QC metrics)?
+message("Significant COHORT-ADJUSTED associations (non-cohort covariates, adj. p < 0.05):")
+print(subset(assoc_df, covariate != "Cohort" & p_adjCohort_bh < 0.05,
   select = c(embedding, PC, covariate, r2_partial_adjCohort, p_adjCohort_bh, n)
 ))
 
