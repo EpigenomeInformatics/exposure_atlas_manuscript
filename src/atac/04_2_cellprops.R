@@ -120,3 +120,39 @@ p <- ggplot(df, aes(x = sample_exposure_group, y = freq, fill = sample_exposure_
 ggsave(p, filename = paste0(fig_dir, "cell_prop_plots.pdf"), width = 20, height = 20)
 
 #####################################################################
+# Explicit per-sample Wilcoxon rank-sum tests with Bonferroni correction
+# (R2 / R3.2). NOTE: stat_compare_means(comparisons = ...) draws each bracket's
+# RAW pairwise p-value; its p.adjust.method is ignored for bracket comparisons.
+# We therefore compute the adjusted p-values we report here, at the sample
+# (donor) level, so the reported padj values are reproducible.
+#####################################################################
+prop_test_df <- do.call(rbind, lapply(comparisons, function(cmp) {
+  do.call(rbind, lapply(unique(as.character(df$ClusterCellTypes)), function(ct) {
+    sub <- df[as.character(df$ClusterCellTypes) == ct &
+      df$sample_exposure_group %in% cmp, ]
+    g1 <- sub$freq[sub$sample_exposure_group == cmp[1]]
+    g2 <- sub$freq[sub$sample_exposure_group == cmp[2]]
+    if (length(g1) < 1 || length(g2) < 1) {
+      return(NULL)
+    }
+    wt <- suppressWarnings(wilcox.test(g1, g2, exact = FALSE))
+    data.frame(
+      cell_type = ct, group1 = cmp[1], group2 = cmp[2],
+      n1 = length(g1), n2 = length(g2),
+      median1 = median(g1), median2 = median(g2),
+      p_value = wt$p.value, stringsAsFactors = FALSE
+    )
+  }))
+}))
+
+# Bonferroni across the full family of tests. To match a narrower family (e.g.
+# per cohort or per cell type), group_by before p.adjust instead.
+prop_test_df$p_adj <- p.adjust(prop_test_df$p_value, method = "bonferroni")
+prop_test_df <- prop_test_df[order(prop_test_df$p_adj), ]
+write.csv(prop_test_df,
+  file = paste0(fig_dir, "cell_prop_wilcox_bonferroni.csv"), row.names = FALSE
+)
+message("Significant cell-type composition changes (Bonferroni p_adj < 0.05):")
+print(subset(prop_test_df, p_adj < 0.05))
+
+#####################################################################

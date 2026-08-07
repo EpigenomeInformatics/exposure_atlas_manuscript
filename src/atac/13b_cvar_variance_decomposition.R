@@ -122,6 +122,29 @@ plot_vp(vpA_df, "TF-activity variance: lineage vs exposure vs donor",
 plot_vp(vpB_df, "TF-activity variance: lineage vs condition vs donor",
         "varpart_violin_modelB.pdf")
 
+# Boxplot version of the same decomposition (Fabian: supplement figure)
+plot_vp_box <- function(vp_df, title, file) {
+  long <- vp_df %>%
+    select(-Motif) %>%
+    pivot_longer(everything(), names_to = "Factor", values_to = "VarExplained")
+  ord <- long %>%
+    group_by(Factor) %>%
+    summarise(m = median(VarExplained), .groups = "drop") %>%
+    arrange(desc(m)) %>%
+    pull(Factor)
+  long$Factor <- factor(long$Factor, levels = ord)
+  p <- ggplot(long, aes(x = Factor, y = VarExplained, fill = Factor)) +
+    geom_boxplot(outlier.size = 0.4, alpha = 0.85) +
+    theme_classic() +
+    theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1)) +
+    labs(title = title, x = NULL, y = "Fraction of variance explained")
+  ggsave(file.path(save_dir, file), p, width = 7, height = 5)
+}
+plot_vp_box(vpA_df, "TF-activity variance: lineage vs exposure vs donor",
+            "varpart_boxplot_modelA.pdf")
+plot_vp_box(vpB_df, "TF-activity variance: lineage vs condition vs donor",
+            "varpart_boxplot_modelB.pdf")
+
 # -------------------------------------------------------------------
 # 5. Which motifs are the exception -- exposure-driven, not lineage-driven?
 #    These are the candidate 'condition-specific' TFs the reviewer wants
@@ -154,5 +177,59 @@ if (sum(covid_mask) > 10) {
   plot_vp(vpC_df, "COVID-19: lineage vs severity vs donor",
           "varpart_violin_COVID_severity.pdf")
 }
+
+# -------------------------------------------------------------------
+# 7. Within-cell-type decomposition (comment 112: "do this within each
+#    cell type rather than across all cell types"). For each cell type we
+#    drop the lineage axis and ask how TF-activity variance splits between
+#    exposure and donor WITHIN that lineage.
+# -------------------------------------------------------------------
+cell_types <- levels(droplevels(meta$Cell_Type))
+vp_list <- lapply(cell_types, function(ct) {
+  idx <- meta$Cell_Type == ct
+  m <- droplevels(meta[idx, ])
+  z <- zmat[, idx, drop = FALSE]
+  # need >= 2 exposures and enough pseudobulks/donors to fit the random effects
+  if (nlevels(m$Exposure) < 2 || ncol(z) < 6 || nlevels(m$Sample) < 3) {
+    message("  skip ", ct, " (insufficient design)")
+    return(NULL)
+  }
+  zv <- apply(z, 1, var, na.rm = TRUE)
+  z <- z[is.finite(zv) & zv > 0, , drop = FALSE]
+  vp <- as.data.frame(fitExtractVarPartModel(z, ~ (1 | Exposure) + (1 | Sample), m))
+  vp$Cell_Type <- ct
+  vp$n_pseudobulk <- ncol(z)
+  vp
+})
+vp_within <- dplyr::bind_rows(vp_list) # per-motif, per-cell-type
+
+# median fraction per factor within each cell type
+within_ct <- vp_within %>%
+  group_by(Cell_Type) %>%
+  summarise(
+    n_pseudobulk = dplyr::first(n_pseudobulk),
+    median_Exposure = median(Exposure),
+    median_Sample = median(Sample),
+    median_Residuals = median(Residuals),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(median_Exposure))
+write.csv(within_ct, file.path(save_dir, "varpart_within_celltype.csv"), row.names = FALSE)
+message("Within-cell-type variance partition (median fraction per factor):")
+print(within_ct)
+
+# Boxplot: distribution of exposure-associated variance per motif, by cell type
+vp_within$Cell_Type <- factor(vp_within$Cell_Type, levels = within_ct$Cell_Type)
+p_within <- ggplot(vp_within, aes(x = Cell_Type, y = Exposure, fill = Cell_Type)) +
+  geom_boxplot(outlier.size = 0.4, alpha = 0.85) +
+  theme_classic() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1)) +
+  labs(
+    title = "Exposure-associated TF-activity variance within each cell type",
+    x = NULL, y = "Fraction of variance explained by exposure"
+  )
+ggsave(file.path(save_dir, "varpart_within_celltype_boxplot.pdf"), p_within,
+  width = 8, height = 5
+)
 
 message("variancePartition decomposition complete.")

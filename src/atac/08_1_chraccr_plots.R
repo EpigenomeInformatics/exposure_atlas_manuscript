@@ -320,12 +320,17 @@ write.csv(summary_r34,
 # with increasing severity across all three comparisons.
 ###############################################################################
 suppressPackageStartupMessages(library(UpSetR))
+fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 
-# control-vs-moderate and control-vs-severe come from the ChrAccR comparisons
-# (indices 2 and 3); moderate-vs-severe comes from the direct DESeq2 comparison
-# computed in 07_2_run_ChrAccR_C19.R (saved as mod_vs_sev_DAR.rds).
-idx_ctrl_mod <- 2
-idx_ctrl_sev <- 3
+# Select the ChrAccR comparisons BY NAME (robust to diffTab ordering) rather
+# than by a hard-coded positional index; moderate-vs-severe comes from the
+# direct comparison in 07_2_run_ChrAccR_C19.R (mod_vs_sev_DAR.rds).
+comparisonTable <- readRDS(paste0(outputDir, cell, "/reports/differential_data/comparisonTable.rds"))
+comp_index <- function(grp1, grp2) {
+  i <- which(comparisonTable$grp1 == grp1 & comparisonTable$grp2 == grp2)
+  if (length(i) != 1) stop("comparison not found in comparisonTable: ", grp1, " vs ", grp2)
+  i
+}
 
 get_dar <- function(index) {
   tab <- prepareDARforPlot(cell, outputDir, index, "archrPeaks")
@@ -334,11 +339,19 @@ get_dar <- function(index) {
   tab[tab$isDiff == TRUE, c("id", "log2FC")]
 }
 
-dar_cm <- get_dar(idx_ctrl_mod) # moderate vs control
-dar_cs <- get_dar(idx_ctrl_sev) # severe vs control
+dar_cm <- get_dar(comp_index("C19_mod", "C19_ctrl")) # moderate vs control
+dar_cs <- get_dar(comp_index("C19_sev", "C19_ctrl")) # severe vs control
 
 ms_tab <- readRDS(paste0(plot_dir, "mod_vs_sev_DAR.rds")) # from 07_2 (R3.4)
 dar_ms <- ms_tab[ms_tab$isDiff == TRUE, c("id", "log2FC")] # severe vs moderate
+
+# report set sizes split by direction so empty sets are explicit
+message(sprintf(
+  "DAR counts (up/down)  ctrl-mod: %d/%d | ctrl-sev: %d/%d | mod-sev: %d/%d",
+  sum(dar_cm$log2FC > 0), sum(dar_cm$log2FC < 0),
+  sum(dar_cs$log2FC > 0), sum(dar_cs$log2FC < 0),
+  sum(dar_ms$log2FC > 0), sum(dar_ms$log2FC < 0)
+))
 
 up_ids   <- function(d) d$id[d$log2FC > 0]
 down_ids <- function(d) d$id[d$log2FC < 0]
@@ -354,16 +367,15 @@ down_sets <- list(
   `moderate-severe`  = down_ids(dar_ms)
 )
 
-pdf(paste0(plot_dir, "DAR_3way_upset_up.pdf"), width = 7, height = 5)
+pdf(paste0(fig_dir, "DAR_3way_upset_up.pdf"), width = 7, height = 5)
 print(UpSetR::upset(fromList(up_sets), nsets = 3, order.by = "freq",
   mainbar.y.label = "Hyper-accessible DARs (shared/specific)",
   sets.x.label = "DARs per comparison"))
 dev.off()
 
-pdf(paste0(plot_dir, "DAR_3way_upset_down.pdf"), width = 7, height = 5)
+pdf(paste0(fig_dir, "DAR_3way_upset_down.pdf"), width = 7, height = 5)
 print(UpSetR::upset(fromList(down_sets), nsets = 3, order.by = "freq",
   mainbar.y.label = "Hypo-accessible DARs (shared/specific)",
   sets.x.label = "DARs per comparison"))
 dev.off()
 
-message("Wrote 3-way UpSet plots (up/down) to ", plot_dir)
