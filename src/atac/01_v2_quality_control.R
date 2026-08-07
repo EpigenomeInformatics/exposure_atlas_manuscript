@@ -74,18 +74,26 @@ qc_by_sample <- getCellColData(project,
   )
 covar <- dplyr::left_join(covar, qc_by_sample, by = c("arrow_name" = "Sample"))
 
-## ---- Predict donor sex from chrY vs chrX fragments --------------------------
-# Rationale: XX donors carry essentially no chrY signal. We count chrY and chrX
-# fragments per sample (project cells only), use the chrY/chrX ratio as a sex
-# signal, and calibrate a threshold on the samples with RECORDED sex (OP + HIV).
-# This lets us report an inferred sex for all cohorts (incl. COVID-19 and
-# influenza) and test it across all 92 samples.
-# CAUTION: validate the concordance printed below before trusting predicted
-# labels. Pseudoautosomal regions and multi-mapping reads put a small floor on
-# chrY in XX donors, so calibration on the labelled set is important.
+## ---- Predict donor sex from chrY and XIST accessibility ---------------------
+# chrY/chrX alone was unreliable across processing batches: chrX depth varies,
+# and a subset of samples carries a chrY read floor, so recorded females can
+# land at male-level chrY/chrX. We therefore combine two DEPTH-NORMALISED
+# features and fit a logistic classifier on the samples with RECORDED sex:
+#   - chrY fragment fraction   (male marker; chrY reads / total fragments)
+#   - XIST-locus accessibility (female marker; XIST is accessible from the
+#     inactive X in XX donors and silent in XY donors)
+# XIST is independent of the chrY artifact, so it disambiguates samples where
+# the chrY signal is unreliable. Concordance and a per-cohort breakdown are
+# printed so the prediction can be validated before use.
+xist_gr <- GenomicRanges::GRanges(
+  "chrX", IRanges::IRanges(start = 73820651, end = 73852753)
+) # XIST gene, hg38
+
 arrowFiles <- ArchR::getArrowFiles(project)
 cell_sample_all <- getCellColData(project, select = "Sample", drop = TRUE)
 all_cellNames <- project$cellNames
+nfrags_all <- getCellColData(project, select = "nFrags", drop = TRUE)
+total_by_sample <- tapply(nfrags_all, cell_sample_all, sum)
 
 sex_metrics <- do.call(rbind, lapply(arrowFiles, function(af) {
   samp <- gsub("\\.arrow$", "", basename(af))
@@ -93,47 +101,55 @@ sex_metrics <- do.call(rbind, lapply(arrowFiles, function(af) {
   if (length(cells) == 0) {
     return(NULL)
   }
-  nY <- length(ArchR::getFragmentsFromArrow(af, chr = "chrY", cellNames = cells, verbose = FALSE))
-  nX <- length(ArchR::getFragmentsFromArrow(af, chr = "chrX", cellNames = cells, verbose = FALSE))
+  fy <- ArchR::getFragmentsFromArrow(af, chr = "chrY", cellNames = cells, verbose = FALSE)
+  fx <- ArchR::getFragmentsFromArrow(af, chr = "chrX", cellNames = cells, verbose = FALSE)
+  n_xist <- sum(IRanges::overlapsAny(fx, xist_gr))
+  total <- as.numeric(total_by_sample[samp])
   data.frame(
-    Sample = samp, chrY = nY, chrX = nX,
-    chrY_chrX_ratio = nY / nX, stringsAsFactors = FALSE
+    Sample = samp,
+    chrY = length(fy), chrX = length(fx), xist = n_xist,
+    chrY_frac = length(fy) / total,
+    xist_frac = n_xist / total,
+    chrY_chrX_ratio = length(fy) / length(fx),
+    stringsAsFactors = FALSE
   )
 }))
 rownames(sex_metrics) <- NULL
 
-# attach recorded sex, calibrate threshold on the labelled samples
+# attach recorded sex + cohort for calibration and diagnostics
 sex_metrics <- dplyr::left_join(sex_metrics,
-  dplyr::select(covar, arrow_name, Sex),
+  dplyr::select(covar, arrow_name, exposure_type, Sex),
   by = c("Sample" = "arrow_name")
 )
-metric <- log10(sex_metrics$chrY_chrX_ratio + 1e-6)
+
+# logistic classifier on the labelled subset (features on log scale)
+sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + 1e-8)
+sex_metrics$log_xist <- log10(sex_metrics$xist_frac + 1e-8)
 lab <- !is.na(sex_metrics$Sex)
-if (sum(lab) > 0 && dplyr::n_distinct(sex_metrics$Sex[lab]) == 2) {
-  lo <- max(metric[lab][sex_metrics$Sex[lab] == "Female"]) # highest female
-  hi <- min(metric[lab][sex_metrics$Sex[lab] == "Male"]) # lowest male
-  sex_threshold <- mean(c(lo, hi))
-} else {
-  km <- stats::kmeans(metric, centers = 2)
-  sex_threshold <- mean(tapply(metric, km$cluster, mean))
-}
+train <- sex_metrics[lab, ]
+train$is_male <- as.integer(train$Sex == "Male")
+fit <- stats::glm(is_male ~ log_chrY + log_xist, data = train, family = "binomial")
+sex_metrics$p_male <- stats::predict(fit, newdata = sex_metrics, type = "response")
 sex_metrics$Sex_predicted <- factor(
-  ifelse(metric >= sex_threshold, "Male", "Female"),
+  ifelse(sex_metrics$p_male >= 0.5, "Male", "Female"),
   levels = c("Female", "Male")
 )
 
-# validate against recorded labels
+# validate against recorded labels: overall concordance + per-cohort breakdown
 val <- sex_metrics[lab, ]
-concordance <- mean(val$Sex_predicted == val$Sex)
 message(sprintf(
-  "Sex prediction: threshold log10(chrY/chrX) = %.2f; concordance on %d labelled samples = %.1f%%",
-  sex_threshold, nrow(val), 100 * concordance
+  "Sex prediction concordance on %d labelled samples: %.1f%%",
+  nrow(val), 100 * mean(val$Sex_predicted == val$Sex)
 ))
 print(table(observed = val$Sex, predicted = val$Sex_predicted))
+message("Median signal by cohort x recorded sex (diagnostic):")
+print(aggregate(cbind(chrY_frac, xist_frac, chrY_chrX_ratio) ~ exposure_type + Sex,
+  data = val, FUN = median
+))
 
-# add inferred sex (and the raw signal) to the covariate table
+# add inferred sex, confidence, and raw signals to the covariate table
 covar <- dplyr::left_join(covar,
-  dplyr::select(sex_metrics, Sample, chrY_chrX_ratio, Sex_predicted),
+  dplyr::select(sex_metrics, Sample, chrY_chrX_ratio, xist_frac, p_male, Sex_predicted),
   by = c("arrow_name" = "Sample")
 )
 
@@ -309,14 +325,15 @@ wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
 # covar is in the same row order as Table S1 (it was read from that sheet and
 # only left-joined onto), so we can write the new columns directly.
 s1_ncol <- ncol(openxlsx::readWorkbook(wb, sheet = "Table S1"))
-openxlsx::writeData(wb, "Table S1", x = "Sex_predicted",
+new_cols <- data.frame(
+  Sex_predicted = as.character(covar$Sex_predicted),
+  Sex_pred_prob_male = round(covar$p_male, 3),
+  chrY_chrX_ratio = round(covar$chrY_chrX_ratio, 4),
+  xist_frac = signif(covar$xist_frac, 3),
+  stringsAsFactors = FALSE
+)
+openxlsx::writeData(wb, "Table S1", x = new_cols,
   startCol = s1_ncol + 1, startRow = 1)
-openxlsx::writeData(wb, "Table S1", x = as.character(covar$Sex_predicted),
-  startCol = s1_ncol + 1, startRow = 2)
-openxlsx::writeData(wb, "Table S1", x = "chrY_chrX_ratio",
-  startCol = s1_ncol + 2, startRow = 1)
-openxlsx::writeData(wb, "Table S1", x = round(covar$chrY_chrX_ratio, 4),
-  startCol = s1_ncol + 2, startRow = 2)
 
 sheet_name <- "Table S1B" # per-PC association results
 if (sheet_name %in% names(wb)) openxlsx::removeWorksheet(wb, sheet_name)

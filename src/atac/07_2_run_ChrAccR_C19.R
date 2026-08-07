@@ -31,19 +31,18 @@ sampleannot <- merge(sampleannot, batch, by = "fragmentFiles")
 
 # set directory for the output
 outputDir <- "/icbb/projects/igunduz/DARPA_analysis/BedFiles_final/"
-rundir <- paste0("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_", Sys.Date(), "/")
+#rundir <- paste0("/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_", Sys.Date())
+rundir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/"
 if (!dir.exists(rundir)) dir.create(rundir)
 
 # set the cell types and the comparisons
-cells <- c("Mono_CD16", "Mono_CD14", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive")[1]
+cells <- c("Mono_CD16", "Mono_CD14", "NK_CD16", "T_mem_CD8", "T_mem_CD4", "T_naive")
 
 
 diffCompNames <- c(
   "C19_mild vs C19_ctrl [sample_exposure_group]",
   "C19_mod vs C19_ctrl [sample_exposure_group]",
-  "C19_sev vs C19_ctrl [sample_exposure_group]",
-  # direct moderate-vs-severe comparison (for the 3-way DAR overlap, R3.4)
-  "C19_sev vs C19_mod [sample_exposure_group]"
+  "C19_sev vs C19_ctrl [sample_exposure_group]"
 )
 
 lapply(cells, function(cell) {
@@ -112,5 +111,48 @@ lapply(cells, function(cell) {
   }
 })
 
+
+#####################################################################
+# R3.4: direct moderate-vs-severe differential accessibility
+# Loads the EXISTING processed ChrAccR DsATAC object (no re-run of import/
+# filtering/normalization) and runs ChrAccR's own differential module for the
+# C19_sev vs C19_mod comparison, so it uses the same normalization, model and
+# cutoffs as the control comparisons above.
+#####################################################################
+cell_ms <- "Mono_CD14"
+# existing ChrAccR run directory (see src/atac/08_1_chraccr_plots.R)
+existing_run <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/"
+plot_dir <- "/icbb/projects/igunduz/finalize_echo_050824/C19/"
+
+# load the processed object
+ds <- ChrAccR::loadDsAcc(paste0(existing_run, cell_ms, "/data/dsATAC_filtered/"))
+
+# configure the differential module for the direct moderate-vs-severe test,
+# mirroring the settings used for the control comparisons above
+setConfigElement("differentialColumns", c("sample_exposure_group"))
+setConfigElement("differentialCompNames", c("C19_sev vs C19_mod [sample_exposure_group]"))
+setConfigElement("differentialAdjColumns", "processing_date")
+setConfigElement("differentialCutoffL2FC", 0.5)
+setConfigElement("filteringSexChroms", TRUE)
+
+# run into a FRESH analysis dir: run_atac_differential skips if a differential
+# report already exists in anaDir, so we do not reuse the control-comparison dir
+ms_dir <- paste0(existing_run, cell_ms, "_mod_vs_sev/")
+if (!dir.exists(ms_dir)) dir.create(ms_dir, recursive = TRUE)
+run_atac_differential(ds, ms_dir)
+
+# read the resulting DAR table (single comparison -> index 1) with the same
+# helper, cutoff and id convention as the 3-way overlap in 08_1_chraccr_plots.R
+source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/chraccr_plots.R")
+mod_sev_tab <- prepareDARforPlot(paste0(cell_ms, "_mod_vs_sev"), existing_run, 1, "archrPeaks")
+mod_sev_tab$Start <- mod_sev_tab$Start + 1
+mod_sev_tab$id <- paste0(mod_sev_tab$Chromosome, ":", mod_sev_tab$Start, "-", mod_sev_tab$End)
+
+message("moderate-vs-severe DARs (|log2FC|>0.5, padj<0.05): ", sum(mod_sev_tab$isDiff))
+write.table(mod_sev_tab,
+  file = paste0(plot_dir, "diffTab_mod_vs_sev_archrPeaks.tsv"),
+  sep = "\t", quote = FALSE, row.names = FALSE
+)
+saveRDS(mod_sev_tab, paste0(plot_dir, "mod_vs_sev_DAR.rds"))
 
 #####################################################################

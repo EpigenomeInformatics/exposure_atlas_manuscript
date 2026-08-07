@@ -321,10 +321,11 @@ write.csv(summary_r34,
 ###############################################################################
 suppressPackageStartupMessages(library(UpSetR))
 
-# comparison indices in diffCompNames: 1=mild/ctrl, 2=mod/ctrl, 3=sev/ctrl, 4=sev/mod
+# control-vs-moderate and control-vs-severe come from the ChrAccR comparisons
+# (indices 2 and 3); moderate-vs-severe comes from the direct DESeq2 comparison
+# computed in 07_2_run_ChrAccR_C19.R (saved as mod_vs_sev_DAR.rds).
 idx_ctrl_mod <- 2
 idx_ctrl_sev <- 3
-idx_mod_sev  <- 4
 
 get_dar <- function(index) {
   tab <- prepareDARforPlot(cell, outputDir, index, "archrPeaks")
@@ -335,7 +336,9 @@ get_dar <- function(index) {
 
 dar_cm <- get_dar(idx_ctrl_mod) # moderate vs control
 dar_cs <- get_dar(idx_ctrl_sev) # severe vs control
-dar_ms <- get_dar(idx_mod_sev)  # severe vs moderate
+
+ms_tab <- readRDS(paste0(plot_dir, "mod_vs_sev_DAR.rds")) # from 07_2 (R3.4)
+dar_ms <- ms_tab[ms_tab$isDiff == TRUE, c("id", "log2FC")] # severe vs moderate
 
 up_ids   <- function(d) d$id[d$log2FC > 0]
 down_ids <- function(d) d$id[d$log2FC < 0]
