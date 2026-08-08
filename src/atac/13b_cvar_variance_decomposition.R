@@ -68,22 +68,55 @@ hiv_subject <- c(
   hiv11 = "HIV_S4", hiv10 = "HIV_S4", hiv5 = "HIV_S4"
 )
 
+# Patterns are matched ANYWHERE in the identifier, so this works whether the
+# sample string is "ATAC_flu01_1_fragments.tsv.gz", "flu01_1", or carries an
+# extra prefix from the pseudobulk column names.
 derive_donor <- function(sample_id) {
-  s <- sub("_fragments\\.tsv\\.gz$", "", as.character(sample_id))
-  s <- sub("^ATAC_", "", s)
-  vapply(s, function(x) {
-    if (!is.na(hiv_subject[x])) return(unname(hiv_subject[x])) # HIV timepoints
-    if (grepl("^flu", x)) return(sub("_[0-9]+$", "", x))       # fluXX_1..4 -> fluXX
-    # COVID-19 repeat sampling: 555_1/555_2, 564A/564B, 66D0/66D7, 132D0/132D7
-    y <- sub("_[12]$", "", x)          # 555_1 -> 555
-    y <- sub("([0-9])[AB]$", "\\1", y) # 564A  -> 564
-    y <- sub("([0-9])D[0-9]+$", "\\1", y) # 66D0 -> 66, 132D0 -> 132
-    y
-  }, character(1), USE.NAMES = FALSE)
+  x <- as.character(sample_id)
+  out <- x # default: one donor per sample (OP cohort)
+
+  # HIV: hiv<N> anywhere -> subject ID (3 timepoints per subject)
+  has_hiv <- grepl("hiv[0-9]+", x)
+  if (any(has_hiv)) {
+    key <- sub(".*?(hiv[0-9]+).*", "\\1", x[has_hiv])
+    mapped <- unname(hiv_subject[key])
+    mapped[is.na(mapped)] <- key[is.na(mapped)] # unknown hiv id -> keep as-is
+    out[has_hiv] <- mapped
+  }
+
+  # Influenza: flu<ID>_<timepoint> -> flu<ID> (4 timepoints per subject)
+  has_flu <- grepl("flu[0-9]+_[0-9]+", x)
+  if (any(has_flu)) {
+    out[has_flu] <- sub(".*?(flu[0-9]+)_[0-9]+.*", "\\1", x[has_flu])
+  }
+
+  # COVID-19: ATAC_<id>_fragments, collapsing repeat-timepoint suffixes
+  #   555_1/555_2 -> 555 ; 564A/564B -> 564 ; 66D0/66D7 -> 66 ; 132D0 -> 132
+  has_c19 <- grepl("ATAC_.+_fragments", x) & !has_flu
+  if (any(has_c19)) {
+    id <- sub(".*ATAC_(.+)_fragments.*", "\\1", x[has_c19])
+    id <- sub("_[12]$", "", id)
+    id <- sub("([0-9])[AB]$", "\\1", id)
+    id <- sub("([0-9])D[0-9]+$", "\\1", id)
+    out[has_c19] <- paste0("C19_", id)
+  }
+  out
 }
 meta$Donor <- factor(derive_donor(meta$Sample))
+
 message("Samples: ", nlevels(meta$Sample), " | Donors: ", nlevels(meta$Donor))
-print(head(unique(data.frame(Sample = meta$Sample, Donor = meta$Donor)), 20))
+if (nlevels(meta$Donor) == nlevels(meta$Sample)) {
+  warning("Donor did not collapse any samples -- check the Sample ID format printed below")
+}
+collapsed <- unique(data.frame(
+  Sample = as.character(meta$Sample), Donor = as.character(meta$Donor)
+))
+message("Donors contributing more than one sample:")
+print(head(subset(
+  merge(collapsed, as.data.frame(table(collapsed$Donor)),
+    by.x = "Donor", by.y = "Var1"
+  ), Freq > 1
+), 30))
 
 # Drop pseudobulks with missing labels or singleton factor levels
 keep <- complete.cases(meta[, c("Cell_Type","Exposure","Condition","Sample","Donor")])
