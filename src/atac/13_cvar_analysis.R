@@ -284,7 +284,9 @@ condition_colors <- c(
   "Influenza_ctrl"= "#2b8cbe",  # Control (Matching COVID control if they are the same baseline)
   "Influenza_d3"  = "#fec44f",  # Day 3 (Yellow/Orange)
   "Influenza_d6"  = "#fe9929",  # Day 6 (Orange)
-  "Influenza_d30" = "#d95f0e",  # Day 28/30 (Dark Orange/Red)
+  # day 28 is the true final timepoint; "d30" is a legacy mislabel
+  "Influenza_d30" = "#d95f0e",
+  "Influenza_d28" = "#d95f0e",
 
   # HIV (Purples)
   "HIV_ctrl"      = "#4F619D",  # Control (Lavender/Pink)

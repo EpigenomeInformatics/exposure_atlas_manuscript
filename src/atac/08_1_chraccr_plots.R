@@ -37,7 +37,9 @@ color_mapping <- c(
   "Influenza_ctrl" = "#4F619D",
   "Influenza_d3" = "#FFD34E",
   "Influenza_d6" = "#EBB332",
+  # day 28 is the true final timepoint; "d30" is a legacy mislabel
   "Influenza_d30" = "#E1861A",
+  "Influenza_d28" = "#E1861A",
   "OP_low" = "#BADBF4",
   "OP_med" = "#94A9D3",
   "OP_high" = "#16528A"

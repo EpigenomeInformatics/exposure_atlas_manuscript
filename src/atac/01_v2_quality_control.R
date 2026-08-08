@@ -114,9 +114,13 @@ label <- sub("_fragments\\.tsv\\.gz$", "", covar$arrow_name)
 donor_id <- unname(atac_to_donor[label])
 pm_i <- match(donor_id, pm$Donor)
 hiv_i <- match(label, hiv_meta$stem)
+# NB: "day 30 after challenge" in the legacy annotation is a MISLABEL -- the
+# actual final timepoint is day 28 (group label Influenza_d28). We map it to 28
+# and also correct the text in Table S1 when writing the workbook below.
 flu_day <- c(
   "right before challenge" = -1, "day 3 after challenge" = 3,
-  "day 6 after challenge" = 6, "day 30 after challenge" = 28
+  "day 6 after challenge" = 6, "day 30 after challenge" = 28,
+  "day 28 after challenge" = 28
 )
 
 covar <- covar %>% dplyr::mutate(
@@ -411,6 +415,18 @@ ggsave(file.path(repo_dir, "figures/sex_prediction_by_cohort.pdf"), p_sex_cohort
 )
 message("Wrote sex-prediction figures to ", file.path(repo_dir, "figures/"))
 
+# Supporting per-sample detail for the sex inference. Kept OUT of Table S1 (which
+# carries only the final Sex_predicted call) but retained here as the evidence
+# behind the call and behind the flagged metadata discrepancies.
+write.csv(
+  sex_metrics[, c(
+    "Sample", "exposure_type", "Sex", "Sex_predicted", "p_male",
+    "Sex_by_xist", "Sex_by_chrY", "features_agree",
+    "chrY_frac", "xist_frac", "chrY_chrX_ratio", "sex_flag"
+  )],
+  file = file.path(repo_dir, "figures/sex_prediction_metrics.csv"), row.names = FALSE
+)
+
 # add inferred sex, confidence, raw signals and the flag to the covariate table
 covar <- dplyr::left_join(covar,
   dplyr::select(
@@ -589,26 +605,34 @@ assoc_supp <- assoc_df %>%
 
 wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
 
-# Append predicted sex (and the raw chrY/chrX signal) to the Table S1 sheet.
-# covar is in the same row order as Table S1 (it was read from that sheet and
-# only left-joined onto), so we can write the new columns directly.
-s1_ncol <- ncol(openxlsx::readWorkbook(wb, sheet = "Table S1"))
+# Correct the influenza timepoint mislabel in the existing record_id column:
+# the final challenge timepoint is day 28, not day 30 (group label Influenza_d28).
+s1_now <- openxlsx::readWorkbook(wb, sheet = "Table S1")
+rec_col <- which(names(s1_now) == "record_id")
+if (length(rec_col) == 1) {
+  fixed_rec <- sub("day 30 after challenge", "day 28 after challenge",
+    as.character(s1_now$record_id)
+  )
+  n_fixed <- sum(fixed_rec != as.character(s1_now$record_id), na.rm = TRUE)
+  openxlsx::writeData(wb, "Table S1", x = fixed_rec,
+    startCol = rec_col, startRow = 2
+  )
+  message("Corrected 'day 30' -> 'day 28' in Table S1 record_id for ", n_fixed, " row(s)")
+}
+
+# Append the new columns to the Table S1 sheet. covar is in the same row order as
+# Table S1 (it was read from that sheet and only left-joined onto), so we can
+# write the new columns directly.
+s1_ncol <- ncol(s1_now)
 new_cols <- data.frame(
-  # --- recovered donor metadata (reported values) ---
-  Donor_ID = covar$donor_id,
+  # recovered donor metadata (reported values)
   Age_reported = covar$Age_reported,
   Sex_reported = as.character(covar$Sex),
   Sampling_day_rel_onset = covar$sampling_day,
-  Onset_reference = covar$onset_reference,
   Viral_load = covar$viral_load,
-  # --- molecular sex prediction (kept, validates the reported values) ---
-  Sex_predicted = as.character(covar$Sex_predicted), # LDA call
-  Sex_pred_P_male = covar$p_male, # LDA posterior
-  Sex_by_xist = as.character(covar$Sex_by_xist), # marker cross-check
-  Sex_by_chrY = as.character(covar$Sex_by_chrY), # marker cross-check
-  Sex_metadata_flag = covar$sex_flag,
-  chrY_frac = signif(covar$chrY_frac, 3),
-  xist_frac = signif(covar$xist_frac, 3),
+  # final molecular sex call (supporting features are kept out of Table S1 and
+  # written to figures/sex_prediction_metrics.csv instead)
+  Sex_predicted = as.character(covar$Sex_predicted),
   stringsAsFactors = FALSE
 )
 openxlsx::writeData(wb, "Table S1", x = new_cols,

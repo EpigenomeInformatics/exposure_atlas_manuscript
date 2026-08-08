@@ -121,7 +121,10 @@ color_mapping <- c(
   "Influenza_ctrl" = "#4F619D",
   "Influenza_d3" = "#FFD34E",
   "Influenza_d6" = "#EBB332",
+  # the final influenza timepoint is day 28; "d30" is a legacy mislabel still
+  # present in the raw sample annotation, so both keys are mapped here
   "Influenza_d30" = "#E1861A",
+  "Influenza_d28" = "#E1861A",
   "OP_low" = "#BADBF4",
   "OP_med" = "#94A9D3",
   "OP_high" = "#16528A"
