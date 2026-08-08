@@ -311,15 +311,12 @@ write.csv(summary_r34,
           row.names = FALSE)
 
 ###############################################################################
-# R3.4 (revision): 3-way DAR overlap as UpSet plots, split by direction
-# Sets: control-vs-moderate, control-vs-severe, moderate-vs-severe.
-# Requires the "C19_sev vs C19_mod" comparison to have been run in
-# 07_2_run_ChrAccR_C19.R (added as comparison index 4).
+# R3.4 (revision): moderate-vs-severe DAR overlap, split by direction.
+# The direct moderate-vs-severe comparison is computed in
+# 07_2_run_ChrAccR_C19.R and read from mod_vs_sev_DAR.rds.
 # Direction convention follows ChrAccR: log2FC > 0 = higher accessibility in the
-# more severe / disease group of each comparison, so "up" = gained accessibility
-# with increasing severity across all three comparisons.
+# disease group of each comparison.
 ###############################################################################
-suppressPackageStartupMessages(library(UpSetR))
 fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 
 # Select the ChrAccR comparisons BY NAME (robust to diffTab ordering) rather
@@ -353,29 +350,60 @@ message(sprintf(
   sum(dar_ms$log2FC > 0), sum(dar_ms$log2FC < 0)
 ))
 
-up_ids   <- function(d) d$id[d$log2FC > 0]
-down_ids <- function(d) d$id[d$log2FC < 0]
+###############################################################################
+# Single compact panel replacing the two UpSet plots.
+# One stacked bar carries everything the upsets did: the three overlap
+# categories (moderate-only / shared / severe-only), the hyper- vs hypo-
+# accessible split within each, and -- in the subtitle -- the effect-size
+# concordance of the shared core plus the null result of the direct
+# moderate-vs-severe test. Small enough to sit as an inset in Figure 3
+# (Fabian's suggestion) rather than taking a full panel.
+###############################################################################
+ov       <- intersect(dar_cm$id, dar_cs$id)
+mod_only <- setdiff(dar_cm$id, dar_cs$id)
+sev_only <- setdiff(dar_cs$id, dar_cm$id)
 
-up_sets <- list(
-  `control-moderate` = up_ids(dar_cm),
-  `control-severe`   = up_ids(dar_cs),
-  `moderate-severe`  = up_ids(dar_ms)
+# direction taken from the group in which the region is differential
+# (severe for the shared set; the shared set is direction-concordant anyway)
+dir_of <- function(ids, tab) {
+  ifelse(tab$log2FC[match(ids, tab$id)] > 0, "Hyper-accessible", "Hypo-accessible")
+}
+cat_df <- rbind(
+  data.frame(Category = "Moderate\nonly", Direction = dir_of(mod_only, dar_cm)),
+  data.frame(Category = "Shared",         Direction = dir_of(ov,       dar_cs)),
+  data.frame(Category = "Severe\nonly",   Direction = dir_of(sev_only, dar_cs))
 )
-down_sets <- list(
-  `control-moderate` = down_ids(dar_cm),
-  `control-severe`   = down_ids(dar_cs),
-  `moderate-severe`  = down_ids(dar_ms)
+cat_df$Category <- factor(cat_df$Category,
+  levels = c("Moderate\nonly", "Shared", "Severe\nonly")
 )
 
-pdf(paste0(fig_dir, "DAR_3way_upset_up.pdf"), width = 7, height = 5)
-print(UpSetR::upset(fromList(up_sets), nsets = 3, order.by = "freq",
-  mainbar.y.label = "Hyper-accessible DARs (shared/specific)",
-  sets.x.label = "DARs per comparison"))
-dev.off()
+# effect-size concordance within the shared core
+m_lfc_ov <- dar_cm$log2FC[match(ov, dar_cm$id)]
+s_lfc_ov <- dar_cs$log2FC[match(ov, dar_cs$id)]
+r_shared <- cor(m_lfc_ov, s_lfc_ov, use = "complete.obs")
+pct_conc <- 100 * mean(sign(m_lfc_ov) == sign(s_lfc_ov))
 
-pdf(paste0(fig_dir, "DAR_3way_upset_down.pdf"), width = 7, height = 5)
-print(UpSetR::upset(fromList(down_sets), nsets = 3, order.by = "freq",
-  mainbar.y.label = "Hypo-accessible DARs (shared/specific)",
-  sets.x.label = "DARs per comparison"))
-dev.off()
+p_overlap <- ggplot(cat_df, aes(x = Category, fill = Direction)) +
+  geom_bar(colour = "grey20", width = 0.7) +
+  geom_text(stat = "count", aes(label = after_stat(count)),
+    position = position_stack(vjust = 0.5), size = 3.2, colour = "white"
+  ) +
+  scale_fill_manual(values = c(
+    "Hyper-accessible" = "#E64B35", "Hypo-accessible" = "#3C5488"
+  )) +
+  labs(
+    title = "CD14+ monocyte DARs: moderate vs severe COVID-19",
+    subtitle = sprintf(
+      "Shared: %.0f%% direction-concordant, effect sizes r = %.2f | direct moderate-vs-severe test: %d DARs",
+      pct_conc, r_shared, nrow(dar_ms)
+    ),
+    x = NULL, y = "Number of DARs", fill = NULL
+  ) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = "top", plot.subtitle = element_text(size = 8))
+
+ggsave(paste0(fig_dir, "DAR_moderate_vs_severe_overlap.pdf"), p_overlap,
+  width = 5.2, height = 4.2
+)
+message("Wrote compact DAR-overlap panel to ", fig_dir)
 

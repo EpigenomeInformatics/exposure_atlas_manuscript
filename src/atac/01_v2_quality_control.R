@@ -30,6 +30,7 @@ suppressPackageStartupMessages({
   library(ArchR)
   library(dplyr)
   library(ggplot2)
+  library(MASS) # LDA for molecular sex classification
 })
 set.seed(12) # set seed
 
@@ -48,12 +49,120 @@ project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 # which matches Table S1$arrow_name -- NOT Table S1$sampleId ("C19_mod_055").
 # We therefore join the covariates on arrow_name.
 covar <- readxl::read_excel(suppTables, sheet = "Table S1") %>%
-  dplyr::select(sampleId, arrow_name, exposure_type, Age, Sex) %>%
+  dplyr::select(sampleId, arrow_name, exposure_type, record_id, Age, Sex) %>%
   dplyr::mutate(
     exposure_type = factor(exposure_type),
     Sex = factor(Sex),
     Age = as.numeric(Age)
   )
+
+#####################################################################
+# RECOVERED DONOR METADATA (age / sex / sampling time relative to onset)
+# Age and sex were originally present only for the OP and HIV cohorts. We
+# recover them for the COVID-19 cohort from the clinical metadata table, and
+# recover sampling time relative to infection onset for all three infection
+# cohorts:
+#   COVID-19  : days after the first positive SARS-CoV-2 test
+#   HIV       : days relative to seroconversion (negative = pre-infection)
+#   Influenza : days after the challenge protocol (already in Table S1)
+#   OP        : chronic environmental exposure, no datable onset event
+# The recorded values fill Table S1; the molecular sex prediction below is kept
+# and used to validate them.
+#####################################################################
+
+# Authoritative ATAC-label -> clinical Donor ID map for the COVID-19 cohort
+atac_to_donor <- c(
+  ATAC_055 = "55650-0055", ATAC_057 = "55650-0057", ATAC_132D0 = "55650-0132d0",
+  ATAC_52 = "55650-0052", ATAC_555_1 = "28205-0555d0", ATAC_555_2 = "28205-0555d2",
+  ATAC_556 = "28205-0556", ATAC_557 = "28205-0557", ATAC_558 = "28205-0558",
+  ATAC_559 = "28205-0559", ATAC_560 = "28205-0560", ATAC_564A = "28205-0564d0",
+  ATAC_564B = "28205-0564d2", ATAC_66D0 = "55650-0066d0", ATAC_66D7 = "55650-0066d7",
+  ATAC_67 = "55650-0067", ATAC_83 = "55650-0083", ATAC_86 = "55650-0086",
+  ATAC_EV08 = "EV08", ATAC_HIP02_frozen = "HIP002", ATAC_HIP023_frozen = "HIP023",
+  ATAC_HIP043 = "HIP043", ATAC_HIP044 = "HIP044", ATAC_HIP045 = "HIP045",
+  ATAC_HIP15_frozen = "HIP015"
+)
+
+# COVID-19 clinical metadata (one row per Donor; place the CSV in sample_annots/)
+pm <- read.csv(file.path(repo_dir, "sample_annots/patient_metadata.csv"),
+  stringsAsFactors = FALSE
+)
+
+# HIV longitudinal metadata: day relative to seroconversion (SC) + donor info
+hiv_meta <- data.frame(
+  stem = c("hiv6", "hiv12", "hiv9", "hiv8", "hiv4", "hiv1",
+           "hiv2", "hiv7", "hiv3", "hiv11", "hiv10", "hiv5"),
+  donor = c(rep("9313454", 3), rep("9313664", 3), rep("9320086", 3), rep("9320666", 3)),
+  day_to_SC = c(-294, 0, 189, -232, 0, 265, -114, 0, 196, -364, 0, 253),
+  viral_load = c(0, 1866453, 794, 0, 852580, 110691, 40, 415480, 244551, 40, 27250, 12341),
+  age = c(rep(23, 3), rep(22, 3), rep(22, 3), rep(19, 3)),
+  sex = "Male", stringsAsFactors = FALSE
+)
+
+# bin midpoint for the binned COVID-19 ages, so age can be used as a continuous
+# covariate alongside the exact ages recorded for HIV and OP
+bin_to_numeric <- function(x) {
+  vapply(x, function(s) {
+    if (is.na(s) || s == "" || s == "NA") return(NA_real_)
+    if (grepl("\\+$", s)) return(as.numeric(sub("\\+", "", s)) + 5)
+    p <- as.numeric(strsplit(s, "-")[[1]])
+    if (length(p) == 2) mean(p) else suppressWarnings(as.numeric(s))
+  }, numeric(1), USE.NAMES = FALSE)
+}
+
+label <- sub("_fragments\\.tsv\\.gz$", "", covar$arrow_name)
+donor_id <- unname(atac_to_donor[label])
+pm_i <- match(donor_id, pm$Donor)
+hiv_i <- match(label, hiv_meta$stem)
+flu_day <- c(
+  "right before challenge" = -1, "day 3 after challenge" = 3,
+  "day 6 after challenge" = 6, "day 30 after challenge" = 28
+)
+
+covar <- covar %>% dplyr::mutate(
+  donor_id = dplyr::coalesce(donor_id, hiv_meta$donor[hiv_i]),
+  # reported age: exact where known, bin label for COVID-19
+  Age_reported = dplyr::case_when(
+    !is.na(Age) ~ as.character(Age),
+    !is.na(pm_i) ~ pm$Age[pm_i],
+    !is.na(hiv_i) ~ as.character(hiv_meta$age[hiv_i]),
+    TRUE ~ NA_character_
+  ),
+  # numeric age for the association test (bin midpoints for COVID-19)
+  Age_numeric = dplyr::coalesce(
+    Age, bin_to_numeric(ifelse(is.na(pm_i), NA_character_, pm$Age[pm_i])),
+    as.numeric(hiv_meta$age[hiv_i])
+  ),
+  Sex = factor(dplyr::coalesce(
+    as.character(Sex),
+    c(M = "Male", F = "Female")[pm$Sex[pm_i]],
+    hiv_meta$sex[hiv_i]
+  ), levels = c("Female", "Male")),
+  # sampling time relative to infection onset
+  sampling_day = dplyr::case_when(
+    exposure_type == "C19" & !is.na(pm_i) & pm$days_post_pos_test[pm_i] != "NA" ~
+      suppressWarnings(as.numeric(pm$days_post_pos_test[pm_i])),
+    exposure_type == "HIV" & !is.na(hiv_i) ~ as.numeric(hiv_meta$day_to_SC[hiv_i]),
+    exposure_type == "Influenza" ~ unname(flu_day[as.character(record_id)]),
+    TRUE ~ NA_real_
+  ),
+  onset_reference = dplyr::case_when(
+    exposure_type == "C19" & !is.na(sampling_day) ~ "days after first positive SARS-CoV-2 test",
+    exposure_type == "HIV" ~ "days relative to seroconversion",
+    exposure_type == "Influenza" ~ "days after influenza challenge",
+    exposure_type == "OP" ~ "chronic exposure; no datable onset",
+    TRUE ~ NA_character_
+  ),
+  viral_load = ifelse(is.na(hiv_i), NA_real_, hiv_meta$viral_load[hiv_i])
+)
+
+message("Recorded metadata coverage after recovery (n samples with a value):")
+print(covar %>%
+  dplyr::group_by(exposure_type) %>%
+  dplyr::summarise(
+    n = dplyr::n(), sex = sum(!is.na(Sex)), age = sum(!is.na(Age_numeric)),
+    sampling_day = sum(!is.na(sampling_day)), .groups = "drop"
+  ))
 
 ## ---- Per-sample QC metrics (technical covariates) ---------------------------
 # The reviewer/PI also wants technical quality tested as a potential driver of
@@ -186,19 +295,37 @@ train_df <- data.frame(
   log_xist = sex_metrics$log_xist[train_idx]
 )
 
+# Equal priors: the training subset happens to be male-skewed (~87% male), and
+# using its empirical class frequencies as priors would bias calls toward Male.
+# We have no prior expectation of the sex ratio, so we set it to 0.5/0.5.
+equal_prior <- c(Female = 0.5, Male = 0.5)
+
 # leave-one-out cross-validated accuracy on the training set
-loo <- MASS::lda(Sex ~ log_chrY + log_xist, data = train_df, CV = TRUE)
+loo <- MASS::lda(Sex ~ log_chrY + log_xist,
+  data = train_df, prior = equal_prior, CV = TRUE
+)
 message(sprintf(
-  "LDA leave-one-out accuracy on training set: %.1f%%",
-  100 * mean(loo$class == train_df$Sex)
+  "LDA leave-one-out accuracy on training set: %.1f%% (n = %d)",
+  100 * mean(loo$class == train_df$Sex), nrow(train_df)
 ))
 
 # fit on the full training set and predict all samples
-lda_fit <- MASS::lda(Sex ~ log_chrY + log_xist, data = train_df)
+lda_fit <- MASS::lda(Sex ~ log_chrY + log_xist, data = train_df, prior = equal_prior)
 print(lda_fit)
 pred <- stats::predict(lda_fit, newdata = sex_metrics[, c("log_chrY", "log_xist")])
 sex_metrics$Sex_predicted <- factor(as.character(pred$class), levels = c("Female", "Male"))
 sex_metrics$p_male <- round(pred$posterior[, "Male"], 4)
+
+# Independent validation: the LDA call should reproduce the marker-threshold
+# calls. chrY and XIST are strongly anti-correlated (near-collinear on the log
+# scale), so the individual LDA coefficients are not individually interpretable
+# -- but agreement with the independent XIST threshold confirms the partition.
+agree_xist <- mean(sex_metrics$Sex_predicted == sex_metrics$Sex_by_xist)
+agree_chrY <- mean(sex_metrics$Sex_predicted == sex_metrics$Sex_by_chrY)
+message(sprintf(
+  "LDA call agrees with XIST threshold for %.1f%% and with chrY threshold for %.1f%% of all %d samples",
+  100 * agree_xist, 100 * agree_chrY, nrow(sex_metrics)
+))
 
 message("Predicted sex by cohort:")
 print(table(cohort = sex_metrics$exposure_type, predicted = sex_metrics$Sex_predicted))
@@ -211,7 +338,6 @@ if (any(low_conf)) {
 }
 
 # use recorded sex ONLY to validate and to flag likely metadata errors
-lab <- !is.na(sex_metrics$Sex)
 val <- sex_metrics[lab, ]
 message(sprintf(
   "Molecular sex vs recorded sex: %.1f%% concordant (%d labelled samples)",
@@ -229,11 +355,67 @@ message("Recorded sex disagrees with the molecular call for ", nrow(disc),
 )
 print(disc)
 
+## ---- Diagnostic figure: molecular sex classification ------------------------
+# Scatter of the two markers with the LDA decision boundary. Colour = predicted
+# sex, shape = recorded sex, and samples whose recorded sex disagrees with the
+# molecular call are ringed, so metadata errors are visible at a glance.
+sex_grid <- expand.grid(
+  log_chrY = seq(min(sex_metrics$log_chrY), max(sex_metrics$log_chrY), length.out = 200),
+  log_xist = seq(min(sex_metrics$log_xist), max(sex_metrics$log_xist), length.out = 200)
+)
+sex_grid$p_male <- stats::predict(lda_fit, newdata = sex_grid)$posterior[, "Male"]
+
+sex_metrics$Recorded <- ifelse(is.na(sex_metrics$Sex), "not recorded",
+  as.character(sex_metrics$Sex)
+)
+sex_metrics$Discordant <- sex_metrics$sex_flag == "check_metadata"
+
+base_sex_plot <- function(dat) {
+  ggplot(dat, aes(x = log_chrY, y = log_xist)) +
+    geom_contour(
+      data = sex_grid, aes(z = p_male), breaks = 0.5,
+      colour = "grey35", linetype = "dashed", linewidth = 0.5
+    ) +
+    geom_point(aes(colour = Sex_predicted, shape = Recorded), size = 2.8, alpha = 0.9) +
+    scale_colour_manual(values = c(Female = "#E64B35", Male = "#3C5488"), name = "Predicted") +
+    scale_shape_manual(values = c(Female = 17, Male = 15, `not recorded` = 1), name = "Recorded") +
+    labs(
+      x = expression(log[10] ~ "chrY fragment fraction"),
+      y = expression(log[10] ~ "XIST accessibility fraction")
+    ) +
+    theme_classic(base_size = 12)
+}
+
+p_sex <- base_sex_plot(sex_metrics) +
+  geom_point(
+    data = subset(sex_metrics, Discordant), shape = 21, size = 5,
+    stroke = 0.8, colour = "black", fill = NA
+  ) +
+  labs(
+    title = "Molecular sex inference from chrY and XIST accessibility",
+    subtitle = paste0(
+      "dashed line = LDA decision boundary; black rings = recorded sex disagrees with molecular call (n = ",
+      sum(sex_metrics$Discordant), ")"
+    )
+  )
+ggsave(file.path(repo_dir, "figures/sex_prediction_scatter.pdf"), p_sex,
+  width = 7.5, height = 5.5
+)
+
+# same view split by cohort: shows the separation is cohort-independent
+p_sex_cohort <- base_sex_plot(sex_metrics) +
+  facet_wrap(~exposure_type) +
+  labs(title = "Molecular sex inference by cohort")
+ggsave(file.path(repo_dir, "figures/sex_prediction_by_cohort.pdf"), p_sex_cohort,
+  width = 9, height = 6.5
+)
+message("Wrote sex-prediction figures to ", file.path(repo_dir, "figures/"))
+
 # add inferred sex, confidence, raw signals and the flag to the covariate table
 covar <- dplyr::left_join(covar,
   dplyr::select(
-    sex_metrics, Sample, chrY_frac, xist_frac, sex_confidence,
-    Sex_predicted, Sex_by_chrY, sex_flag
+    sex_metrics, Sample, chrY_frac, xist_frac, p_male,
+    Sex_predicted, Sex_by_xist, Sex_by_chrY, sex_flag
   ),
   by = c("arrow_name" = "Sample")
 )
@@ -315,8 +497,9 @@ for (emb in embeddings_to_test) {
   # test each PC against each covariate
   covariate_cols <- list(
     Cohort = cv$exposure_type, # all samples
-    Age = cv$Age, # OP + HIV subset (recorded)
-    Sex_observed = cv$Sex, # OP + HIV subset (recorded)
+    Age = cv$Age_numeric, # C19 + HIV + OP (bin midpoints for C19)
+    Sex_observed = cv$Sex, # C19 + HIV + OP (recorded/recovered)
+    Sampling_day = cv$sampling_day, # within-cohort sampling time vs onset
     Sex_predicted = cv$Sex_predicted, # all samples (chrY/chrX inference)
     QC_nCells = cv$n_cells, # technical QC (all samples)
     QC_meanTSS = cv$mean_TSS, # technical QC
@@ -411,9 +594,18 @@ wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
 # only left-joined onto), so we can write the new columns directly.
 s1_ncol <- ncol(openxlsx::readWorkbook(wb, sheet = "Table S1"))
 new_cols <- data.frame(
-  Sex_predicted = as.character(covar$Sex_predicted),
-  Sex_predicted_confidence = covar$sex_confidence,
-  Sex_by_chrY = as.character(covar$Sex_by_chrY),
+  # --- recovered donor metadata (reported values) ---
+  Donor_ID = covar$donor_id,
+  Age_reported = covar$Age_reported,
+  Sex_reported = as.character(covar$Sex),
+  Sampling_day_rel_onset = covar$sampling_day,
+  Onset_reference = covar$onset_reference,
+  Viral_load = covar$viral_load,
+  # --- molecular sex prediction (kept, validates the reported values) ---
+  Sex_predicted = as.character(covar$Sex_predicted), # LDA call
+  Sex_pred_P_male = covar$p_male, # LDA posterior
+  Sex_by_xist = as.character(covar$Sex_by_xist), # marker cross-check
+  Sex_by_chrY = as.character(covar$Sex_by_chrY), # marker cross-check
   Sex_metadata_flag = covar$sex_flag,
   chrY_frac = signif(covar$chrY_frac, 3),
   xist_frac = signif(covar$xist_frac, 3),
@@ -455,7 +647,7 @@ p_assoc <- ggplot(
   scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
   labs(
     title = "Association of sample-level PCs with known covariates",
-    subtitle = "tile label = variance explained (R^2); Age & observed Sex on OP+HIV subset, predicted Sex & QC on all samples",
+    subtitle = "tile label = variance explained (R^2); shading = significance. Age/Sex on samples with recorded metadata; predicted Sex & QC on all samples",
     x = NULL, y = NULL
   ) +
   theme_classic() +
