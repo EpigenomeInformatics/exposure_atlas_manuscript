@@ -579,3 +579,33 @@ plotPDF(
   ArchRProj = project,
   addDOC = FALSE, width = 5, height = 5
 )
+
+#####################################################################
+# TF-activity (chromVAR) UMAPs for the supplement
+# (Fabian, comments 7/9/11: include the TF activities we previously only
+#  checked manually in a supplementary panel). We compute per-cell motif
+#  deviations and project the FOXP-family and exhaustion-associated TF
+#  activities onto the T-cell UMAP so they can be shown directly.
+#####################################################################
+project <- addDeviationsMatrix(ArchRProj = project, peakAnnotation = "Motif", force = TRUE)
+
+motif_features <- getFeatures(project, useMatrix = "MotifMatrix")
+pick <- function(p) grep(p, motif_features, value = TRUE, ignore.case = TRUE)
+# FOXP family (the response focus) + canonical CD8 exhaustion / memory TFs
+tf_show <- unique(c(
+  pick("FOXP1"), pick("FOXP2"), pick("FOXP3"),
+  pick("TBX21"), pick("EOMES"), pick("TCF7"), pick("NR4A1"), pick("TOX")
+))
+message("TF-activity UMAP motifs: ", paste(tf_show, collapse = ", "))
+
+p_tf <- plotEmbedding(
+  ArchRProj = project,
+  colorBy = "MotifMatrix",
+  name = tf_show,
+  embedding = "UMAP_HIV",
+  imputeWeights = getImputeWeights(project)
+)
+plotPDF(p_tf,
+  name = "TFactivity_UMAP_tcells.pdf",
+  ArchRProj = project, addDOC = FALSE, width = 5, height = 5
+)

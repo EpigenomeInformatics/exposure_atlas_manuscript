@@ -184,19 +184,23 @@ if (sum(covid_mask) > 10) {
 #    drop the lineage axis and ask how TF-activity variance splits between
 #    exposure and donor WITHIN that lineage.
 # -------------------------------------------------------------------
+# NOTE: within a single cell type there is one pseudobulk per donor, so the
+# donor random effect (1 | Sample) has as many levels as observations and is not
+# estimable. We therefore drop Sample here and decompose exposure vs residual
+# only (donor variance is captured in the across-cell-type Model A above).
 cell_types <- levels(droplevels(meta$Cell_Type))
 vp_list <- lapply(cell_types, function(ct) {
   idx <- meta$Cell_Type == ct
   m <- droplevels(meta[idx, ])
   z <- zmat[, idx, drop = FALSE]
-  # need >= 2 exposures and enough pseudobulks/donors to fit the random effects
-  if (nlevels(m$Exposure) < 2 || ncol(z) < 6 || nlevels(m$Sample) < 3) {
+  # need >= 2 exposures and more observations than exposure levels
+  if (nlevels(m$Exposure) < 2 || ncol(z) <= nlevels(m$Exposure) + 1) {
     message("  skip ", ct, " (insufficient design)")
     return(NULL)
   }
   zv <- apply(z, 1, var, na.rm = TRUE)
   z <- z[is.finite(zv) & zv > 0, , drop = FALSE]
-  vp <- as.data.frame(fitExtractVarPartModel(z, ~ (1 | Exposure) + (1 | Sample), m))
+  vp <- as.data.frame(fitExtractVarPartModel(z, ~ (1 | Exposure), m))
   vp$Cell_Type <- ct
   vp$n_pseudobulk <- ncol(z)
   vp
@@ -209,7 +213,6 @@ within_ct <- vp_within %>%
   summarise(
     n_pseudobulk = dplyr::first(n_pseudobulk),
     median_Exposure = median(Exposure),
-    median_Sample = median(Sample),
     median_Residuals = median(Residuals),
     .groups = "drop"
   ) %>%
