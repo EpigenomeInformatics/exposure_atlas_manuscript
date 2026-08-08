@@ -238,8 +238,16 @@ sex_metrics <- dplyr::left_join(sex_metrics,
 # UNSUPERVISED molecular sex call: 2-cluster k-means on the standardised log
 # features (no recorded labels used); the cluster with the higher chrY fraction
 # is Male. Because chrY and XIST agree, the two clusters are well separated.
-sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + 1e-9)
-sex_metrics$log_xist <- log10(sex_metrics$xist_frac + 1e-9)
+# Log-transform with a DATA-DRIVEN pseudocount (half the smallest non-zero
+# value per feature). A fixed 1e-9 would place a sample with zero XIST fragments
+# at -9, several log units below every real value, which distorts both the axis
+# range and the feature scale. Half the minimum observed value places it just
+# below the lowest real measurement instead.
+half_min_nonzero <- function(x) min(x[x > 0], na.rm = TRUE) / 2
+eps_chrY <- half_min_nonzero(sex_metrics$chrY_frac)
+eps_xist <- half_min_nonzero(sex_metrics$xist_frac)
+sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + eps_chrY)
+sex_metrics$log_xist <- log10(sex_metrics$xist_frac + eps_xist)
 
 # IMPORTANT: do NOT cluster on chrY and XIST jointly. chrY read fraction carries
 # large cohort/processing-specific offsets, so a 2-cluster k-means on both
@@ -398,12 +406,13 @@ p_sex <- base_sex_plot(sex_metrics) +
   labs(
     title = "Molecular sex inference from chrY and XIST accessibility",
     subtitle = paste0(
-      "dashed line = LDA decision boundary; black rings = recorded sex disagrees with molecular call (n = ",
-      sum(sex_metrics$Discordant), ")"
+      "Dashed line, LDA boundary. Black rings, recorded sex disagrees with the\n",
+      "molecular call (n = ", sum(sex_metrics$Discordant), ")."
     )
-  )
+  ) +
+  theme(plot.subtitle = element_text(size = 9))
 ggsave(file.path(repo_dir, "figures/sex_prediction_scatter.pdf"), p_sex,
-  width = 7.5, height = 5.5
+  width = 8.5, height = 5.5
 )
 
 # same view split by cohort: shows the separation is cohort-independent
