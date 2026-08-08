@@ -302,7 +302,39 @@ if (length(missing_cols)) {
   warning("cell types without an assigned colour: ", paste(missing_cols, collapse = ", "))
 }
 
-p_within <- ggplot(vp_within, aes(x = Cell_Type, y = Exposure, fill = Cell_Type)) +
+# Show BOTH components estimated by the within-lineage model: variance
+# attributable to exposure and to donor. Faceting (rather than colouring) by
+# component keeps the cell-type colour scheme identical to the UMAPs.
+vp_within_long <- vp_within %>%
+  dplyr::select(Cell_Type, Exposure, Donor) %>%
+  tidyr::pivot_longer(c(Exposure, Donor),
+    names_to = "Component", values_to = "VarExplained"
+  ) %>%
+  dplyr::filter(!is.na(VarExplained)) %>%
+  dplyr::mutate(Component = factor(Component,
+    levels = c("Exposure", "Donor"),
+    labels = c("Exposure", "Donor (inter-individual)")
+  ))
+
+p_within <- ggplot(vp_within_long, aes(x = Cell_Type, y = VarExplained, fill = Cell_Type)) +
+  geom_boxplot(outlier.size = 0.4, alpha = 0.9, colour = "grey20") +
+  facet_wrap(~Component, ncol = 1, scales = "free_y") +
+  scale_fill_manual(values = cell_type_colors) +
+  theme_classic(base_size = 13) +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1)) +
+  labs(
+    title = "TF-activity variance within each cell type",
+    x = NULL, y = "Fraction of variance explained"
+  )
+ggsave(file.path(save_dir, "varpart_within_celltype_boxplot.pdf"), p_within,
+  width = 8, height = 7
+)
+
+# exposure-only version (single panel), in case the figure has room for one row
+p_within_exp <- ggplot(
+  subset(vp_within_long, Component == "Exposure"),
+  aes(x = Cell_Type, y = VarExplained, fill = Cell_Type)
+) +
   geom_boxplot(outlier.size = 0.4, alpha = 0.9, colour = "grey20") +
   scale_fill_manual(values = cell_type_colors) +
   theme_classic(base_size = 13) +
@@ -311,7 +343,7 @@ p_within <- ggplot(vp_within, aes(x = Cell_Type, y = Exposure, fill = Cell_Type)
     title = "Exposure-associated TF-activity variance within each cell type",
     x = NULL, y = "Fraction of variance explained by exposure"
   )
-ggsave(file.path(save_dir, "varpart_within_celltype_boxplot.pdf"), p_within,
+ggsave(file.path(save_dir, "varpart_within_celltype_exposureonly.pdf"), p_within_exp,
   width = 8, height = 5
 )
 
