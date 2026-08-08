@@ -96,33 +96,16 @@ vpB_df$Motif <- rownames(vpB_df)
 write.csv(vpB_df, file.path(save_dir, "varpart_per_motif_modelB.csv"), row.names = FALSE)
 
 # -------------------------------------------------------------------
-# 4. Plots (violin of variance explained per factor)
+# 4. Plots (boxplots of variance explained per factor; scientific palette)
 # -------------------------------------------------------------------
-plot_vp <- function(vp_df, title, file) {
-  long <- vp_df %>%
-    select(-Motif) %>%
-    pivot_longer(everything(), names_to = "Factor", values_to = "VarExplained")
-  # order factors by median
-  ord <- long %>% group_by(Factor) %>%
-    summarise(m = median(VarExplained), .groups = "drop") %>%
-    arrange(desc(m)) %>% pull(Factor)
-  long$Factor <- factor(long$Factor, levels = ord)
-  p <- ggplot(long, aes(x = Factor, y = VarExplained, fill = Factor)) +
-    geom_violin(scale = "width", trim = TRUE, alpha = 0.8) +
-    geom_boxplot(width = 0.12, outlier.size = 0.4, fill = "white") +
-    theme_classic() +
-    theme(legend.position = "none",
-          axis.text.x = element_text(angle = 30, hjust = 1)) +
-    labs(title = title, x = NULL, y = "Fraction of variance explained")
-  ggsave(file.path(save_dir, file), p, width = 7, height = 5)
-}
+# Publication palette (ggsci NPG + AAAS colours, hardcoded so no extra package
+# dependency); enough distinct colours for the factors and the 12 cell types.
+sci_pal <- c(
+  "#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F", "#8491B4",
+  "#91D1C2", "#DC0000", "#7E6148", "#B09C85", "#3B4992", "#008B45",
+  "#631879", "#008280", "#BB0021", "#5F559B"
+)
 
-plot_vp(vpA_df, "TF-activity variance: lineage vs exposure vs donor",
-        "varpart_violin_modelA.pdf")
-plot_vp(vpB_df, "TF-activity variance: lineage vs condition vs donor",
-        "varpart_violin_modelB.pdf")
-
-# Boxplot version of the same decomposition (Fabian: supplement figure)
 plot_vp_box <- function(vp_df, title, file) {
   long <- vp_df %>%
     select(-Motif) %>%
@@ -134,8 +117,9 @@ plot_vp_box <- function(vp_df, title, file) {
     pull(Factor)
   long$Factor <- factor(long$Factor, levels = ord)
   p <- ggplot(long, aes(x = Factor, y = VarExplained, fill = Factor)) +
-    geom_boxplot(outlier.size = 0.4, alpha = 0.85) +
-    theme_classic() +
+    geom_boxplot(outlier.size = 0.4, alpha = 0.9, colour = "grey20") +
+    scale_fill_manual(values = sci_pal) +
+    theme_classic(base_size = 13) +
     theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1)) +
     labs(title = title, x = NULL, y = "Fraction of variance explained")
   ggsave(file.path(save_dir, file), p, width = 7, height = 5)
@@ -174,8 +158,8 @@ if (sum(covid_mask) > 10) {
   vpC <- fitExtractVarPartModel(zmat_c, formC, meta_c)
   vpC_df <- as.data.frame(vpC); vpC_df$Motif <- rownames(vpC_df)
   write.csv(vpC_df, file.path(save_dir, "varpart_per_motif_COVID_severity.csv"), row.names = FALSE)
-  plot_vp(vpC_df, "COVID-19: lineage vs severity vs donor",
-          "varpart_violin_COVID_severity.pdf")
+  plot_vp_box(vpC_df, "COVID-19: lineage vs severity vs donor",
+              "varpart_boxplot_COVID_severity.pdf")
 }
 
 # -------------------------------------------------------------------
@@ -224,8 +208,9 @@ print(within_ct)
 # Boxplot: distribution of exposure-associated variance per motif, by cell type
 vp_within$Cell_Type <- factor(vp_within$Cell_Type, levels = within_ct$Cell_Type)
 p_within <- ggplot(vp_within, aes(x = Cell_Type, y = Exposure, fill = Cell_Type)) +
-  geom_boxplot(outlier.size = 0.4, alpha = 0.85) +
-  theme_classic() +
+  geom_boxplot(outlier.size = 0.4, alpha = 0.9, colour = "grey20") +
+  scale_fill_manual(values = sci_pal) +
+  theme_classic(base_size = 13) +
   theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1)) +
   labs(
     title = "Exposure-associated TF-activity variance within each cell type",

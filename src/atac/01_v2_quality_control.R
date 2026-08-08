@@ -125,19 +125,90 @@ sex_metrics <- dplyr::left_join(sex_metrics,
 # UNSUPERVISED molecular sex call: 2-cluster k-means on the standardised log
 # features (no recorded labels used); the cluster with the higher chrY fraction
 # is Male. Because chrY and XIST agree, the two clusters are well separated.
-sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + 1e-8)
-sex_metrics$log_xist <- log10(sex_metrics$xist_frac + 1e-8)
-featZ <- scale(sex_metrics[, c("log_chrY", "log_xist")])
-set.seed(12)
-km <- stats::kmeans(featZ, centers = 2, nstart = 25)
-male_cluster <- which.max(tapply(sex_metrics$chrY_frac, km$cluster, mean))
-sex_metrics$Sex_predicted <- factor(
-  ifelse(km$cluster == male_cluster, "Male", "Female"),
+sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + 1e-9)
+sex_metrics$log_xist <- log10(sex_metrics$xist_frac + 1e-9)
+
+# IMPORTANT: do NOT cluster on chrY and XIST jointly. chrY read fraction carries
+# large cohort/processing-specific offsets, so a 2-cluster k-means on both
+# features splits the samples by COHORT rather than by sex. XIST accessibility is
+# on a consistent scale across all cohorts here, so we threshold on XIST and use
+# chrY only as an independent cross-check.
+#
+# Threshold = 1D natural break (largest gap in the sorted log values), searched
+# over the interior quantiles so a single extreme sample cannot define the split.
+gap_threshold <- function(x, lo = 0.10, hi = 0.90) {
+  lx <- sort(log10(x + 1e-9))
+  n <- length(lx)
+  i_lo <- max(1L, floor(lo * n))
+  i_hi <- min(n - 1L, ceiling(hi * n))
+  idx <- i_lo:i_hi
+  i <- idx[which.max(diff(lx)[idx])]
+  10^mean(c(lx[i], lx[i + 1L])) # geometric midpoint of the largest interior gap
+}
+
+# Marker-based reference calls (used to define trustworthy training labels and
+# as an independent cross-check): high XIST = female, high chrY = male.
+xist_thr <- gap_threshold(sex_metrics$xist_frac)
+sex_metrics$Sex_by_xist <- factor(
+  ifelse(sex_metrics$xist_frac >= xist_thr, "Female", "Male"),
   levels = c("Female", "Male")
 )
-# monotone confidence: higher chrY relative to XIST -> more male
-score <- as.numeric(scale(sex_metrics$log_chrY - sex_metrics$log_xist))
-sex_metrics$p_male <- 1 / (1 + exp(-score))
+chrY_thr <- gap_threshold(sex_metrics$chrY_frac)
+sex_metrics$Sex_by_chrY <- factor(
+  ifelse(sex_metrics$chrY_frac >= chrY_thr, "Male", "Female"),
+  levels = c("Female", "Male")
+)
+sex_metrics$features_agree <- sex_metrics$Sex_by_xist == sex_metrics$Sex_by_chrY
+message(sprintf(
+  "Marker thresholds: XIST %.3g, chrY %.3g; the two markers agree for %d/%d samples",
+  xist_thr, chrY_thr, sum(sex_metrics$features_agree), nrow(sex_metrics)
+))
+
+## ---- LINEAR CLASSIFIER (LDA) on the two log features ------------------------
+# Training labels: samples whose RECORDED sex agrees with the marker-based call.
+# This deliberately EXCLUDES the mislabelled samples that corrupt a classifier
+# trained on all recorded labels (a model trained on every recorded label
+# inverted the chrY->male direction). LDA gives a linear decision boundary and
+# posterior probabilities, and is numerically stable under near-perfect class
+# separation (logistic-regression coefficients diverge in that regime).
+lab <- !is.na(sex_metrics$Sex)
+train_idx <- lab & sex_metrics$Sex == sex_metrics$Sex_by_xist &
+  sex_metrics$features_agree
+message(sprintf(
+  "LDA training set: %d high-confidence samples (%d recorded labels excluded as inconsistent)",
+  sum(train_idx), sum(lab) - sum(train_idx)
+))
+stopifnot(sum(train_idx) >= 6, dplyr::n_distinct(sex_metrics$Sex[train_idx]) == 2)
+
+train_df <- data.frame(
+  Sex = droplevels(factor(sex_metrics$Sex[train_idx], levels = c("Female", "Male"))),
+  log_chrY = sex_metrics$log_chrY[train_idx],
+  log_xist = sex_metrics$log_xist[train_idx]
+)
+
+# leave-one-out cross-validated accuracy on the training set
+loo <- MASS::lda(Sex ~ log_chrY + log_xist, data = train_df, CV = TRUE)
+message(sprintf(
+  "LDA leave-one-out accuracy on training set: %.1f%%",
+  100 * mean(loo$class == train_df$Sex)
+))
+
+# fit on the full training set and predict all samples
+lda_fit <- MASS::lda(Sex ~ log_chrY + log_xist, data = train_df)
+print(lda_fit)
+pred <- stats::predict(lda_fit, newdata = sex_metrics[, c("log_chrY", "log_xist")])
+sex_metrics$Sex_predicted <- factor(as.character(pred$class), levels = c("Female", "Male"))
+sex_metrics$p_male <- round(pred$posterior[, "Male"], 4)
+
+message("Predicted sex by cohort:")
+print(table(cohort = sex_metrics$exposure_type, predicted = sex_metrics$Sex_predicted))
+low_conf <- sex_metrics$p_male > 0.05 & sex_metrics$p_male < 0.95
+if (any(low_conf)) {
+  message("Low-confidence calls (0.05 < P(male) < 0.95):")
+  print(sex_metrics[low_conf,
+    c("Sample", "exposure_type", "chrY_frac", "xist_frac", "p_male", "Sex_predicted")
+  ])
+}
 
 # use recorded sex ONLY to validate and to flag likely metadata errors
 lab <- !is.na(sex_metrics$Sex)
@@ -161,8 +232,8 @@ print(disc)
 # add inferred sex, confidence, raw signals and the flag to the covariate table
 covar <- dplyr::left_join(covar,
   dplyr::select(
-    sex_metrics, Sample, chrY_chrX_ratio, xist_frac, p_male,
-    Sex_predicted, sex_flag
+    sex_metrics, Sample, chrY_frac, xist_frac, sex_confidence,
+    Sex_predicted, Sex_by_chrY, sex_flag
   ),
   by = c("arrow_name" = "Sample")
 )
@@ -341,9 +412,10 @@ wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
 s1_ncol <- ncol(openxlsx::readWorkbook(wb, sheet = "Table S1"))
 new_cols <- data.frame(
   Sex_predicted = as.character(covar$Sex_predicted),
-  Sex_pred_prob_male = round(covar$p_male, 3),
+  Sex_predicted_confidence = covar$sex_confidence,
+  Sex_by_chrY = as.character(covar$Sex_by_chrY),
   Sex_metadata_flag = covar$sex_flag,
-  chrY_chrX_ratio = round(covar$chrY_chrX_ratio, 4),
+  chrY_frac = signif(covar$chrY_frac, 3),
   xist_frac = signif(covar$xist_frac, 3),
   stringsAsFactors = FALSE
 )
