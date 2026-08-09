@@ -106,7 +106,15 @@ p <- ggplot(df, aes(x = sample_exposure_group, y = freq, fill = sample_exposure_
     panel.border = element_rect(color = "black", fill = NA) # Panel border
   ) +
   facet_wrap("ClusterCellTypes", scales = "free_y", ncol = 4) +
-  geom_boxplot(outlier.shape = NA, alpha = 1, color = "black") + # Add black outlines
+  # outlier.shape = NA so outliers are not drawn twice once the points are added
+  geom_boxplot(outlier.shape = NA, alpha = 1, color = "black") +
+  # Individual samples shown as points (reviewer 1, minor comment 1): with only a
+  # few donors per group the distribution is not meaningful on its own, so every
+  # sample is displayed. Seeded jitter keeps the figure reproducible.
+  geom_point(
+    position = position_jitter(width = 0.18, height = 0, seed = 12),
+    size = 1.1, alpha = 0.75, colour = "black", show.legend = FALSE
+  ) +
   scale_fill_manual(values = custom_colors) + # Vibrant colors
   stat_compare_means(
     comparisons = comparisons,
@@ -120,6 +128,19 @@ p <- ggplot(df, aes(x = sample_exposure_group, y = freq, fill = sample_exposure_
 
 # Save the plot
 ggsave(p, filename = paste0(fig_dir, "cell_prop_plots.pdf"), width = 20, height = 20)
+
+# Version without the significance brackets. The brackets add roughly a third of
+# the panel height and, as noted below, show RAW p-values; the adjusted values
+# are reported in cell_prop_wilcox_bonferroni.csv. Use this version if space in
+# the supplementary figure is tight.
+p_nobrackets <- p
+p_nobrackets$layers <- p_nobrackets$layers[
+  !vapply(p_nobrackets$layers, function(l) inherits(l$stat, "StatCompareMeans"), logical(1))
+]
+ggsave(p_nobrackets,
+  filename = paste0(fig_dir, "cell_prop_plots_nobrackets.pdf"),
+  width = 20, height = 16
+)
 
 #####################################################################
 # Explicit per-sample Wilcoxon rank-sum tests with Bonferroni correction
