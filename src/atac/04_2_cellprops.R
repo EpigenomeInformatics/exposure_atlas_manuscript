@@ -179,3 +179,108 @@ message("Significant cell-type composition changes (Bonferroni p_adj < 0.05):")
 print(subset(prop_test_df, p_adj < 0.05))
 
 #####################################################################
+# Add the composition statistics to the supplementary workbook as Table S3.
+#
+# Cell-type composition is discussed early in the Results (Figure 1F,
+# fig. S1H), i.e. after the cluster annotation table (S2) and before the TF
+# motif variance tables. Supplementary tables must be numbered in order of
+# first citation, so the new table is inserted as S3 and every later table
+# shifts by one:
+#     S3A/B/C -> S4A/B/C,  S4 -> S5,  S5 -> S6, ... , S11 -> S12
+# The script renames the existing sheets, inserts the new one in the right
+# position, updates the Index sheet, and prints the mapping you need to apply
+# to the manuscript text.
+#
+# Saved to a COPY so the master workbook is never overwritten. The script is
+# safe to re-run: it stops if the shift has already been applied.
+#####################################################################
+suppressPackageStartupMessages(library(openxlsx))
+
+repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+supp_in <- file.path(repo_dir, "sample_annots", "All_Supplementary_Tables.xlsx")
+supp_out <- file.path(repo_dir, "sample_annots", "All_Supplementary_Tables_updated.xlsx")
+
+# publication-ready version of the statistics table
+comp_supp <- prop_test_df %>%
+  dplyr::transmute(
+    `Cell type` = cell_type,
+    `Group 1` = group1,
+    `Group 2` = group2,
+    `n (group 1)` = n1,
+    `n (group 2)` = n2,
+    `Median proportion (group 1)` = signif(median1, 3),
+    `Median proportion (group 2)` = signif(median2, 3),
+    `p (Wilcoxon rank-sum)` = signif(p_value, 3),
+    `p (Bonferroni-adjusted)` = signif(p_adj, 3)
+  )
+
+wb <- openxlsx::loadWorkbook(if (file.exists(supp_out)) supp_out else supp_in)
+
+if ("Table S12" %in% names(wb)) {
+  message("Table S12 already present: the renumbering has been applied before, skipping.")
+} else {
+  # rename from the highest number downwards so names never collide
+  rename_map <- c(
+    "Table S11" = "Table S12", "Table S10" = "Table S11", "Table S9" = "Table S10",
+    "Table S8" = "Table S9", "Table S7" = "Table S8", "Table S6" = "Table S7",
+    "Table S5" = "Table S6", "Table S4" = "Table S5",
+    "Table S3C" = "Table S4C", "Table S3B" = "Table S4B", "Table S3A" = "Table S4A"
+  )
+  for (old in names(rename_map)) {
+    if (old %in% names(wb)) openxlsx::renameWorksheet(wb, old, rename_map[[old]])
+  }
+
+  # add the new Table S3 and move it directly after Table S2
+  openxlsx::addWorksheet(wb, "Table S3")
+  openxlsx::writeData(wb, "Table S3", comp_supp,
+    withFilter = TRUE,
+    headerStyle = openxlsx::createStyle(textDecoration = "bold")
+  )
+  openxlsx::setColWidths(wb, "Table S3", cols = seq_along(comp_supp), widths = "auto")
+
+  nm <- names(wb)
+  pos_new <- which(nm == "Table S3")
+  pos_after <- which(nm == "Table S2")
+  ord <- append(seq_along(nm)[-pos_new], pos_new, after = pos_after)
+  openxlsx::worksheetOrder(wb) <- ord
+
+  # update the Index sheet: shift the old numbers and insert the new row
+  idx <- openxlsx::readWorkbook(wb, sheet = "Index")
+  shift <- function(x) {
+    x <- sub("^Table S11$", "Table S12", x)
+    x <- sub("^Table S10$", "Table S11", x)
+    for (i in 9:4) x <- sub(paste0("^Table S", i, "$"), paste0("Table S", i + 1), x)
+    sub("^Table S3$", "Table S4", x)
+  }
+  idx[[1]] <- vapply(as.character(idx[[1]]), shift, character(1), USE.NAMES = FALSE)
+  new_row <- idx[1, ]
+  new_row[1, ] <- NA
+  new_row[[1]] <- "Table S3"
+  new_row[[2]] <- paste(
+    "Cell-type composition statistics: per-sample cell-type proportions compared",
+    "between each exposure group and its matched within-cohort control",
+    "(two-sided Wilcoxon rank-sum test, Bonferroni-adjusted)"
+  )
+  after <- which(idx[[1]] == "Table S2")
+  idx <- rbind(idx[seq_len(after), ], new_row, idx[-seq_len(after), ])
+  openxlsx::removeWorksheet(wb, "Index")
+  openxlsx::addWorksheet(wb, "Index")
+  openxlsx::writeData(wb, "Index", idx,
+    headerStyle = openxlsx::createStyle(textDecoration = "bold")
+  )
+  openxlsx::setColWidths(wb, "Index", cols = 1:2, widths = c(14, 110))
+  openxlsx::worksheetOrder(wb) <- c(
+    which(names(wb) == "Index"), setdiff(seq_along(names(wb)), which(names(wb) == "Index"))
+  )
+
+  openxlsx::saveWorkbook(wb, supp_out, overwrite = TRUE)
+  message("Wrote ", supp_out)
+  message("APPLY THIS RENUMBERING TO THE MANUSCRIPT TEXT:")
+  print(data.frame(
+    old = c("Table S3A/B/C", paste0("Table S", 4:11)),
+    new = c("Table S4A/B/C", paste0("Table S", 5:12))
+  ))
+  message("New Table S3 = cell-type composition statistics.")
+}
+
+#####################################################################

@@ -279,6 +279,48 @@ tex_traj <- ggplot(subj_prop_plot,
 ggsave(tex_traj, file = paste0(fig_dir, "tex_proportion_trajectory.pdf"),
        width = 6, height = 5)
 
+## <<< REVISION (R2/R3): donor composition of each Tex cluster -----------------
+## Reviewer (R2, annotation reproducibility across individuals) and co-author
+## comments (Fabian 64/65/66) asked for the percentage of cells in each
+## exhausted (Tex) cluster contributed by each HIV subject, to show that both
+## Tex clusters (C1, C2) are made up of cells from all four subjects rather than
+## being driven by a single individual. This is the ClustersHIV x Subject
+## cross-tabulation (as percentages) promised in the response letter
+## (Response Figure N).
+tex_donor <- getCellColData(project, select = c("ClustersHIV", "Sample")) %>%
+  as.data.frame() %>%
+  dplyr::mutate(Subject = sample_to_subject[as.character(Sample)]) %>%
+  dplyr::filter(ClustersHIV %in% c("C1", "C2"))
+
+# Within each Tex cluster: percentage of its cells contributed by each subject
+tex_donor_comp <- tex_donor %>%
+  dplyr::count(ClustersHIV, Subject, name = "n_cells") %>%
+  tidyr::complete(ClustersHIV, Subject = names(colorPalette),
+                  fill = list(n_cells = 0)) %>%
+  dplyr::group_by(ClustersHIV) %>%
+  dplyr::mutate(pct = 100 * n_cells / sum(n_cells)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(Subject = factor(Subject, levels = names(colorPalette)))
+
+write.csv(tex_donor_comp,
+          file = paste0(fig_dir, "tex_cluster_donor_composition.csv"),
+          row.names = FALSE)
+
+# Stacked barplot: one bar per Tex cluster, split by subject (sums to 100%)
+tex_donor_bar <- ggplot(tex_donor_comp,
+                        aes(x = ClustersHIV, y = pct, fill = Subject)) +
+  geom_col(width = 0.7, colour = "white", linewidth = 0.2) +
+  scale_fill_manual(values = colorPalette) +
+  labs(x = "Exhausted (Tex) cluster", y = "Cells per cluster (%)",
+       fill = "Subject") +
+  theme_classic(base_size = 10) +
+  theme(legend.position = "right")
+
+ggsave(tex_donor_bar,
+       file = paste0(fig_dir, "tex_cluster_donor_composition_bar.pdf"),
+       width = 5, height = 4)
+## <<< END REVISION -----------------------------------------------------------
+
 ## NOTE: the previous pooled Fisher test is retained below but commented out,
 ## so the change from the original submission is transparent. Do not use for
 ## the manuscript claim.
@@ -374,6 +416,29 @@ draw(heatmapGS)
 dev.off()
 
 project <- addImputeWeights(project)
+
+## <<< REVISION (R2/R3): keep a compact colour scale on each UMAP panel --------
+## Previously each gene-activity UMAP dropped its colour guide
+## (guides(color = FALSE, fill = FALSE)), so the panels had no min-to-max scale.
+## Reviewers/co-authors need to read the gene-activity range, so we keep a small
+## per-panel colour bar (each gene keeps its own scale, since e.g. CD8A and FOXP3
+## span different ranges). Axis ticks stay off to keep the panels clean.
+style_umap_gene <- function(x) {
+  x +
+    theme_ArchR(baseSize = 6.5) +
+    theme(
+      plot.margin       = unit(c(0.05, 0.05, 0.05, 0.05), "cm"),
+      axis.text.x  = element_blank(), axis.ticks.x = element_blank(),
+      axis.text.y  = element_blank(), axis.ticks.y = element_blank(),
+      legend.position   = "right",
+      legend.key.width  = unit(0.20, "cm"),
+      legend.key.height = unit(0.45, "cm"),
+      legend.text       = element_text(size = 5),
+      legend.title      = element_text(size = 5)
+    )
+}
+## <<< END REVISION -----------------------------------------------------------
+
 p <- plotEmbedding(
   ArchRProj = project,
   colorBy = "GeneScoreMatrix",
@@ -382,18 +447,8 @@ p <- plotEmbedding(
   quantCut = c(0.01, 0.95)
 )
 
-p2 <- lapply(p, function(x) {
-  x + guides(color = FALSE, fill = FALSE) +
-    theme_ArchR(baseSize = 6.5) +
-    theme(plot.margin = unit(c(0, 0, 0, 0), "cm")) +
-    theme(
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
-      axis.text.y = element_blank(),
-      axis.ticks.y = element_blank()
-    )
-})
-pdf(file = paste0(fig_dir, "exhaustion_markers_umap.pdf"), width = 10, height = 10)
+p2 <- lapply(p, style_umap_gene)
+pdf(file = paste0(fig_dir, "exhaustion_markers_umap.pdf"), width = 12, height = 10)
 do.call(cowplot::plot_grid, c(list(ncol = 3), p2))
 dev.off()
 
@@ -408,16 +463,8 @@ p_lin <- plotEmbedding(
   embedding = "UMAP_HIV",
   quantCut = c(0.01, 0.95)
 )
-p_lin2 <- lapply(p_lin, function(x) {
-  x + guides(color = FALSE, fill = FALSE) +
-    theme_ArchR(baseSize = 6.5) +
-    theme(plot.margin = unit(c(0, 0, 0, 0), "cm")) +
-    theme(
-      axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-      axis.text.y = element_blank(), axis.ticks.y = element_blank()
-    )
-})
-pdf(file = paste0(fig_dir, "lineage_treg_markers_umap.pdf"), width = 9, height = 6)
+p_lin2 <- lapply(p_lin, style_umap_gene)
+pdf(file = paste0(fig_dir, "lineage_treg_markers_umap.pdf"), width = 11, height = 6)
 do.call(cowplot::plot_grid, c(list(ncol = 3), p_lin2))
 dev.off()
 
@@ -589,23 +636,43 @@ plotPDF(
 #####################################################################
 project <- addDeviationsMatrix(ArchRProj = project, peakAnnotation = "Motif", force = TRUE)
 
+## getFeatures() on a MotifMatrix returns BOTH the bias-corrected z-scores
+## ("z:TF_###") and the raw deviations ("deviations:TF_###"). The previous grep
+## matched both, so half the panels were raw-deviation UMAPs that render
+## near-flat/blank. We keep only the z-score features (the standard chromVAR
+## readout) and match each TF symbol exactly (anchored after "z:", so "TOX"
+## does not also grab TOX2/TOX3).
 motif_features <- getFeatures(project, useMatrix = "MotifMatrix")
-pick <- function(p) grep(p, motif_features, value = TRUE, ignore.case = TRUE)
+motif_z <- grep("^z:", motif_features, value = TRUE)
+
+pick <- function(tf) {
+  hits <- grep(paste0("^z:", tf, "(_|$)"), motif_z, value = TRUE, ignore.case = TRUE)
+  if (length(hits) == 0L) message("  [TFactivity] no z-score motif for ", tf)
+  hits
+}
 # FOXP family (the response focus) + canonical CD8 exhaustion / memory TFs
-tf_show <- unique(c(
-  pick("FOXP1"), pick("FOXP2"), pick("FOXP3"),
-  pick("TBX21"), pick("EOMES"), pick("TCF7"), pick("NR4A1"), pick("TOX")
-))
+tf_wanted <- c("FOXP1", "FOXP2", "FOXP3", "TOX", "TBX21", "EOMES", "TCF7", "NR4A1")
+tf_show   <- unique(unlist(lapply(tf_wanted, pick)))
 message("TF-activity UMAP motifs: ", paste(tf_show, collapse = ", "))
+stopifnot(length(tf_show) > 0)
 
 p_tf <- plotEmbedding(
-  ArchRProj = project,
-  colorBy = "MotifMatrix",
-  name = tf_show,
-  embedding = "UMAP_HIV",
+  ArchRProj     = project,
+  colorBy       = "MotifMatrix",
+  name          = tf_show,
+  embedding     = "UMAP_HIV",
   imputeWeights = getImputeWeights(project)
 )
+if (!is.list(p_tf)) p_tf <- list(p_tf)
+
+# Same compact colour scale as the gene-activity panels, so the z-score range shows
+p_tf2 <- lapply(p_tf, style_umap_gene)
+pdf(file = paste0(fig_dir, "TFactivity_UMAP_tcells.pdf"), width = 12, height = 10)
+do.call(cowplot::plot_grid, c(list(ncol = 3), p_tf2))
+dev.off()
+
+# ArchR's native multi-page version kept for completeness
 plotPDF(p_tf,
-  name = "TFactivity_UMAP_tcells.pdf",
+  name = "TFactivity_UMAP_tcells_archr.pdf",
   ArchRProj = project, addDOC = FALSE, width = 5, height = 5
 )
