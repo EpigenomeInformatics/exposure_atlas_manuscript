@@ -26,11 +26,26 @@ suppressPackageStartupMessages({
   library(tidyr)
   library(BSgenome.Hsapiens.UCSC.hg38)
   library(chromVARmotifs)
+  library(methylTFRAnnotationHg38)   # provides the `altius` archetype annotation
+  library(ChrAccR)                   # for the diverging chromVAR colour scheme
+  library(RColorBrewer)
 })
+# addPeakAnnotationsNew() lives in the project utils (same as 04_1_markers.R)
+source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
 
-addArchRThreads(threads = 30) 
+addArchRThreads(threads = 30)
 fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
+# --- HIV T-cell project cache -------------------------------------------------
+# Build the subsetted/clustered/peak-called project once and save it as an RDS.
+# On later runs we read the RDS and skip the expensive steps (LSI, clustering,
+# UMAP, peak calling, chromVAR deviations), so only the plots/analyses re-run.
+# NB: the Arrow files under outputDir must remain in place for the RDS to load.
+hiv_rds <- file.path(outputDir, "hiv_tcell_project.rds")
+build_project <- !file.exists(hiv_rds)
+
+if (build_project) {
+
 echo_full <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 
 # Get the cell data from echo
@@ -83,6 +98,11 @@ project <- addUMAP(
   metric = "euclidean",
   force=TRUE
 )
+
+} else {
+  message("Loading cached HIV T-cell project: ", hiv_rds)
+  project <- readRDS(hiv_rds)
+}
 
 # Create a vector for sample file names corresponding to each sample
 sample_files <- c(
@@ -287,38 +307,43 @@ ggsave(tex_traj, file = paste0(fig_dir, "tex_proportion_trajectory.pdf"),
 ## being driven by a single individual. This is the ClustersHIV x Subject
 ## cross-tabulation (as percentages) promised in the response letter
 ## (Response Figure N).
-tex_donor <- getCellColData(project, select = c("ClustersHIV", "Sample")) %>%
+cluster_levels_all <- paste0("C", 1:6)   # C1/C2 are the exhausted (Tex) clusters
+donor_comp_df <- getCellColData(project, select = c("ClustersHIV", "Sample")) %>%
   as.data.frame() %>%
-  dplyr::mutate(Subject = sample_to_subject[as.character(Sample)]) %>%
-  dplyr::filter(ClustersHIV %in% c("C1", "C2"))
+  dplyr::mutate(Subject = sample_to_subject[as.character(Sample)])
 
-# Within each Tex cluster: percentage of its cells contributed by each subject
-tex_donor_comp <- tex_donor %>%
+# Within each cluster: percentage of its cells contributed by each subject
+donor_comp <- donor_comp_df %>%
   dplyr::count(ClustersHIV, Subject, name = "n_cells") %>%
-  tidyr::complete(ClustersHIV, Subject = names(colorPalette),
+  tidyr::complete(ClustersHIV = cluster_levels_all, Subject = names(colorPalette),
                   fill = list(n_cells = 0)) %>%
   dplyr::group_by(ClustersHIV) %>%
   dplyr::mutate(pct = 100 * n_cells / sum(n_cells)) %>%
   dplyr::ungroup() %>%
-  dplyr::mutate(Subject = factor(Subject, levels = names(colorPalette)))
+  dplyr::mutate(
+    Subject     = factor(Subject, levels = names(colorPalette)),
+    ClustersHIV = factor(ClustersHIV, levels = cluster_levels_all)
+  )
 
-write.csv(tex_donor_comp,
-          file = paste0(fig_dir, "tex_cluster_donor_composition.csv"),
+write.csv(donor_comp,
+          file = paste0(fig_dir, "hiv_cluster_donor_composition.csv"),
           row.names = FALSE)
 
-# Stacked barplot: one bar per Tex cluster, split by subject (sums to 100%)
-tex_donor_bar <- ggplot(tex_donor_comp,
-                        aes(x = ClustersHIV, y = pct, fill = Subject)) +
+# Horizontal stacked barplot: one bar per cluster (all six), split by subject
+# (each bar sums to 100%). Clusters on the y-axis (C1 at top), proportion on x.
+donor_comp_bar <- ggplot(donor_comp,
+                         aes(x = pct, y = ClustersHIV, fill = Subject)) +
   geom_col(width = 0.7, colour = "white", linewidth = 0.2) +
   scale_fill_manual(values = colorPalette) +
-  labs(x = "Exhausted (Tex) cluster", y = "Cells per cluster (%)",
+  scale_y_discrete(limits = rev(cluster_levels_all)) +   # C1 at top
+  labs(x = "Cells per cluster (%)", y = "HIV CD8+ T-cell cluster (C1, C2 = Tex)",
        fill = "Subject") +
   theme_classic(base_size = 10) +
   theme(legend.position = "right")
 
-ggsave(tex_donor_bar,
-       file = paste0(fig_dir, "tex_cluster_donor_composition_bar.pdf"),
-       width = 5, height = 4)
+ggsave(donor_comp_bar,
+       file = paste0(fig_dir, "hiv_cluster_donor_composition_bar.pdf"),
+       width = 6, height = 4)
 ## <<< END REVISION -----------------------------------------------------------
 
 ## NOTE: the previous pooled Fisher test is retained below but commented out,
@@ -490,15 +515,17 @@ write.csv(as.data.frame(tex_summary),
 #####################################################################
 project$TexClusters <- ifelse(project$ClustersHIV %in% c("C1","C2"), "Tex", project$ClustersHIV)
 
-project <- addGroupCoverages(ArchRProj = project, groupBy = "TexClusters", threads = 30, force = TRUE)
-pathToMacs2 <- findMacs2()
-project <- addReproduciblePeakSet(
-    ArchRProj = project, 
-    groupBy = "TexClusters", maxPeaks = 300000,
-    pathToMacs2 = pathToMacs2, threads = 30
-)
-project <- addPeakMatrix(project, threads = 30, force = TRUE)
-project <- addBgdPeaks(project, force = TRUE)
+if (build_project) {
+  project <- addGroupCoverages(ArchRProj = project, groupBy = "TexClusters", threads = 30, force = TRUE)
+  pathToMacs2 <- findMacs2()
+  project <- addReproduciblePeakSet(
+      ArchRProj = project,
+      groupBy = "TexClusters", maxPeaks = 300000,
+      pathToMacs2 = pathToMacs2, threads = 30
+  )
+  project <- addPeakMatrix(project, threads = 30, force = TRUE)
+  project <- addBgdPeaks(project, force = TRUE)
+}
 
 #####################################################################
 # Marker testing
@@ -518,7 +545,7 @@ markerTest <- getMarkerFeatures(
 
 pv <- plotMarkers(seMarker = markerTest, name = "Tex", cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", plotAs = "Volcano")
 ggsave(pv, file = paste0(fig_dir, "marker_volcano_c1.pdf"), width = 6, height = 5)
-project <- addMotifAnnotations(ArchRProj = project, motifSet = "cisbp", name = "Motif",force = TRUE)
+if (build_project) project <- addMotifAnnotations(ArchRProj = project, motifSet = "cisbp", name = "Motif", force = TRUE)
 
 motifsUp <- peakAnnoEnrichment(
     seMarker = markerTest,
@@ -634,7 +661,7 @@ plotPDF(
 #  deviations and project the FOXP-family and exhaustion-associated TF
 #  activities onto the T-cell UMAP so they can be shown directly.
 #####################################################################
-project <- addDeviationsMatrix(ArchRProj = project, peakAnnotation = "Motif", force = TRUE)
+if (build_project) project <- addDeviationsMatrix(ArchRProj = project, peakAnnotation = "Motif", force = TRUE)
 
 ## getFeatures() on a MotifMatrix returns BOTH the bias-corrected z-scores
 ## ("z:TF_###") and the raw deviations ("deviations:TF_###"). The previous grep
@@ -676,3 +703,59 @@ plotPDF(p_tf,
   name = "TFactivity_UMAP_tcells_archr.pdf",
   ArchRProj = project, addDOC = FALSE, width = 5, height = 5
 )
+
+#####################################################################
+# chromVAR TF-activity heatmap across HIV clusters (C1-C6), Altius archetypes
+# ArchR-native marker heatmap of the most differentially active (variable)
+# Altius archetypes across the six HIV CD8+ T-cell clusters, on chromVAR
+# z-scores. Coloured with the ChrAccR diverging scheme (`.default.div`,
+# teal-to-brown) so it matches the cvar TF-deviation heatmap.
+#####################################################################
+# Add the Altius archetype annotation + deviations matrix on this T-cell peak set
+if (build_project) {
+  # subsetCells() inherits peak annotations from the full project, whose match
+  # matrices are sized to the OLD peak set. After building a new T-cell peak set
+  # a stale 'altius' annotation makes addDeviationsMatrix fail with
+  # 'subscript out of bounds', so drop it and recompute against the new peaks.
+  if ("altius" %in% names(project@peakAnnotation)) {
+    project@peakAnnotation <- project@peakAnnotation[
+      setdiff(names(project@peakAnnotation), "altius")
+    ]
+  }
+  altius <- readRDS("/icbb/projects/share/annotations/methylTFRAnnotationHg38/inst/extdata/altius_tf_bindsites.rds")
+  project <- addPeakAnnotationsNew(ArchRProj = project,
+                                   regions = altius, name = "altius")
+  project <- addDeviationsMatrix(ArchRProj = project, peakAnnotation = "altius", force = TRUE)
+
+  # Cache the fully-built project (all matrices) so later runs skip the heavy steps
+  saveRDS(project, file = hiv_rds)
+  message("Saved HIV T-cell project to ", hiv_rds)
+}
+
+# Differential (variable) Altius archetypes per HIV cluster, on chromVAR z-scores
+motifMarkers <- getMarkerFeatures(
+  ArchRProj   = project,
+  useMatrix   = "altiusMatrix",
+  groupBy     = "ClustersHIV",
+  useSeqnames = "z",
+  bias        = c("TSSEnrichment", "log10(nFrags)"),
+  testMethod  = "wilcoxon"
+)
+
+# Same diverging palette as the cvar TF-deviation heatmap (ChrAccR .default.div,
+# teal-to-brown); fall back to a BrBG teal-brown ramp if the config is absent.
+colors.cv <- tryCatch(
+  ChrAccR::getConfigElement("colorSchemesCont")[[".default.div"]],
+  error = function(e) rev(RColorBrewer::brewer.pal(11, "BrBG"))
+)
+
+hm_motifs <- markerHeatmap(
+  seMarker  = motifMarkers,
+  cutOff    = "FDR <= 0.1 & abs(MeanDiff) >= 0.5",
+  transpose = TRUE,
+  pal       = colors.cv
+)
+
+pdf(file = paste0(fig_dir, "hiv_chromVAR_cluster_heatmap_altius.pdf"), width = 10, height = 6)
+draw(hm_motifs)
+dev.off()

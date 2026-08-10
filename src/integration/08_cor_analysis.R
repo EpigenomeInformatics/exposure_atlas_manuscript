@@ -480,17 +480,27 @@ ggsave(
 #######################################################################
 # Statistical test of the methylMinus vs methylPlus skew (R3 minor 1)
 #######################################################################
-mm <- row_correlation_df$Correlation[row_correlation_df$methyl.SELEX.call == "MethylMinus"]
-mp <- row_correlation_df$Correlation[row_correlation_df$methyl.SELEX.call == "MethylPlus"]
+mm <- as.numeric(row_correlation_df$Correlation[row_correlation_df$methyl.SELEX.call == "MethylMinus"])
+mp <- as.numeric(row_correlation_df$Correlation[row_correlation_df$methyl.SELEX.call == "MethylPlus"])
+# Drop non-finite correlations (NA/NaN from zero-variance motifs) before any stat,
+# otherwise median()/mean() return NA. n reported below is the finite count.
+n_mm_raw <- length(mm); n_mp_raw <- length(mp)
 mm <- mm[is.finite(mm)]; mp <- mp[is.finite(mp)]
+message(sprintf("MethylMinus: %d/%d finite; MethylPlus: %d/%d finite",
+                length(mm), n_mm_raw, length(mp), n_mp_raw))
+stopifnot(length(mm) > 0, length(mp) > 0)
 
 wt <- wilcox.test(mm, mp, alternative = "less")
 c(n_mm=length(mm), n_mp=length(mp),
+  mean_mm=mean(mm), mean_mp=mean(mp),
   med_mm=median(mm), med_mp=median(mp), p=signif(wt$p.value,3))
 
 selex_test <- data.frame(
   n_methylMinus  = length(mm),
   n_methylPlus   = length(mp),
+  mean_mMinus    = round(mean(mm), 3),
+  mean_mPlus     = round(mean(mp), 3),
+  mean_difference = round(mean(mm) - mean(mp), 3),
   median_mMinus  = round(median(mm), 3),
   median_mPlus   = round(median(mp), 3),
   Wilcoxon_W     = unname(wt$statistic),

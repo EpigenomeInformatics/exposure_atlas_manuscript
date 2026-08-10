@@ -1,2 +1,2 @@
-"n_methylMinus","n_methylPlus","median_mMinus","median_mPlus","Wilcoxon_W","Wilcoxon_p"
-143,155,-0.006,NA,10177,0.13
+"n_methylMinus","n_methylPlus","mean_mMinus","mean_mPlus","mean_difference","median_mMinus","median_mPlus","Wilcoxon_W","Wilcoxon_p"
+143,154,-0.068,0.002,-0.07,-0.006,-0.028,10177,0.13
