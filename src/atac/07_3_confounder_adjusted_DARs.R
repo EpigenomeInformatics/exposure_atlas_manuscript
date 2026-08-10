@@ -79,7 +79,7 @@ gc()
 # comp            : "GRP1 vs GRP2 [sample_exposure_group]"
 # extra_adj       : adjustment columns already used in the original run
 run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0)) {
-  ds <- ChrAccR::loadDsAcc(file.path(anaDir_existing, cell, "data", "dsATAC_processed"))
+  ds <- ChrAccR::loadDsAcc(file.path(anaDir_existing, cell, "data", "dsATAC_filtered"))
   sa <- ChrAccR::getSampleAnnot(ds)
 
   # match ChrAccR sample ids to the ArchR QC table. ChrAccR sample ids derive
