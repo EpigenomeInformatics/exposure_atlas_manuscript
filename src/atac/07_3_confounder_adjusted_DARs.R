@@ -42,6 +42,18 @@ if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 # adjustment columns to add on top of any existing ones
 qc_adj_cols <- c("mean_TSS", "mean_FRIP")
 
+# Normalise a sample identifier for joining ChrAccR sample ids to the ArchR QC
+# table: drop any directory, the .tsv.gz extension, and a trailing "_fragments",
+# so "hiv6_fragments.tsv.gz", "hiv6_fragments" and "hiv6" all collapse to "hiv6".
+# (The old code stripped only ".tsv.gz", leaving "hiv6_fragments" != "hiv6",
+# which is why every sample failed to match.)
+norm_key <- function(x) {
+  x <- basename(as.character(x))
+  x <- sub("\\.tsv\\.gz.*$", "", x)   # drop .tsv.gz and anything after it
+  x <- sub("_fragments$", "", x)      # drop a trailing _fragments
+  x
+}
+
 ## ---- 1. Per-sample QC metrics from the ArchR project ------------------------
 archr_dir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 project <- ArchR::loadArchRProject(archr_dir, showLogo = FALSE)
@@ -58,7 +70,7 @@ qc_by_sample <- getCellColData(project,
     mean_FRIP = mean(FRIP, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  dplyr::mutate(sample_key = sub("_fragments\\.tsv\\.gz$", "", Sample))
+  dplyr::mutate(sample_key = norm_key(Sample))
 rm(project)
 gc()
 
@@ -71,21 +83,48 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0)) 
   sa <- ChrAccR::getSampleAnnot(ds)
 
   # match ChrAccR sample ids to the ArchR QC table. ChrAccR sample ids derive
-  # from the per-cell-type BED filenames, so we strip suffixes before matching.
-  key <- sub("\\.tsv\\.gz.*$", "", rownames(sa))
-  if (all(is.na(match(key, qc_by_sample$sample_key)))) {
-    key <- sub("\\.tsv\\.gz.*$", "", as.character(sa[[1]]))
+  # from the per-cell-type BED filenames; normalise both sides to a common key
+  # before matching.
+  sa_keys <- norm_key(rownames(sa))
+  if (all(is.na(match(sa_keys, qc_by_sample$sample_key)))) {
+    sa_keys <- norm_key(sa[[1]])   # fall back to the first annotation column
   }
-  idx <- match(key, qc_by_sample$sample_key)
+  idx <- match(sa_keys, qc_by_sample$sample_key)
+  # substring fallback for any residual mismatch (e.g. cohort prefixes)
+  for (ii in which(is.na(idx))) {
+    hit <- which(vapply(qc_by_sample$sample_key,
+      function(k) grepl(k, sa_keys[ii], fixed = TRUE) ||
+                  grepl(sa_keys[ii], k, fixed = TRUE), logical(1)))
+    if (length(hit) == 1) idx[ii] <- hit
+  }
   if (any(is.na(idx))) {
     warning(cell, " / ", comp, ": ", sum(is.na(idx)),
       " sample(s) could not be matched to QC metrics; they will be dropped by the model")
+    message("  unmatched sample keys: ", paste(head(unique(sa_keys[is.na(idx)]), 10), collapse = ", "))
+    message("  available QC keys: ", paste(head(qc_by_sample$sample_key, 20), collapse = ", "))
+  } else {
+    message("  matched all ", length(idx), " samples to QC metrics")
   }
   for (cc in c(qc_adj_cols, "mean_log10_nFrags", "n_cells")) {
     sa[[cc]] <- qc_by_sample[[cc]][idx]
   }
   # write the augmented annotation back onto the object
   ds@sampleAnnot <- sa
+
+  # DESeq2-based differential needs raw integer counts. The processed DsATAC can
+  # carry normalized/transformed (non-integer) counts, which makes
+  # run_atac_differential fail with "some values in assay are not integers".
+  # Loading a raw/pre-normalization object would be cleaner; as a safeguard we
+  # round any non-integer count matrix back to integers so the model can run.
+  ct_slots <- tryCatch(names(ds@counts), error = function(e) character(0))
+  for (rt in ct_slots) {
+    cm <- tryCatch(as.matrix(ds@counts[[rt]]), error = function(e) NULL)
+    if (is.null(cm)) next
+    if (any(abs(cm - round(cm)) > 1e-6, na.rm = TRUE)) {
+      message("  region type '", rt, "': non-integer counts detected, rounding for DESeq2")
+      ds@counts[[rt]] <- round(cm)
+    }
+  }
 
   # ---- adjusted run, into a fresh directory ----
   tag <- gsub("[^A-Za-z0-9]+", "_", sub(" \\[.*", "", comp))

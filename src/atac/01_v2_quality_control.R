@@ -691,6 +691,90 @@ ggsave(p_assoc,
   width = 9, height = 6, units = "in", dpi = 300
 )
 
+## ---- Per-(sample x cell type) association: adds Cell type and Exposure -------
+# The analysis above aggregates over cell types (one profile per sample), so it
+# cannot show how much structure is explained by cell type. Here we repeat it at
+# the pseudobulk level of sample x cell type, adding Cell type as a covariate
+# alongside exposure (cohort) and the sample-level covariates, so the heatmap
+# reports both exposure and cell type.
+ct_col <- "ClusterCellTypes"   # cell-type annotation used across the atlas
+
+assoc_ct_results <- list()
+for (emb in embeddings_to_test) {
+  reddim <- getReducedDims(project, reducedDims = emb)
+  cd     <- as.data.frame(getCellColData(project, select = c("Sample", ct_col)))
+  grp    <- paste(cd$Sample, cd[[ct_col]], sep = "||")
+
+  sums   <- rowsum(reddim, group = grp)
+  n_grp  <- as.numeric(table(grp)[rownames(sums)])
+  pb_emb <- sums / n_grp                       # (sample x cell type) x dims
+  keep   <- n_grp >= 20                        # drop tiny, noisy pseudobulks
+  pb_emb <- pb_emb[keep, , drop = FALSE]
+
+  pca <- stats::prcomp(pb_emb, center = TRUE, scale. = TRUE)
+  var_explained <- (pca$sdev^2) / sum(pca$sdev^2)
+  k   <- min(n_pc, ncol(pca$x))
+  pcs <- pca$x[, seq_len(k), drop = FALSE]
+
+  key       <- do.call(rbind, strsplit(rownames(pcs), "\\|\\|"))
+  pb_sample <- key[, 1]
+  pb_ct     <- key[, 2]
+  cvp       <- covar[match(pb_sample, covar$arrow_name), ]
+
+  covariate_cols <- list(
+    CellType          = factor(pb_ct),
+    Exposure          = cvp$exposure_type,
+    Age               = cvp$Age_numeric,
+    Sex_observed      = cvp$Sex,
+    Sampling_day      = cvp$sampling_day,
+    Sex_predicted     = cvp$Sex_predicted,
+    QC_meanTSS        = cvp$mean_TSS,
+    QC_meanLog10Frags = cvp$mean_log10_nFrags,
+    QC_meanFRIP       = cvp$mean_FRIP
+  )
+
+  res <- do.call(rbind, lapply(seq_len(k), function(i) {
+    do.call(rbind, lapply(names(covariate_cols), function(cn) {
+      a <- pc_assoc(pcs[, i], covariate_cols[[cn]])
+      data.frame(embedding = emb, PC = paste0("PC", i), pc_index = i,
+                 var_explained = var_explained[i], covariate = cn,
+                 r2 = a[["r2"]], p = a[["p"]], n = a[["n"]],
+                 stringsAsFactors = FALSE)
+    }))
+  }))
+  assoc_ct_results[[emb]] <- res
+}
+
+assoc_ct_df <- dplyr::bind_rows(assoc_ct_results) %>%
+  dplyr::group_by(embedding, covariate) %>%
+  dplyr::mutate(p_adj = p.adjust(p, method = "BH")) %>%
+  dplyr::ungroup()
+
+write.csv(assoc_ct_df,
+  file = file.path(repo_dir, "figures/pc_covariate_association_by_celltype.csv"),
+  row.names = FALSE
+)
+
+p_assoc_ct <- ggplot(assoc_ct_df, aes(x = PC, y = covariate, fill = -log10(p_adj))) +
+  geom_tile(color = "grey90") +
+  geom_text(aes(label = ifelse(is.na(p_adj), "", sprintf("%.2f", r2))), size = 3) +
+  facet_wrap(~embedding, ncol = 1) +
+  scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
+    name = "-log10(adj. p)") +
+  scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
+  labs(
+    title = "Association of pseudobulk (sample x cell type) PCs with covariates",
+    subtitle = "tile label = variance explained (R^2); shading = significance. Cell type and exposure tested across all pseudobulks",
+    x = NULL, y = NULL
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(p_assoc_ct,
+  filename = file.path(repo_dir, "figures/pc_covariate_association_by_celltype.pdf"),
+  width = 9, height = 6, units = "in", dpi = 300
+)
+
 # quick console summary of any significant confounder associations
 message("Significant MARGINAL PC-covariate associations (adj. p < 0.05):")
 print(subset(assoc_df, p_adj < 0.05,

@@ -510,6 +510,48 @@ write.csv(as.data.frame(tex_summary),
 ## <<< END REVISION -----------------------------------------------------------
 
 
+## <<< REVISION (R2): per-cluster CD4/CD8 gene-activity distributions -----------
+## Side-by-side violin/box plots of CD4 and CD8 (CD8A, CD8B) gene activity across
+## the six HIV CD8 subclusters, showing that all clusters remain CD8A/CD8B-
+## positive and CD4-low (Tex = C1/C2). This is the quantitative, per-cluster
+## companion to the marker UMAPs and shows the CD8A gradient within the compartment.
+comp_genes <- intersect(c("CD8A", "CD8B", "CD4"), rownames(gs_sub))
+# align gene-activity columns to the project cell order before attaching clusters
+cell_ids         <- colnames(gsm)
+clusters_by_cell <- as.character(project$ClustersHIV)[match(cell_ids, project$cellNames)]
+
+comp_df <- do.call(rbind, lapply(comp_genes, function(g) {
+  data.frame(Gene = g, Cluster = clusters_by_cell, Activity = gs_sub[g, ])
+})) %>%
+  dplyr::mutate(
+    Cluster = factor(Cluster, levels = paste0("C", 1:6)),
+    Gene    = factor(Gene, levels = c("CD8A", "CD8B", "CD4"))
+  )
+
+comp_violin <- ggplot(comp_df, aes(x = Cluster, y = Activity, fill = Cluster)) +
+  geom_violin(scale = "width", trim = TRUE, linewidth = 0.2) +
+  geom_boxplot(width = 0.12, outlier.shape = NA, fill = "white", linewidth = 0.2) +
+  facet_wrap(~ Gene, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = tex_palette) +
+  labs(x = "HIV CD8+ T-cell cluster (C1, C2 = Tex)", y = "Gene activity") +
+  theme_classic(base_size = 10) +
+  theme(legend.position = "none")
+
+ggsave(comp_violin,
+       file = paste0(fig_dir, "hiv_cluster_CD4_CD8_geneactivity_violin.pdf"),
+       width = 10, height = 4)
+
+# Per-cluster mean gene activity table (for the legend/text)
+comp_means <- comp_df %>%
+  dplyr::group_by(Gene, Cluster) %>%
+  dplyr::summarise(mean_activity = round(mean(Activity, na.rm = TRUE), 3), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = Cluster, values_from = mean_activity)
+write.csv(comp_means,
+          file = paste0(fig_dir, "hiv_cluster_CD4_CD8_geneactivity_means.csv"),
+          row.names = FALSE)
+## <<< END REVISION -----------------------------------------------------------
+
+
 #####################################################################
 # Add peak matrix and motif annotations
 #####################################################################
