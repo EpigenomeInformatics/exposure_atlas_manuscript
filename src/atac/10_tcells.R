@@ -732,15 +732,24 @@ if (build_project) {
   message("Saved HIV T-cell project to ", hiv_rds)
 }
 
-# Differential (variable) Altius archetypes per HIV cluster, on chromVAR z-scores
-motifMarkers <- getMarkerFeatures(
-  ArchRProj   = project,
-  useMatrix   = "altiusMatrix",
-  groupBy     = "ClustersHIV",
-  useSeqnames = "z",
-  bias        = c("TSSEnrichment", "log10(nFrags)"),
-  testMethod  = "wilcoxon"
-)
+# Top-30 most VARIABLE Altius archetypes (chromVAR combined variability), shown
+# as mean per-cluster z-scores. The differential marker test returned too few
+# archetypes on this small T-cell peak set, so we rank by variability instead.
+vd <- as.data.frame(getVarDeviations(project, name = "altiusMatrix", plot = FALSE))
+n_top   <- 30
+top_var <- if ("name" %in% colnames(vd)) head(vd$name, n_top) else head(rownames(vd), n_top)
+
+# Per-cell z-scores averaged per HIV cluster, keeping the variability order
+mm   <- getMatrixFromProject(project, useMatrix = "altiusMatrix")
+zmat <- assays(mm)[["z"]]
+rownames(zmat) <- rowData(mm)$name
+zmat <- zmat[intersect(top_var, rownames(zmat)), , drop = FALSE]
+
+clust          <- project$ClustersHIV
+cluster_levels <- paste0("C", 1:6)
+mean_z <- sapply(cluster_levels, function(cl)
+  rowMeans(zmat[, clust == cl, drop = FALSE], na.rm = TRUE))
+mean_z <- t(scale(t(mean_z)))          # row-scale for cluster-to-cluster contrast
 
 # Same diverging palette as the cvar TF-deviation heatmap (ChrAccR .default.div,
 # teal-to-brown); fall back to a BrBG teal-brown ramp if the config is absent.
@@ -748,14 +757,20 @@ colors.cv <- tryCatch(
   ChrAccR::getConfigElement("colorSchemesCont")[[".default.div"]],
   error = function(e) rev(RColorBrewer::brewer.pal(11, "BrBG"))
 )
+col_fun <- circlize::colorRamp2(
+  seq(-2, 2, length.out = length(colors.cv)), colors.cv)
 
-hm_motifs <- markerHeatmap(
-  seMarker  = motifMarkers,
-  cutOff    = "FDR <= 0.1 & abs(MeanDiff) >= 0.5",
-  transpose = TRUE,
-  pal       = colors.cv
+hm_motifs <- ComplexHeatmap::Heatmap(
+  mean_z,
+  name            = "Row z\n(mean chromVAR)",
+  col             = col_fun,
+  cluster_columns = FALSE,
+  column_order    = cluster_levels,
+  show_row_names  = TRUE,
+  row_names_gp    = grid::gpar(fontsize = 7),
+  column_names_gp = grid::gpar(fontsize = 10)
 )
 
-pdf(file = paste0(fig_dir, "hiv_chromVAR_cluster_heatmap_altius.pdf"), width = 10, height = 6)
-draw(hm_motifs)
+pdf(file = paste0(fig_dir, "hiv_chromVAR_cluster_heatmap_altius.pdf"), width = 6, height = 8)
+ComplexHeatmap::draw(hm_motifs)
 dev.off()
