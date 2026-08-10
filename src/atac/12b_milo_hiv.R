@@ -52,9 +52,15 @@ lsi   <- getReducedDims(project, reducedDims = "IterativeLSI_hiv")
 cells <- rownames(lsi)
 samp  <- sapply(strsplit(cells, "#"), `[`, 1)
 
+# Milo's buildGraph filters LSI dims that correlate with sequencing depth, using
+# colSums of the counts assay. A dummy all-zero assay makes depth constant, which
+# yields NA correlations and a "subscript out of bounds" error in findKNN. We give
+# it a real per-cell depth (nFrags) as a 1-row counts assay so the depth filter is
+# well defined (it will drop LSI dim 1, as intended for LSI embeddings).
+nfrags <- getCellColData(project, select = "nFrags", drop = TRUE)[match(cells, project$cellNames)]
 sce <- SingleCellExperiment(
-  assays = list(logcounts = matrix(
-    0, nrow = 1, ncol = length(cells), dimnames = list("dummy", cells)))
+  assays = list(counts = matrix(as.numeric(nfrags), nrow = 1,
+                                dimnames = list("depth", cells)))
 )
 reducedDim(sce, "LSI") <- lsi
 sce$Sample  <- samp
@@ -62,16 +68,18 @@ sce$Subject <- sample_to_subject[samp]
 sce$Stage   <- factor(sample_to_timepoint[samp], levels = c("pre", "acute", "chronic"))
 sce$Cluster <- as.character(project$ClustersHIV)[match(cells, project$cellNames)]
 
+d_use <- min(30, ncol(lsi))   # never request more LSI dims than exist
+
 # --- Build the Milo object and neighbourhoods ---------------------------------
 milo <- Milo(sce)
-milo <- buildGraph(milo, k = 30, d = 30, reduced.dim = "LSI")
-milo <- makeNhoods(milo, prop = 0.1, k = 30, d = 30, refined = TRUE, reduced_dims = "LSI")
+milo <- buildGraph(milo, k = 30, d = d_use, reduced.dim = "LSI")
+milo <- makeNhoods(milo, prop = 0.1, k = 30, d = d_use, refined = TRUE, reduced_dims = "LSI")
 
 pdf(file = paste0(fig_dir, "milo_hiv_nhood_sizes.pdf"), width = 5, height = 4)
 print(plotNhoodSizeHist(milo))
 dev.off()
 
-milo <- calcNhoodDistance(milo, d = 30, reduced.dim = "LSI")
+milo <- calcNhoodDistance(milo, d = d_use, reduced.dim = "LSI")
 
 #####################################################################
 # (1) REAL replicates: the 12 samples, design ~ Subject + Stage
