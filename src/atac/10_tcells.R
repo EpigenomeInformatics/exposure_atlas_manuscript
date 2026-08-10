@@ -736,14 +736,23 @@ if (build_project) {
 # as mean per-cluster z-scores. The differential marker test returned too few
 # archetypes on this small T-cell peak set, so we rank by variability instead.
 vd <- as.data.frame(getVarDeviations(project, name = "altiusMatrix", plot = FALSE))
-n_top   <- 30
-top_var <- if ("name" %in% colnames(vd)) head(vd$name, n_top) else head(rownames(vd), n_top)
+all_feats <- if ("name" %in% colnames(vd)) vd$name else rownames(vd)
 
-# Per-cell z-scores averaged per HIV cluster, keeping the variability order
+n_top   <- 50
+top_var <- head(all_feats, n_top)
+
+# Always include the FOXP/FOX-family archetype(s), even if not among the top
+# variable set, since they are the focus of the HIV/Tex analysis.
+fox_feats <- grep("fox", all_feats, value = TRUE, ignore.case = TRUE)
+if (length(fox_feats)) message("FOX-family archetypes added: ", paste(fox_feats, collapse = ", "))
+top_var <- unique(c(top_var, fox_feats))
+
+# Per-cell z-scores averaged per HIV cluster, keeping the variability/append order
 mm   <- getMatrixFromProject(project, useMatrix = "altiusMatrix")
 zmat <- assays(mm)[["z"]]
 rownames(zmat) <- rowData(mm)$name
-zmat <- zmat[intersect(top_var, rownames(zmat)), , drop = FALSE]
+top_var <- top_var[top_var %in% rownames(zmat)]
+zmat <- zmat[top_var, , drop = FALSE]
 
 clust          <- project$ClustersHIV
 cluster_levels <- paste0("C", 1:6)
@@ -767,10 +776,10 @@ hm_motifs <- ComplexHeatmap::Heatmap(
   cluster_columns = FALSE,
   column_order    = cluster_levels,
   show_row_names  = TRUE,
-  row_names_gp    = grid::gpar(fontsize = 7),
+  row_names_gp    = grid::gpar(fontsize = 6),
   column_names_gp = grid::gpar(fontsize = 10)
 )
 
-pdf(file = paste0(fig_dir, "hiv_chromVAR_cluster_heatmap_altius.pdf"), width = 6, height = 8)
+pdf(file = paste0(fig_dir, "hiv_chromVAR_cluster_heatmap_altius.pdf"), width = 6, height = 11)
 ComplexHeatmap::draw(hm_motifs)
 dev.off()
