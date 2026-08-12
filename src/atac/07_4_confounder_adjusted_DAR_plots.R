@@ -31,6 +31,15 @@ source(file.path(repo_dir, "utils/helpers.R")) # cutL0.5fc2Padj05
 out_dir <- "/icbb/projects/igunduz/finalize_echo_050824/confounder_adjusted/"
 qc_adj_cols <- c("mean_TSS", "mean_FRIP")
 
+# Figures and the small summary tables belong in the repo figures/ directory with
+# every other panel; only the bulky per-region table stays in the scratch dir.
+fig_dir <- file.path(repo_dir, "figures")
+if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
+
+# The sweep in 07_3 covers every cell type, which is far too many facets for one
+# readable scatter. Draw the panels with the most unadjusted DARs and say so.
+max_scatter_panels <- 24
+
 # original (unadjusted) ChrAccR analysis directories, as in 07_3
 covid_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/"
 other_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_2023-10-02/"
@@ -116,6 +125,8 @@ pick_unadjusted <- function(anaDir, cell, grp1, grp2) {
   files[i]
 }
 
+key_of <- function(cell, comparison) paste(cell, comparison)
+
 read_diff <- function(f) {
   dm <- read.delim(f)
   isDiff <- cutL0.5fc2Padj05(dm[, c("log2FoldChange", "padj")])
@@ -128,11 +139,11 @@ read_diff <- function(f) {
 }
 
 ## ---- 3. Summarise each comparison -------------------------------------------
-merged_list <- list()
-
-summarise_one <- function(j) {
-  message("=== ", j$cell, " | ", j$comparison)
-
+# Pass 1 computes the summary for EVERY comparison and deliberately discards each
+# merged table afterwards. Holding all of them at once would be tens of millions
+# of rows once the sweep covers every cell type; the scatter panels re-read the
+# handful of tables they need in pass 2.
+build_merged <- function(j) {
   adj_files <- list_diff_tabs(j$dir)
   if (length(adj_files) == 0) {
     message("  skipped: no diffTab under ", j$dir)
@@ -158,7 +169,27 @@ summarise_one <- function(j) {
   }
   m$cell <- j$cell
   m$comparison <- j$comparison
-  merged_list[[paste(j$cell, j$comparison)]] <<- m
+  m
+}
+
+# Regions called a DAR by either model are kept from pass 1 (a small fraction of
+# the merge), so the per-region table covers every comparison rather than only
+# the ones drawn in the scatter.
+dar_list <- list()
+
+# Per-comparison counts broken down by overlap category and direction, used for
+# the stacked bars. Computed in pass 1 so nothing has to be re-read for them.
+cat_list <- list()
+
+summarise_one <- function(j) {
+  message("=== ", j$cell, " | ", j$comparison)
+  m <- build_merged(j)
+  if (is.null(m)) return(NULL)
+
+  keep <- m$isDiff_unadj | m$isDiff_adj
+  if (any(keep)) {
+    dar_list[[key_of(j$cell, j$comparison)]] <<- m[keep, , drop = FALSE]
+  }
 
   a <- m$id[m$isDiff_unadj]
   b <- m$id[m$isDiff_adj]
@@ -171,6 +202,38 @@ summarise_one <- function(j) {
   message("  ", length(a), " unadjusted / ", length(b), " adjusted DARs, ",
     length(shared), " shared")
 
+  # Classify every DAR by which model called it and in which direction. Shared
+  # and unadjusted-only regions take their direction from the unadjusted fit,
+  # adjusted-only regions from the adjusted fit; the sign concordance above says
+  # how often the two agree where both called a region.
+  cls <- dplyr::case_when(
+    m$isDiff_unadj & m$isDiff_adj ~ "Shared",
+    m$isDiff_unadj ~ "Unadjusted only",
+    m$isDiff_adj ~ "Adjusted only",
+    TRUE ~ NA_character_
+  )
+  sel <- !is.na(cls)
+  l2 <- ifelse(m$isDiff_unadj, m$log2FC_unadj, m$log2FC_adj)
+  dirn <- ifelse(l2 > 0, "Hyper-accessible", "Hypo-accessible")
+  cnt_df <- as.data.frame(
+    table(
+      overlap = factor(cls[sel],
+        levels = c("Shared", "Unadjusted only", "Adjusted only")),
+      direction = factor(dirn[sel],
+        levels = c("Hyper-accessible", "Hypo-accessible"))
+    ),
+    stringsAsFactors = FALSE
+  )
+  names(cnt_df)[names(cnt_df) == "Freq"] <- "n"
+  cnt_df$cell <- j$cell
+  cnt_df$comparison <- j$comparison
+  cat_list[[key_of(j$cell, j$comparison)]] <<- cnt_df
+
+  get_n <- function(o, d) {
+    v <- cnt_df$n[cnt_df$overlap == o & cnt_df$direction == d]
+    if (length(v) == 1) v else 0L
+  }
+
   data.frame(
     cell = j$cell, comparison = j$comparison,
     DARs_unadjusted = length(a), DARs_adjusted = length(b),
@@ -179,18 +242,27 @@ summarise_one <- function(j) {
     sign_concordance_pct = round(conc, 1),
     lfc_pearson_all = round(cor(m$log2FC_unadj, m$log2FC_adj, use = "complete.obs"), 3),
     n_regions_tested = nrow(m),
+    # direction breakdown, so the stacked figure can be read off the table
+    shared_hyper = get_n("Shared", "Hyper-accessible"),
+    shared_hypo = get_n("Shared", "Hypo-accessible"),
+    unadj_only_hyper = get_n("Unadjusted only", "Hyper-accessible"),
+    unadj_only_hypo = get_n("Unadjusted only", "Hypo-accessible"),
+    adj_only_hyper = get_n("Adjusted only", "Hyper-accessible"),
+    adj_only_hypo = get_n("Adjusted only", "Hypo-accessible"),
     stringsAsFactors = FALSE
   )
 }
 
 jobs <- Filter(Negate(is.null), lapply(adj_dirs, parse_adj_dir))
 res <- do.call(rbind, lapply(jobs, function(j) {
-  tryCatch(summarise_one(j),
+  out <- tryCatch(summarise_one(j),
     error = function(e) {
       message("  FAILED: ", conditionMessage(e))
       NULL
     }
   )
+  gc()
+  out
 }))
 
 if (is.null(res) || nrow(res) == 0) {
@@ -199,45 +271,110 @@ if (is.null(res) || nrow(res) == 0) {
 }
 
 print(res)
-write.csv(res, file.path(out_dir, "confounder_adjusted_DAR_summary.csv"),
+write.csv(res, file.path(fig_dir, "confounder_adjusted_DAR_summary.csv"),
   row.names = FALSE)
 
-## ---- 4. Figure 1: DAR counts, unadjusted vs adjusted ------------------------
-plot_df <- res %>%
-  dplyr::select(comparison, cell, DARs_unadjusted, DARs_adjusted) %>%
-  tidyr::pivot_longer(c(DARs_unadjusted, DARs_adjusted),
-    names_to = "model", values_to = "n_DARs"
-  ) %>%
+## ---- 4. Figure 1: overlap and direction of the DAR calls --------------------
+# A side-by-side count of "unadjusted DARs" against "adjusted DARs" is hard to
+# read, because two similar-height bars can still be two different region sets.
+# This shows the partition instead: every DAR is one of shared / unadjusted-only
+# / adjusted-only, stacked, and split by direction. A result that is robust to
+# the adjustment looks like a tall "Shared" block with thin slivers either side,
+# balanced across the two direction panels.
+cat_all <- dplyr::bind_rows(cat_list) %>%
   dplyr::mutate(
-    model = factor(ifelse(model == "DARs_unadjusted", "Unadjusted", "QC-adjusted"),
-      levels = c("Unadjusted", "QC-adjusted")),
-    label = paste0(cell, "\n", comparison)
+    label = paste0(cell, " | ", comparison),
+    overlap = factor(overlap,
+      levels = c("Unadjusted only", "Shared", "Adjusted only"))
   )
 
-p_counts <- ggplot(plot_df, aes(x = label, y = n_DARs, fill = model)) +
-  geom_col(position = position_dodge(width = 0.7), width = 0.65, colour = "grey20") +
-  geom_text(aes(label = n_DARs),
-    position = position_dodge(width = 0.7), vjust = -0.3, size = 3
-  ) +
-  scale_fill_manual(values = c("Unadjusted" = "#3C5488", "QC-adjusted" = "#E64B35")) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.12))) +
+# order the comparisons by total DAR count, largest at the top
+bar_order <- cat_all %>%
+  dplyr::group_by(label) %>%
+  dplyr::summarise(total = sum(n), .groups = "drop") %>%
+  dplyr::arrange(total)
+cat_all$label <- factor(cat_all$label, levels = bar_order$label)
+
+# per-panel totals, annotated at the end of each bar
+tot_lab <- cat_all %>%
+  dplyr::group_by(label, direction) %>%
+  dplyr::summarise(n = sum(n), .groups = "drop")
+
+overlap_cols <- c(
+  "Unadjusted only" = "#3C5488", # called only without the QC covariates
+  "Shared"          = "#B8B8B8", # called by both models
+  "Adjusted only"   = "#E64B35"  # called only with the QC covariates
+)
+
+p_stack <- ggplot(cat_all, aes(x = label, y = n, fill = overlap)) +
+  geom_col(width = 0.7, colour = "grey25", linewidth = 0.15) +
+  geom_text(data = tot_lab, aes(x = label, y = n, label = n),
+    inherit.aes = FALSE, hjust = -0.15, size = 2.4, colour = "grey20") +
+  coord_flip() +
+  facet_wrap(~direction) +
+  scale_fill_manual(values = overlap_cols) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.18))) +
   labs(
-    title = "Differential accessibility with and without technical-covariate adjustment",
-    subtitle = paste0("Adjusted model adds ", paste(qc_adj_cols, collapse = " + "),
-      " to the differential design; DAR = |log2FC| > 0.5 and padj < 0.05"),
+    title = "Overlap of DAR calls with and without technical-covariate adjustment",
+    subtitle = paste0(
+      "Adjusted model adds ", paste(qc_adj_cols, collapse = " + "),
+      " to the differential design. DAR = |log2FC| > 0.5 and padj < 0.05.\n",
+      "Bar segments partition the DARs of each comparison; the number at the end of each bar is the union. ",
+      nrow(res), " comparisons across ", dplyr::n_distinct(res$cell), " cell types."
+    ),
     x = NULL, y = "Number of DARs", fill = NULL
   ) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "top", plot.subtitle = element_text(size = 9))
+  theme_classic(base_size = 11) +
+  theme(legend.position = "top", plot.subtitle = element_text(size = 8),
+    strip.background = element_blank(), strip.text = element_text(face = "bold"))
 
-ggsave(file.path(out_dir, "confounder_adjusted_DARs.pdf"), p_counts,
-  width = 7.5, height = 5)
+ggsave(file.path(fig_dir, "confounder_adjusted_DARs.pdf"), p_stack,
+  width = 11, height = max(5, 0.30 * nrow(res) + 2.2), limitsize = FALSE)
+
+# The same partition scaled to 100%, so a comparison with 60 DARs is as readable
+# as one with 6000. Read the two together: this one shows what fraction survives
+# the adjustment, the one above shows how many regions that is.
+p_stack_pct <- ggplot(cat_all, aes(x = label, y = n, fill = overlap)) +
+  geom_col(width = 0.7, colour = "grey25", linewidth = 0.15, position = "fill") +
+  coord_flip() +
+  facet_wrap(~direction) +
+  scale_fill_manual(values = overlap_cols) +
+  scale_y_continuous(labels = scales::percent,
+    expand = expansion(mult = c(0, 0.02))) +
+  labs(
+    title = "Overlap of DAR calls, as a share of each comparison",
+    subtitle = "Same partition as the count figure, scaled to 100% per comparison and direction.",
+    x = NULL, y = "Share of DARs", fill = NULL
+  ) +
+  theme_classic(base_size = 11) +
+  theme(legend.position = "top", plot.subtitle = element_text(size = 8),
+    strip.background = element_blank(), strip.text = element_text(face = "bold"))
+
+ggsave(file.path(fig_dir, "confounder_adjusted_DARs_proportion.pdf"), p_stack_pct,
+  width = 11, height = max(5, 0.30 * nrow(res) + 2.2), limitsize = FALSE)
 
 ## ---- 5. Figure 2: per-region effect sizes, adjusted vs unadjusted -----------
 # The count bar chart alone does not show that the SAME regions move the same
 # way. This panel does: every tested region, unadjusted log2FC on x against
 # adjusted log2FC on y, with the Pearson correlation annotated per comparison.
-merged_df <- dplyr::bind_rows(merged_list) %>%
+#
+# Across the full sweep there are far more comparisons than fit in one readable
+# figure, so the panels are the max_scatter_panels comparisons with the most
+# unadjusted DARs -- the ones the manuscript's claims actually rest on. The
+# summary table above covers all of them.
+res_scatter <- res[order(-res$DARs_unadjusted), , drop = FALSE]
+res_scatter <- utils::head(res_scatter, max_scatter_panels)
+message("Drawing scatter panels for ", nrow(res_scatter), " of ", nrow(res),
+  " comparisons (most unadjusted DARs first)")
+
+want_keys <- key_of(res_scatter$cell, res_scatter$comparison)
+sel_jobs <- Filter(function(j) key_of(j$cell, j$comparison) %in% want_keys, jobs)
+
+merged_df <- dplyr::bind_rows(lapply(sel_jobs, function(j) {
+  m <- tryCatch(build_merged(j), error = function(e) NULL)
+  gc()
+  m
+})) %>%
   dplyr::mutate(
     panel = paste0(cell, "\n", comparison),
     status = dplyr::case_when(
@@ -274,7 +411,7 @@ p_scatter <- ggplot(plot_pts, aes(x = log2FC_unadj, y = log2FC_adj, colour = sta
   geom_point(size = 0.5, alpha = 0.5) +
   geom_text(data = cor_lab, inherit.aes = FALSE,
     aes(x = -Inf, y = Inf, label = lab), hjust = -0.1, vjust = 1.2, size = 3) +
-  facet_wrap(~panel, scales = "free") +
+  facet_wrap(~panel, scales = "free", ncol = min(4, max(1, nrow(res_scatter)))) +
   scale_colour_manual(values = c(
     "not significant" = "grey80", "DAR unadjusted only" = "#3C5488",
     "DAR adjusted only" = "#E64B35", "DAR in both" = "#4A2377"
@@ -282,26 +419,40 @@ p_scatter <- ggplot(plot_pts, aes(x = log2FC_unadj, y = log2FC_adj, colour = sta
   guides(colour = guide_legend(override.aes = list(size = 2, alpha = 1))) +
   labs(
     title = "Per-region effect sizes are unchanged by technical-covariate adjustment",
-    subtitle = "Dashed line, y = x. Each point is one tested region.",
+    subtitle = paste0("Dashed line, y = x. Each point is one tested region. ",
+      nrow(res_scatter), " of ", nrow(res),
+      " comparisons shown, ranked by unadjusted DAR count."),
     x = "log2 fold change, unadjusted model",
     y = "log2 fold change, QC-adjusted model", colour = NULL
   ) +
   theme_classic(base_size = 11) +
   theme(legend.position = "top", plot.subtitle = element_text(size = 9))
 
-ggsave(file.path(out_dir, "confounder_adjusted_DAR_l2fc_scatter.pdf"), p_scatter,
-  width = 9, height = 7)
+n_col <- min(4, max(1, nrow(res_scatter)))
+n_row <- ceiling(nrow(res_scatter) / n_col)
+ggsave(file.path(fig_dir, "confounder_adjusted_DAR_l2fc_scatter.pdf"), p_scatter,
+  width = 2.6 * n_col + 1.5, height = 2.6 * n_row + 1.5, limitsize = FALSE)
 
-# Per-region table for every region called a DAR by either model, so each number
-# in the two figures can be traced back. Regions significant in neither model are
-# left out; the full merge is tens of millions of rows across the comparisons.
-dar_regions <- merged_df[merged_df$isDiff_unadj | merged_df$isDiff_adj,
-  c("cell", "comparison", "id", "log2FC_unadj", "padj_unadj", "isDiff_unadj",
-    "log2FC_adj", "padj_adj", "isDiff_adj", "status")]
+# Per-region table for every region called a DAR by either model, across ALL
+# comparisons, so each number in the two figures can be traced back. Regions
+# significant in neither model are left out; the full merge would be tens of
+# millions of rows. This one stays in the scratch dir, not the repo.
+dar_regions <- dplyr::bind_rows(dar_list)
+if (nrow(dar_regions) > 0) {
+  dar_regions <- dar_regions %>%
+    dplyr::mutate(status = dplyr::case_when(
+      isDiff_unadj & isDiff_adj ~ "DAR in both",
+      isDiff_unadj ~ "DAR unadjusted only",
+      TRUE ~ "DAR adjusted only"
+    )) %>%
+    dplyr::select(cell, comparison, id, log2FC_unadj, padj_unadj, isDiff_unadj,
+      log2FC_adj, padj_adj, isDiff_adj, status)
+}
 write.csv(dar_regions,
   file.path(out_dir, "confounder_adjusted_DAR_regions.csv"), row.names = FALSE)
 message("Wrote ", nrow(dar_regions), " region rows (DAR in either model)")
 
-message("Done. Figures and tables in ", out_dir)
+message("Done. Figures and summary tables in ", fig_dir,
+  "; per-region table in ", out_dir)
 
 #####################################################################

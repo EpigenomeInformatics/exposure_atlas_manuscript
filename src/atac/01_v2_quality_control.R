@@ -686,7 +686,7 @@ write.csv(assoc_df,
 # Fixed row order: the three design covariates (cohort, control status, exposure
 # group) first, then the donor covariates, then the technical QC metrics.
 covariate_order <- c(
-  "CellType", "Cohort", "Exposure", "Control_status", "Exposure_group",
+  "CellType", "Cohort", "Control_status", "Exposure_group",
   "Age", "Sex_observed", "Sex_predicted", "Sampling_day",
   "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
 )
@@ -719,11 +719,12 @@ ggsave(p_assoc,
 )
 
 ## ---- Per-(sample x cell type) association: adds Cell type and Exposure -------
-# The analysis above aggregates over cell types (one profile per sample), so it
-# cannot show how much structure is explained by cell type. Here we repeat it at
-# the pseudobulk level of sample x cell type, adding Cell type as a covariate
-# alongside exposure (cohort) and the sample-level covariates, so the heatmap
-# reports both exposure and cell type.
+# The analysis above aggregates over cell types (one profile per sample), so cell
+# type does not vary within it and cannot be tested there at all. This section is
+# therefore the COMPLETE heatmap: the same PCA repeated at the pseudobulk level of
+# sample x cell type, where every covariate -- cell type, cohort, control status,
+# exposure group, the donor covariates and the technical QC metrics -- is present
+# and each is tested separately (univariate) against each PC.
 ct_col <- "ClusterCellTypes"   # cell-type annotation used across the atlas
 
 assoc_ct_results <- list()
@@ -737,6 +738,9 @@ for (emb in embeddings_to_test) {
   pb_emb <- sums / n_grp                       # (sample x cell type) x dims
   keep   <- n_grp >= 20                        # drop tiny, noisy pseudobulks
   pb_emb <- pb_emb[keep, , drop = FALSE]
+  # NB subset n_grp with the same filter, so the pseudobulk cell counts stay
+  # aligned with the retained rows and can be tested as a technical covariate.
+  pb_ncells <- n_grp[keep]
 
   pca <- stats::prcomp(pb_emb, center = TRUE, scale. = TRUE)
   var_explained <- (pca$sdev^2) / sum(pca$sdev^2)
@@ -748,15 +752,18 @@ for (emb in embeddings_to_test) {
   pb_ct     <- key[, 2]
   cvp       <- covar[match(pb_sample, covar$arrow_name), ]
 
+  # Same covariate set as the sample-level heatmap, plus CellType. QC_nCells is
+  # the number of cells behind each pseudobulk here, not the per-sample count.
   covariate_cols <- list(
     CellType          = factor(pb_ct),
-    Exposure          = cvp$exposure_type,
+    Cohort            = cvp$exposure_type,
     Control_status    = cvp$control_status,
     Exposure_group    = cvp$exposure_group,
     Age               = cvp$Age_numeric,
     Sex_observed      = cvp$Sex,
-    Sampling_day      = cvp$sampling_day,
     Sex_predicted     = cvp$Sex_predicted,
+    Sampling_day      = cvp$sampling_day,
+    QC_nCells         = pb_ncells,
     QC_meanTSS        = cvp$mean_TSS,
     QC_meanLog10Frags = cvp$mean_log10_nFrags,
     QC_meanFRIP       = cvp$mean_FRIP
@@ -794,7 +801,10 @@ p_assoc_ct <- ggplot(assoc_ct_df, aes(x = PC, y = covariate, fill = -log10(p_adj
   scale_y_discrete(limits = order_rows(assoc_ct_df)) +
   labs(
     title = "Association of pseudobulk (sample x cell type) PCs with covariates",
-    subtitle = "tile label = variance explained (R^2); shading = significance. Cell type, cohort, control status and exposure group tested across all pseudobulks",
+    subtitle = paste0(
+      "Every covariate tested separately against each PC. Tile label = variance explained (R^2); shading = significance.\n",
+      "Unit of observation = one sample x cell-type pseudobulk (>= 20 cells); cell type can only be tested at this level, not on sample-level PCs."
+    ),
     x = NULL, y = NULL
   ) +
   theme_classic() +
