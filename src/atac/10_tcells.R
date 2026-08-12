@@ -510,22 +510,30 @@ write.csv(as.data.frame(tex_summary),
 ## <<< END REVISION -----------------------------------------------------------
 
 
-## <<< REVISION (R2): per-cluster CD4/CD8 gene-activity distributions -----------
-## Side-by-side violin/box plots of CD4 and CD8 (CD8A, CD8B) gene activity across
-## the six HIV CD8 subclusters, showing that all clusters remain CD8A/CD8B-
-## positive and CD4-low (Tex = C1/C2). This is the quantitative, per-cluster
-## companion to the marker UMAPs and shows the CD8A gradient within the compartment.
-comp_genes <- intersect(c("CD8A", "CD8B", "CD4"), rownames(gs_sub))
+## <<< REVISION (R2): per-cluster lineage + exhaustion activity distributions ---
+## Side-by-side violin/box plots of the lineage markers (CD8A, CD8B, CD4) and the
+## two canonical exhaustion markers (CTLA4, HAVCR2) across the six HIV CD8
+## subclusters. Shows that all clusters remain CD8A/CD8B-positive and CD4-low,
+## and that CTLA4/HAVCR2 gene activity is elevated in the Tex clusters (C1/C2).
+## This is the quantitative, per-cluster companion to the marker UMAPs and shows
+## the CD8A gradient within the compartment.
+comp_genes_wanted <- c("CD8A", "CD8B", "CD4", "CTLA4", "HAVCR2")
+# gs_sub above holds only the lineage/Treg panel, so the exhaustion markers are
+# taken straight from the full gene-score matrix instead.
+comp_genes <- intersect(comp_genes_wanted, gs_rownames)
+comp_mat   <- assay(gsm)[match(comp_genes, gs_rownames), , drop = FALSE]
+rownames(comp_mat) <- comp_genes
+
 # align gene-activity columns to the project cell order before attaching clusters
 cell_ids         <- colnames(gsm)
 clusters_by_cell <- as.character(project$ClustersHIV)[match(cell_ids, project$cellNames)]
 
 comp_df <- do.call(rbind, lapply(comp_genes, function(g) {
-  data.frame(Gene = g, Cluster = clusters_by_cell, Activity = gs_sub[g, ])
+  data.frame(Gene = g, Cluster = clusters_by_cell, Activity = comp_mat[g, ])
 })) %>%
   dplyr::mutate(
     Cluster = factor(Cluster, levels = paste0("C", 1:6)),
-    Gene    = factor(Gene, levels = c("CD8A", "CD8B", "CD4"))
+    Gene    = factor(Gene, levels = comp_genes)
   )
 
 comp_violin <- ggplot(comp_df, aes(x = Cluster, y = Activity, fill = Cluster)) +
@@ -539,7 +547,7 @@ comp_violin <- ggplot(comp_df, aes(x = Cluster, y = Activity, fill = Cluster)) +
 
 ggsave(comp_violin,
        file = paste0(fig_dir, "hiv_cluster_CD4_CD8_geneactivity_violin.pdf"),
-       width = 10, height = 4)
+       width = 14, height = 4)
 
 # Per-cluster mean gene activity table (for the legend/text)
 comp_means <- comp_df %>%

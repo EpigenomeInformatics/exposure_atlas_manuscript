@@ -101,51 +101,66 @@ if (!is.null(res_real)) {
 }
 
 #####################################################################
-# (2) PSEUDO-replicates: split each sample's cells into n_rep fake replicates,
-#     repeated over several seeds to show the DA calls are unstable.
+# (2) PSEUDO-replicates: split each sample's cells into n_rep fake replicates.
+#     Splitting one sample's cells into "replicates" is pseudoreplication: the
+#     fake replicates are not independent, so the model sees far more replication
+#     than the 4 real subjects provide and inflates significance. We demonstrate
+#     the inflation with a NULL: permute the stage labels within each subject (so
+#     there is no real stage effect) and re-run. If the null still calls many
+#     "significant" neighbourhoods, those hits are an artefact of the fake
+#     replicates, not stage biology.
 #####################################################################
-run_pseudo <- function(seed, n_rep = 3) {
+run_pseudo <- function(seed, n_rep = 3, permute = FALSE) {
   set.seed(seed)
   m2 <- milo
+
+  stage_use <- as.character(m2$Stage)
+  if (permute) {
+    # shuffle the 3 stages within each subject's 3 samples -> no real stage effect
+    perm_map <- sample_to_timepoint
+    for (s in unique(sample_to_subject)) {
+      smp <- names(sample_to_subject)[sample_to_subject == s]
+      perm_map[smp] <- sample(sample_to_timepoint[smp])
+    }
+    stage_use <- perm_map[m2$Sample]
+  }
+  m2$StageTest    <- factor(stage_use, levels = c("pre", "acute", "chronic"))
   m2$PseudoSample <- paste0(m2$Sample, "_r", sample(seq_len(n_rep), ncol(m2), replace = TRUE))
   m2 <- countCells(m2, meta.data = as.data.frame(colData(m2)), samples = "PseudoSample")
-  dd <- distinct(as.data.frame(colData(m2))[, c("PseudoSample", "Subject", "Stage")])
+  dd <- distinct(as.data.frame(colData(m2))[, c("PseudoSample", "Subject", "StageTest")])
   rownames(dd) <- dd$PseudoSample
   r <- tryCatch(
-    testNhoods(m2, design = ~ Subject + Stage, design.df = dd, reduced.dim = "LSI"),
-    error = function(e) { message("  seed ", seed, " failed: ", conditionMessage(e)); NULL })
-  if (is.null(r)) return(NULL)
-  sig <- which(r$SpatialFDR < 0.1)
-  list(n_sig = length(sig), sig_nhoods = r$Nhood[sig])
+    testNhoods(m2, design = ~ Subject + StageTest, design.df = dd, reduced.dim = "LSI"),
+    error = function(e) {
+      message("  seed ", seed, " (permute=", permute, ") failed: ", conditionMessage(e)); NULL })
+  if (is.null(r)) return(NA_integer_)
+  sum(r$SpatialFDR < 0.1, na.rm = TRUE)
 }
 
-seeds       <- 1:5
-pseudo_runs <- lapply(seeds, run_pseudo)
-n_sig       <- sapply(pseudo_runs, function(x) if (is.null(x)) NA_integer_ else x$n_sig)
+seeds      <- 1:5
+n_sig_real <- sapply(seeds, run_pseudo, permute = FALSE)  # real stage labels
+n_sig_null <- sapply(seeds, run_pseudo, permute = TRUE)   # permuted (null) labels
 
-# Jaccard overlap of the significant-neighbourhood sets between seeds (stability)
-sig_sets <- lapply(pseudo_runs, function(x) if (is.null(x)) integer(0) else x$sig_nhoods)
-jac <- function(a, b) if (length(union(a, b)) == 0) NA_real_ else length(intersect(a, b)) / length(union(a, b))
-jac_mat <- outer(seq_along(sig_sets), seq_along(sig_sets),
-                 Vectorize(function(i, j) jac(sig_sets[[i]], sig_sets[[j]])))
+pseudo_summary <- data.frame(seed = seeds,
+                             n_sig_real_labels   = n_sig_real,
+                             n_sig_permuted_null = n_sig_null)
+write.csv(pseudo_summary, paste0(fig_dir, "milo_hiv_pseudo_seed_summary.csv"), row.names = FALSE)
+print(pseudo_summary)
 
-write.csv(data.frame(seed = seeds, n_significant_nhoods = n_sig),
-          paste0(fig_dir, "milo_hiv_pseudo_seed_summary.csv"), row.names = FALSE)
-write.csv(round(jac_mat, 3),
-          paste0(fig_dir, "milo_hiv_pseudo_seed_jaccard.csv"), row.names = FALSE)
-
-message("Pseudo-replicate significant-neighbourhood counts by seed: ",
-        paste(n_sig, collapse = ", "))
-message("Mean pairwise Jaccard overlap of the significant sets across seeds: ",
-        round(mean(jac_mat[upper.tri(jac_mat)], na.rm = TRUE), 3),
-        "  (low overlap = the DA calls are an artefact of the random split)")
+message(sprintf(
+  "PSEUDO-replicate DA: real-label median %d vs permuted-null median %d significant neighbourhoods (SpatialFDR < 0.1).",
+  as.integer(median(n_sig_real, na.rm = TRUE)), as.integer(median(n_sig_null, na.rm = TRUE))))
+message("A large permuted-null count means the significance is a pseudoreplication ",
+        "artefact of the fake replicates, not a real stage effect.")
 
 #####################################################################
 # Interpretation for the response letter:
-#  - REAL model: report n_sig_real (expected ~0), i.e. no neighbourhood reaches
-#    significance once donor structure is respected at n = 4 subjects.
-#  - PSEUDO model: apparent hits appear, but n varies by seed and the sets barely
-#    overlap (low mean Jaccard), so the significance is manufactured by the fake
-#    replicates. This is why we keep the subject-level cluster test rather than a
-#    neighbourhood-based DA for this cohort.
+#  - REAL model (Section 1, ~Subject + Stage on the 12 samples): the honest
+#    donor-aware test. Report n_sig_real from that section as the main result.
+#  - PSEUDO model: to give Milo "replication" we split cells into fake replicates,
+#    which is pseudoreplication. It calls hundreds of significant neighbourhoods,
+#    but the permuted-stage NULL calls a comparable number -> those hits are false
+#    positives manufactured by the fake replicates. Either way (underpowered real
+#    model, or inflated pseudo model) neighbourhood DA does not give a trustworthy
+#    answer at 4 subjects, which is why we keep the subject-level cluster test.
 #####################################################################

@@ -1,6 +1,6 @@
-"seed","n_significant_nhoods"
-1,265
-2,248
-3,266
-4,278
-5,260
+"seed","n_sig_real_labels","n_sig_permuted_null"
+1,265,217
+2,248,256
+3,266,235
+4,278,206
+5,260,86

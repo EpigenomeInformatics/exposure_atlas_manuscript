@@ -71,6 +71,21 @@ qc_by_sample <- getCellColData(project,
     .groups = "drop"
   ) %>%
   dplyr::mutate(sample_key = norm_key(Sample))
+
+# The ChrAccR sample ids ("Influenza_ctrl_flu01_1") and the ArchR Sample ids
+# ("ATAC_055") are different schemes, so a direct key match fails. Build a lookup
+# from EVERY ArchR per-sample descriptor value to the ArchR Sample, so a ChrAccR
+# id that matches any descriptor column can be bridged to the QC metrics.
+archr_sample_meta <- as.data.frame(getCellColData(project))
+archr_sample_meta <- archr_sample_meta[!duplicated(archr_sample_meta$Sample), , drop = FALSE]
+message("ArchR per-sample descriptor columns: ",
+        paste(colnames(archr_sample_meta), collapse = ", "))
+id_lookup <- do.call(rbind, lapply(colnames(archr_sample_meta), function(cn) {
+  data.frame(key = norm_key(archr_sample_meta[[cn]]),
+             Sample = archr_sample_meta$Sample, column = cn, stringsAsFactors = FALSE)
+}))
+id_lookup <- id_lookup[!is.na(id_lookup$key) & id_lookup$key != "", ]
+id_lookup <- id_lookup[!duplicated(id_lookup$key), ]
 rm(project)
 gc()
 
@@ -82,28 +97,33 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0)) 
   ds <- ChrAccR::loadDsAcc(file.path(anaDir_existing, cell, "data", "dsATAC_filtered"))
   sa <- ChrAccR::getSampleAnnot(ds)
 
-  # match ChrAccR sample ids to the ArchR QC table. ChrAccR sample ids derive
-  # from the per-cell-type BED filenames; normalise both sides to a common key
-  # before matching.
-  sa_keys <- norm_key(rownames(sa))
-  if (all(is.na(match(sa_keys, qc_by_sample$sample_key)))) {
-    sa_keys <- norm_key(sa[[1]])   # fall back to the first annotation column
-  }
-  idx <- match(sa_keys, qc_by_sample$sample_key)
-  # substring fallback for any residual mismatch (e.g. cohort prefixes)
-  for (ii in which(is.na(idx))) {
-    hit <- which(vapply(qc_by_sample$sample_key,
-      function(k) grepl(k, sa_keys[ii], fixed = TRUE) ||
-                  grepl(sa_keys[ii], k, fixed = TRUE), logical(1)))
-    if (length(hit) == 1) idx[ii] <- hit
-  }
+  # Bridge ChrAccR sample ids to ArchR Sample ids via the descriptor lookup, then
+  # to the QC metrics. Try the rownames and every annotation column, and report
+  # which one mapped best (so we can see the correct bridge column if this fails).
+  try_map <- function(v) id_lookup$Sample[match(norm_key(v), id_lookup$key)]
+  cand   <- c(list(.rownames = rownames(sa)), as.list(as.data.frame(sa)))
+  mapped <- lapply(cand, try_map)
+  scores <- vapply(mapped, function(m) sum(!is.na(m)), integer(1))
+  best   <- names(cand)[which.max(scores)]
+  message("  ChrAccR->ArchR mapping scores (matched / ", length(rownames(sa)), "): ",
+          paste(sprintf("%s=%d", names(cand), scores), collapse = ", "))
+  arch_samp <- mapped[[best]]
+  idx <- match(arch_samp, qc_by_sample$Sample)
+
   if (any(is.na(idx))) {
     warning(cell, " / ", comp, ": ", sum(is.na(idx)),
-      " sample(s) could not be matched to QC metrics; they will be dropped by the model")
-    message("  unmatched sample keys: ", paste(head(unique(sa_keys[is.na(idx)]), 10), collapse = ", "))
-    message("  available QC keys: ", paste(head(qc_by_sample$sample_key, 20), collapse = ", "))
+      " sample(s) could not be matched to QC metrics")
+    message("  unmatched ChrAccR ids: ", paste(head(rownames(sa)[is.na(idx)], 10), collapse = ", "))
+    message("  sa columns: ", paste(colnames(sa), collapse = ", "))
   } else {
-    message("  matched all ", length(idx), " samples to QC metrics")
+    message("  matched all ", length(idx), " samples to QC metrics via '", best, "'")
+  }
+  # DESeq2 rejects NA in the design, so if any samples are still unmatched, stop
+  # with a clear message rather than the opaque "cannot contain NA" error.
+  if (mean(is.na(idx)) > 0) {
+    stop(sum(is.na(idx)), " of ", length(idx),
+      " samples could not be mapped to QC metrics; fix the id_lookup / bridge ",
+      "column (see mapping scores above) before adjusting.")
   }
   for (cc in c(qc_adj_cols, "mean_log10_nFrags", "n_cells")) {
     sa[[cc]] <- qc_by_sample[[cc]][idx]
@@ -248,6 +268,14 @@ if (!is.null(res) && nrow(res) > 0) {
     theme_classic(base_size = 12) +
     theme(legend.position = "top", plot.subtitle = element_text(size = 9))
   ggsave(file.path(out_dir, "confounder_adjusted_DARs.pdf"), p, width = 7.5, height = 5)
+} else {
+  # The adjusted DESeq2 runs above write their diffTab tables to disk before this
+  # summary is assembled, so a failure in the comparison step leaves the results
+  # in out_dir with no figure. Do not fail silently: say where to pick them up.
+  message("No summary rows were produced, so no figure was drawn here. ",
+    "The adjusted result tables are still in ", out_dir, " -- run ",
+    "src/atac/07_4_confounder_adjusted_DAR_plots.R to read them and plot ",
+    "without re-fitting anything.")
 }
 
 message("Done. Results in ", out_dir)

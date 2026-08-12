@@ -49,9 +49,24 @@ project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 # which matches Table S1$arrow_name -- NOT Table S1$sampleId ("C19_mod_055").
 # We therefore join the covariates on arrow_name.
 covar <- readxl::read_excel(suppTables, sheet = "Table S1") %>%
-  dplyr::select(sampleId, arrow_name, exposure_type, record_id, Age, Sex) %>%
+  dplyr::select(sampleId, arrow_name, exposure_type, exposure_group,
+    exposure_grouping, record_id, Age, Sex) %>%
   dplyr::mutate(
+    # Cohort: C19 / HIV / Influenza / OP
     exposure_type = factor(exposure_type),
+    # Exposure group: the within-cohort condition arm (C19_mild/mod/sev/ctrl,
+    # HIV_ctrl/acu/chr, Influenza_ctrl/d3/d6/d28, OP_low/med/high). Tested as its
+    # own covariate so that within-cohort structure is not attributed to cohort.
+    exposure_group = factor(exposure_group),
+    # Control vs non-control. The unexposed arms are the "healthy" groups
+    # (C19_ctrl, HIV_ctrl, Influenza_ctrl; n = 16). NB the OP cohort has no
+    # unexposed arm -- OP_low is a low-exposure, not a healthy, group -- so every
+    # OP sample is "Exposed" and this covariate is partly nested in cohort. The
+    # cohort-adjusted column is therefore the one to read for it.
+    control_status = factor(
+      ifelse(exposure_grouping == "healthy", "Control", "Exposed"),
+      levels = c("Control", "Exposed")
+    ),
     Sex = factor(Sex),
     Age = as.numeric(Age)
   )
@@ -522,6 +537,8 @@ for (emb in embeddings_to_test) {
   # test each PC against each covariate
   covariate_cols <- list(
     Cohort = cv$exposure_type, # all samples
+    Control_status = cv$control_status, # Control vs Exposed (all samples)
+    Exposure_group = cv$exposure_group, # within-cohort condition arm
     Age = cv$Age_numeric, # C19 + HIV + OP (bin midpoints for C19)
     Sex_observed = cv$Sex, # C19 + HIV + OP (recorded/recovered)
     Sampling_day = cv$sampling_day, # within-cohort sampling time vs onset
@@ -666,6 +683,15 @@ write.csv(assoc_df,
 )
 
 ## ---- Visualise: -log10(adjusted p) per PC x covariate -----------------------
+# Fixed row order: the three design covariates (cohort, control status, exposure
+# group) first, then the donor covariates, then the technical QC metrics.
+covariate_order <- c(
+  "CellType", "Cohort", "Exposure", "Control_status", "Exposure_group",
+  "Age", "Sex_observed", "Sex_predicted", "Sampling_day",
+  "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
+)
+order_rows <- function(d) rev(intersect(covariate_order, unique(d$covariate)))
+
 p_assoc <- ggplot(
   assoc_df,
   aes(x = PC, y = covariate, fill = -log10(p_adj))
@@ -678,9 +704,10 @@ p_assoc <- ggplot(
     na.value = "grey95", name = "-log10(adj. p)"
   ) +
   scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
+  scale_y_discrete(limits = order_rows(assoc_df)) +
   labs(
     title = "Association of sample-level PCs with known covariates",
-    subtitle = "tile label = variance explained (R^2); shading = significance. Age/Sex on samples with recorded metadata; predicted Sex & QC on all samples",
+    subtitle = "tile label = variance explained (R^2); shading = significance. Cohort, control status and exposure group tested separately; Age/Sex on samples with recorded metadata; predicted Sex & QC on all samples",
     x = NULL, y = NULL
   ) +
   theme_classic() +
@@ -688,7 +715,7 @@ p_assoc <- ggplot(
 
 ggsave(p_assoc,
   filename = file.path(repo_dir, "figures/pc_covariate_association.pdf"),
-  width = 9, height = 6, units = "in", dpi = 300
+  width = 9, height = 7.5, units = "in", dpi = 300
 )
 
 ## ---- Per-(sample x cell type) association: adds Cell type and Exposure -------
@@ -724,6 +751,8 @@ for (emb in embeddings_to_test) {
   covariate_cols <- list(
     CellType          = factor(pb_ct),
     Exposure          = cvp$exposure_type,
+    Control_status    = cvp$control_status,
+    Exposure_group    = cvp$exposure_group,
     Age               = cvp$Age_numeric,
     Sex_observed      = cvp$Sex,
     Sampling_day      = cvp$sampling_day,
@@ -762,9 +791,10 @@ p_assoc_ct <- ggplot(assoc_ct_df, aes(x = PC, y = covariate, fill = -log10(p_adj
   scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
     name = "-log10(adj. p)") +
   scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
+  scale_y_discrete(limits = order_rows(assoc_ct_df)) +
   labs(
     title = "Association of pseudobulk (sample x cell type) PCs with covariates",
-    subtitle = "tile label = variance explained (R^2); shading = significance. Cell type and exposure tested across all pseudobulks",
+    subtitle = "tile label = variance explained (R^2); shading = significance. Cell type, cohort, control status and exposure group tested across all pseudobulks",
     x = NULL, y = NULL
   ) +
   theme_classic() +
@@ -772,7 +802,7 @@ p_assoc_ct <- ggplot(assoc_ct_df, aes(x = PC, y = covariate, fill = -log10(p_adj
 
 ggsave(p_assoc_ct,
   filename = file.path(repo_dir, "figures/pc_covariate_association_by_celltype.pdf"),
-  width = 9, height = 6, units = "in", dpi = 300
+  width = 9, height = 7.5, units = "in", dpi = 300
 )
 
 # quick console summary of any significant confounder associations
