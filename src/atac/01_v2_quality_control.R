@@ -255,6 +255,24 @@ message(sprintf(
   nrow(pb_mat) * length(pb_count_cols)
 ))
 
+## ---- Cell-type composition as a sample-level covariate ----------------------
+# Cell type itself cannot be tested on the sample-level PCs: each sample is a
+# single profile averaged over its cells, so cell type does not vary across the
+# rows of that PCA and there is nothing to regress against. What DOES vary per
+# sample is its cell-type COMPOSITION, and that is a legitimate sample-level
+# covariate -- it answers "is this PC just tracking how monocyte-rich a sample
+# is?", which is the question the reviewer is really asking.
+#
+# One column per cell type holding that sample's fraction of it. Each is a
+# continuous covariate tested exactly like Age or the QC metrics, so the R^2
+# values in the heatmap stay directly comparable across every row.
+pb_frac <- pb_mat / ifelse(pb_rowsum > 0, pb_rowsum, NA_real_)
+colnames(pb_frac) <- paste0("Frac_", sub("^n_cells_", "", pb_count_cols))
+pb_frac_cols <- colnames(pb_frac)
+covar <- dplyr::bind_cols(covar, as.data.frame(pb_frac))
+message("Added ", length(pb_frac_cols),
+  " cell-type composition covariate(s) to the sample-level test")
+
 ## ---- Predict donor sex from chrY and XIST accessibility ---------------------
 # Two orthogonal, depth-normalised molecular features:
 #   chrY_frac : chrY fragments / total fragments  (HIGH in XY / male)
@@ -602,6 +620,15 @@ for (emb in embeddings_to_test) {
     QC_meanFRIP = cv$mean_FRIP # technical QC
   )
 
+  # cell-type composition: one covariate per cell type (fraction of the sample)
+  covariate_cols <- c(
+    covariate_cols,
+    stats::setNames(
+      lapply(pb_frac_cols, function(cc) as.numeric(cv[[cc]])),
+      pb_frac_cols
+    )
+  )
+
   res <- do.call(rbind, lapply(seq_len(k), function(i) {
     do.call(rbind, lapply(names(covariate_cols), function(cn) {
       a <- pc_assoc(pcs[, i], covariate_cols[[cn]])
@@ -744,6 +771,7 @@ write.csv(assoc_df,
 # group) first, then the donor covariates, then the technical QC metrics.
 covariate_order <- c(
   "CellType", "Cohort", "Control_status", "Exposure_group",
+  sort(pb_frac_cols), # cell-type composition, one row per cell type
   "Age", "Sex_observed", "Sex_predicted", "Sampling_day",
   "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
 )
@@ -764,7 +792,11 @@ p_assoc <- ggplot(
   scale_y_discrete(limits = order_rows(assoc_df)) +
   labs(
     title = "Association of sample-level PCs with known covariates",
-    subtitle = "tile label = variance explained (R^2); shading = significance. Cohort, control status and exposure group tested separately; Age/Sex on samples with recorded metadata; predicted Sex & QC on all samples",
+    subtitle = paste0(
+      "Every covariate tested separately against each PC. Tile label = variance explained (R^2); shading = significance.\n",
+      "Frac_* rows are each sample's cell-type composition -- cell type itself cannot be tested here, since one sample is a single profile averaged over its cells.\n",
+      "Age/Sex on samples with recorded metadata; predicted Sex and QC on all samples."
+    ),
     x = NULL, y = NULL
   ) +
   theme_classic() +
@@ -772,7 +804,9 @@ p_assoc <- ggplot(
 
 ggsave(p_assoc,
   filename = file.path(repo_dir, "figures/pc_covariate_association.pdf"),
-  width = 9, height = 7.5, units = "in", dpi = 300
+  width = 9.5,
+  height = max(7.5, 0.5 * length(unique(assoc_df$covariate)) + 2.5),
+  units = "in", dpi = 300, limitsize = FALSE
 )
 
 ## ---- Per-(sample x cell type) association: adds Cell type and Exposure -------

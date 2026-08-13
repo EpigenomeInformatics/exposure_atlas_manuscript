@@ -833,3 +833,96 @@ hm_motifs <- ComplexHeatmap::Heatmap(
 pdf(file = paste0(fig_dir, "hiv_chromVAR_cluster_heatmap_altius.pdf"), width = 6, height = 11)
 ComplexHeatmap::draw(hm_motifs)
 dev.off()
+
+#####################################################################
+## <<< REVISION: lineage + exhaustion marker activity across ALL T-cell types --
+## The panel above is restricted to the HIV CD8 subclusters. This is the same
+## marker set (CD8A, CD8B, CD4, CTLA4, HAVCR2) across the T-cell compartment of
+## the whole atlas, with the annotated cell type on the x axis instead of the HIV
+## subcluster, so the exhaustion markers can be read against the lineage markers
+## in every T-cell population rather than only in the HIV subset.
+##
+## T_mix is excluded: it is the mixed/unresolved T-cell cluster, so its marker
+## distributions are a blend of the populations either side of it and would be
+## read as intermediate biology rather than as an annotation artefact.
+#####################################################################
+
+tcell_types <- c("T_naive", "T_mem_CD4", "T_mem_CD8", "T_mait") # T_mix excluded
+
+# Canonical atlas cell-type colours (same values as 13_cvar_analysis.R and
+# 14_l2fc.R), so this panel is comparable with the rest of the figures.
+tcell_palette <- c(
+  "T_naive"   = "#C7E9B4",
+  "T_mem_CD4" = "#4292c6",
+  "T_mem_CD8" = "#0074cc",
+  "T_mait"    = "#41B6C4"
+)
+
+# `project` above is the HIV-only subset, so reload the full atlas if the build
+# branch did not already put it in the session.
+if (!exists("echo_full")) {
+  echo_full <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
+}
+
+cd_all <- as.data.frame(getCellColData(echo_full, select = "ClusterCellTypes"))
+t_cells <- rownames(cd_all)[cd_all$ClusterCellTypes %in% tcell_types]
+message("T-cell compartment: ", length(t_cells), " cells across ",
+        length(tcell_types), " cell types (T_mix excluded)")
+tproj <- ArchR::subsetCells(echo_full, cellNames = t_cells)
+
+# Subset the cells FIRST, so only the T-cell compartment is pulled into memory.
+gsm_t   <- getMatrixFromProject(tproj, useMatrix = "GeneScoreMatrix")
+gs_t_rn <- rowData(gsm_t)$name
+# Reuse the marker set from the HIV panel so the two figures stay identical;
+# fall back to the literal list if only this section is being re-run.
+marker_genes_t <- if (exists("comp_genes_wanted")) comp_genes_wanted else
+  c("CD8A", "CD8B", "CD4", "CTLA4", "HAVCR2")
+genes_t <- intersect(marker_genes_t, gs_t_rn)
+missing_t <- setdiff(marker_genes_t, genes_t)
+if (length(missing_t)) {
+  message("  not in the gene-score matrix, dropped: ",
+          paste(missing_t, collapse = ", "))
+}
+mat_t <- assay(gsm_t)[match(genes_t, gs_t_rn), , drop = FALSE]
+rownames(mat_t) <- genes_t
+
+# align the gene-activity columns to the cell-type labels
+ct_by_cell <- as.character(
+  getCellColData(tproj, select = "ClusterCellTypes", drop = TRUE)
+)[match(colnames(gsm_t), tproj$cellNames)]
+
+tcell_df <- do.call(rbind, lapply(genes_t, function(g) {
+  data.frame(Gene = g, CellType = ct_by_cell, Activity = mat_t[g, ])
+})) %>%
+  dplyr::mutate(
+    CellType = factor(CellType, levels = tcell_types),
+    Gene     = factor(Gene, levels = genes_t)
+  )
+
+tcell_violin <- ggplot(tcell_df, aes(x = CellType, y = Activity, fill = CellType)) +
+  geom_violin(scale = "width", trim = TRUE, linewidth = 0.2) +
+  geom_boxplot(width = 0.12, outlier.shape = NA, fill = "white", linewidth = 0.2) +
+  facet_wrap(~ Gene, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = tcell_palette) +
+  labs(x = "T-cell type", y = "Gene activity") +
+  theme_classic(base_size = 10) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(tcell_violin,
+       file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_violin.pdf"),
+       width = 14, height = 4)
+
+# Per-cell-type mean gene activity, for the legend/text
+tcell_means <- tcell_df %>%
+  dplyr::group_by(Gene, CellType) %>%
+  dplyr::summarise(mean_activity = round(mean(Activity, na.rm = TRUE), 3),
+                   n_cells = dplyr::n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = CellType,
+                     values_from = c(mean_activity, n_cells))
+write.csv(tcell_means,
+          file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_means.csv"),
+          row.names = FALSE)
+## <<< END REVISION -----------------------------------------------------------
+
+#####################################################################
