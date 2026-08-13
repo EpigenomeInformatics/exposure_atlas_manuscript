@@ -742,6 +742,16 @@ write.csv(assoc_df,
 )
 
 ## ---- Visualise: -log10(adjusted p) per PC x covariate -----------------------
+# NB on the colour scale: for a strong association pf() returns a p-value that
+# underflows to exactly 0, and -log10(0) is Inf. ggplot treats Inf as
+# out-of-bounds and paints it with na.value, so the STRONGEST tiles came out the
+# same pale grey as the missing ones -- CellType at R^2 = 0.98 looked weaker than
+# CellType at 0.82. Floor the p-value at the smallest representable double and
+# cap the scale so those tiles saturate at the top of the ramp instead.
+p_cap <- 50
+neglog10 <- function(p, cap = p_cap) {
+  pmin(-log10(pmax(p, .Machine$double.xmin)), cap)
+}
 # Fixed row order: the three design covariates (cohort, control status, exposure
 # group) first, then the donor covariates, then the technical QC metrics.
 covariate_order <- c(
@@ -753,14 +763,15 @@ order_rows <- function(d) rev(intersect(covariate_order, unique(d$covariate)))
 
 p_assoc <- ggplot(
   assoc_df,
-  aes(x = PC, y = covariate, fill = -log10(p_adj))
+  aes(x = PC, y = covariate, fill = neglog10(p_adj))
 ) +
   geom_tile(color = "grey90") +
   geom_text(aes(label = ifelse(is.na(p_adj), "", sprintf("%.2f", r2))), size = 3) +
   facet_wrap(~embedding, ncol = 1) +
   scale_fill_gradient(
     low = "white", high = "#006400",
-    na.value = "grey95", name = "-log10(adj. p)"
+    na.value = "grey95",
+    name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")
   ) +
   scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
   scale_y_discrete(limits = order_rows(assoc_df)) +
@@ -856,12 +867,12 @@ write.csv(assoc_ct_df,
   row.names = FALSE
 )
 
-p_assoc_ct <- ggplot(assoc_ct_df, aes(x = PC, y = covariate, fill = -log10(p_adj))) +
+p_assoc_ct <- ggplot(assoc_ct_df, aes(x = PC, y = covariate, fill = neglog10(p_adj))) +
   geom_tile(color = "grey90") +
   geom_text(aes(label = ifelse(is.na(p_adj), "", sprintf("%.2f", r2))), size = 3) +
   facet_wrap(~embedding, ncol = 1) +
   scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
-    name = "-log10(adj. p)") +
+    name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")) +
   scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
   scale_y_discrete(limits = order_rows(assoc_ct_df)) +
   labs(
