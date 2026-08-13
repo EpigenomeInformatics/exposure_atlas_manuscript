@@ -899,21 +899,77 @@ tcell_df <- do.call(rbind, lapply(genes_t, function(g) {
     Gene     = factor(Gene, levels = genes_t)
   )
 
-tcell_violin <- ggplot(tcell_df, aes(x = CellType, y = Activity, fill = CellType)) +
+## Gene-activity scores are zero-inflated with long right tails: nearly all the
+## mass sits at zero and a few cells reach 50. On a linear axis with scale =
+## "width", the drawn shape is set by those few extreme cells and everything
+## informative is compressed into the bottom of the panel. Two readable views:
+
+## ---- (a) Dot plot: detection rate and mean level ----------------------------
+## The standard readout for zero-inflated single-cell data. Dot SIZE is the
+## percentage of cells with non-zero activity, dot COLOUR is the mean activity
+## scaled within each gene (so genes on different absolute scales are
+## comparable). This separates "how many cells have the marker at all" from
+## "how strong it is where present", which a violin conflates.
+tcell_dot <- tcell_df %>%
+  dplyr::group_by(Gene, CellType) %>%
+  dplyr::summarise(
+    n_cells      = dplyr::n(),
+    pct_detected = 100 * mean(Activity > 0, na.rm = TRUE),
+    mean_all     = mean(Activity, na.rm = TRUE),
+    mean_detected = mean(Activity[Activity > 0], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  dplyr::group_by(Gene) %>%
+  dplyr::mutate(mean_scaled = as.numeric(scale(mean_all))) %>%
+  dplyr::ungroup()
+
+p_dot <- ggplot(tcell_dot, aes(x = CellType, y = Gene)) +
+  geom_point(aes(size = pct_detected, colour = mean_scaled)) +
+  scale_size_continuous(range = c(1, 9), name = "% cells\ndetected") +
+  scale_colour_gradient2(low = "#4292c6", mid = "grey92", high = "#B2182B",
+    midpoint = 0, name = "Mean activity\n(z within gene)") +
+  scale_y_discrete(limits = rev(levels(tcell_df$Gene))) +
+  labs(x = "T-cell type", y = NULL) +
+  theme_classic(base_size = 11) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major = element_line(colour = "grey94", linewidth = 0.3))
+
+ggsave(p_dot,
+       file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_dotplot.pdf"),
+       width = 6.5, height = 4)
+
+## ---- (b) Violin on a log scale ----------------------------------------------
+## Same distributions as before, but log1p-transformed so the zero-inflated bulk
+## is resolved instead of being flattened by the tail. Kept as the companion to
+## the dot plot for anyone who wants the full distribution rather than a summary.
+tcell_violin <- ggplot(tcell_df,
+    aes(x = CellType, y = log1p(Activity), fill = CellType)) +
   geom_violin(scale = "width", trim = TRUE, linewidth = 0.2) +
   geom_boxplot(width = 0.12, outlier.shape = NA, fill = "white", linewidth = 0.2) +
-  facet_wrap(~ Gene, nrow = 1, scales = "free_y") +
+  facet_wrap(~ Gene, nrow = 1) +
   scale_fill_manual(values = tcell_palette) +
-  labs(x = "T-cell type", y = "Gene activity") +
+  labs(x = "T-cell type", y = expression(log[1 * p] ~ "(gene activity)")) +
   theme_classic(base_size = 10) +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 45, hjust = 1))
 
 ggsave(tcell_violin,
        file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_violin.pdf"),
-       width = 14, height = 4)
+       width = 12, height = 4)
 
-# Per-cell-type mean gene activity, for the legend/text
+## ---- Numbers behind both panels ---------------------------------------------
+## NB the unit here is the CELL. Every cell is one observation, so these are
+## descriptive only -- a formal comparison between cell types would be
+## pseudoreplicated across the cells of a donor and must be done at donor level.
+write.csv(
+  tcell_dot %>%
+    dplyr::mutate(dplyr::across(c(pct_detected, mean_all, mean_detected,
+      mean_scaled), ~ round(.x, 3))),
+  file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_summary.csv"),
+  row.names = FALSE
+)
+
+# wide per-cell-type means, kept for the figure legend
 tcell_means <- tcell_df %>%
   dplyr::group_by(Gene, CellType) %>%
   dplyr::summarise(mean_activity = round(mean(Activity, na.rm = TRUE), 3),
