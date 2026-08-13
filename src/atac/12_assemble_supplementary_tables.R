@@ -6,34 +6,42 @@
 #
 # Run LAST, after the scripts that produce the individual tables:
 #   - 01_v2_quality_control.R  -> All_Supplementary_Tables_updated.xlsx
-#         (Table S1 with the recovered metadata columns, and Table S1B)
+#         (Table S1 with the recovered metadata / sex-prediction columns, and
+#          the per-PC covariate association sheet)
 #   - 04_2_cellprops.R         -> figures/cell_prop_wilcox_bonferroni.csv
-#         (cell-type composition statistics, added here as the new Table S3)
+#         (cell-type composition statistics)
+#   - sample_annots/allc_sample_annot_final.csv
+#         (snmC-seq per-cell annotation; committed in the repo)
 #
-# This script reads the updated workbook (pre-shift) and the composition CSV,
-# inserts the composition table as Table S3, shifts every table from S3 upward
-# by one, rebuilds the Index, and writes All_Supplementary_Tables_final.xlsx.
-# It always reads the pre-shift workbook and writes a fresh final file, so it is
-# idempotent (safe to re-run).
+# TWO new tables are inserted here, so the numbering shifts twice. Rather than
+# chaining two rename passes (which is where off-by-one errors creep in), the
+# final layout is declared once in `final_layout` below and every rename is
+# derived from it. Edit that table if the order changes; nothing else needs
+# touching.
 #
-# FINAL NUMBERING (edit here if the order changes):
+# The script always reads the pre-shift workbook and writes a fresh final file,
+# so it is idempotent (safe to re-run).
+#
+# FINAL NUMBERING
 #   S1   Sample metadata of the scATAC dataset
 #   S1B  Per-PC covariate association (before/after Harmony batch correction)
-#   S2   Cluster-to-cell-type annotation mapping
-#   S3   Cell-type composition statistics (per-sample Wilcoxon, Bonferroni)   [NEW]
-#   S4   Variance partition of TF motif activity (cell type / exposure / donor)   (was S3)
-#   S5   Pairwise differential TF motif activity across cell types               (was S4)
-#   S6   Differentially accessible genes in CD8+ T-cell clusters                 (was S5)
-#   S7   Differentially accessible cCREs in CD8+ T-cell clusters                 (was S6)
-#   S8   Differential gene activity & expression, COVID-19 severe vs control     (was S7)
-#   S9   Differentially accessible cCREs, COVID-19 severe vs control             (was S8)
-#   S10  Differential gene expression (scRNA-seq), COVID-19 CD14+ monocytes      (was S9)
-#   S11  Pairwise Wilcoxon (methylTFR vs chromVAR z-score) across cell types     (was S10)
-#   S12  Differentially methylated cCREs, COVID-19 CD14+ monocytes               (was S11)
+#   S2   snmC-seq per-cell annotation                                     [NEW]
+#   S3   Cluster-to-cell-type annotation mapping                     (was S2)
+#   S4   Cell-type composition statistics                                 [NEW]
+#   S5   Variance partition of TF motif activity (S5A/B/C)      (was S3A/B/C)
+#   S6   Pairwise differential TF motif activity across cell types   (was S4)
+#   S7   Differentially accessible genes in CD8+ T-cell clusters    (was S5)
+#   S8   Differentially accessible cCREs in CD8+ T-cell clusters    (was S6)
+#   S9   Differential gene activity & expression, COVID-19 sev vs ctrl (was S7)
+#   S10  Differentially accessible cCREs, COVID-19 severe vs control (was S8)
+#   S11  Bulk RNA-seq differential expression, CD14+ monocytes      (was S9)
+#   S12  Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types (was S10)
+#   S13  Differentially methylated cCREs, COVID-19 CD14+ monocytes  (was S11)
 #####################################################################
 
 suppressPackageStartupMessages({
   library(dplyr)
+  library(tibble) # tribble() for the layout table
   library(openxlsx)
 })
 
@@ -41,17 +49,60 @@ repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
 fig_dir  <- file.path(repo_dir, "figures")
 annot    <- file.path(repo_dir, "sample_annots")
 
-# Inputs: the pre-shift workbook (S1/S1B added by 01_v2) and the composition CSV.
 supp_updated <- file.path(annot, "All_Supplementary_Tables_updated.xlsx")
 supp_master  <- file.path(annot, "All_Supplementary_Tables.xlsx")
 supp_in      <- if (file.exists(supp_updated)) supp_updated else supp_master
 supp_out     <- file.path(annot, "All_Supplementary_Tables_final.xlsx")
 comp_csv     <- file.path(fig_dir, "cell_prop_wilcox_bonferroni.csv")
+allc_csv     <- file.path(annot, "allc_sample_annot_final.csv")
 
-stopifnot(file.exists(supp_in), file.exists(comp_csv))
+stopifnot(file.exists(supp_in), file.exists(comp_csv), file.exists(allc_csv))
 message("Reading workbook: ", supp_in)
 
-# ---- publication-ready composition-statistics table (new Table S3) -----------
+## ---- 1. Old -> new numbering -----------------------------------------------
+# `old` is the sheet name in the incoming workbook, NA for the two new tables.
+final_layout <- tibble::tribble(
+  ~new,          ~old,          ~description,
+  "Table S1",    "Table S1",    "Sample metadata of the scATAC dataset",
+  "Table S1B",   "Table S1B",   paste(
+    "Association of sample-level principal components with known covariates,",
+    "before (IterativeLSI) and after (Harmony) batch correction"),
+  "Table S2",    NA,            paste(
+    "Per-cell annotation of the snmC-seq dataset: cell identifier, assigned cell",
+    "type, donor sex and age, condition, mapping and coverage statistics, and",
+    "global mCG / mCH / CCC methylation rates"),
+  "Table S3",    "Table S2",    paste(
+    "Cluster-to-cell-type annotation mapping: Jaccard similarity between each",
+    "graph-based scATAC cluster and predicted scRNA-seq labels, with final",
+    "assigned cell type and cluster size"),
+  "Table S4",    NA,            paste(
+    "Cell-type composition statistics: per-sample cell-type proportions compared",
+    "between each exposure group and its matched within-cohort control",
+    "(two-sided Wilcoxon rank-sum test, Bonferroni-adjusted)"),
+  "Table S5",    "Table S3",    paste(
+    "Variance partition of TF motif activity across cell type, exposure and donor",
+    "components (S5A: exposure model, S5B: stage/severity model,",
+    "S5C: COVID-19 severity)"),
+  "Table S6",    "Table S4",    paste(
+    "Pairwise differential TF motif activity (Wilcoxon test of chromVAR deviation",
+    "scores) across different cell types"),
+  "Table S7",    "Table S5",    "List of differentially accessible genes in different clusters within CD8+ T cells",
+  "Table S8",    "Table S6",    "List of differentially accessible cCREs in different clusters within CD8+ T cells",
+  "Table S9",    "Table S7",    paste(
+    "Differential gene activity and gene expression table of protein-coding genes",
+    "for COVID-19 severe vs control in CD14+ monocytes"),
+  "Table S10",   "Table S8",    "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
+  "Table S11",   "Table S9",    paste(
+    "Bulk RNA-seq differential expression results for CD14+ monocytes",
+    "(filtered: adj p < 0.05 & |log2FC| > 0.5)"),
+  "Table S12",   "Table S10",   paste(
+    "Pairwise Wilcoxon test between one vs other cell type manner for methylTFR",
+    "and chromVAR z-scores"),
+  "Table S13",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes"
+)
+
+## ---- 2. New table content ---------------------------------------------------
+# (a) cell-type composition statistics
 comp_supp <- read.csv(comp_csv, stringsAsFactors = FALSE) %>%
   dplyr::transmute(
     `Cell type`                   = cell_type,
@@ -65,81 +116,117 @@ comp_supp <- read.csv(comp_csv, stringsAsFactors = FALSE) %>%
     `p (Bonferroni-adjusted)`     = signif(p_adj, 3)
   )
 
+# (b) snmC-seq per-cell annotation.
+# Two columns are deliberately dropped:
+#   - the unnamed row-number column written by write.csv (no information)
+#   - allC_FilePathfull, an absolute path under /icbb/projects/igunduz/... The
+#     relative allC_FilePath is kept; publishing internal filesystem layout in a
+#     supplementary table serves no reader and is easy to overlook.
+allc_raw <- read.csv(allc_csv, stringsAsFactors = FALSE, check.names = FALSE)
+drop_cols <- c("", "X", "allC_FilePathfull")
+allc_supp <- allc_raw[, !colnames(allc_raw) %in% drop_cols, drop = FALSE]
+message("snmC-seq annotation: ", nrow(allc_supp), " cells x ",
+        ncol(allc_supp), " columns (dropped: ",
+        paste(intersect(drop_cols, colnames(allc_raw)), collapse = ", "), ")")
+if (nrow(allc_supp) > 1e5) {
+  message("NB this sheet is large; Excel's row limit is 1,048,576 so it fits, ",
+          "but the workbook will be slow to open.")
+}
+
+new_content <- list(
+  "Table S2" = allc_supp,
+  "Table S4" = comp_supp
+)
+
+## ---- 3. Rename existing sheets ---------------------------------------------
 wb <- openxlsx::loadWorkbook(supp_in)
 
-if ("Table S3" %in% names(wb) &&
-    identical(dim(openxlsx::readWorkbook(wb, "Table S3")), dim(comp_supp))) {
-  message("Composition table already inserted; nothing to do.")
+if (all(names(new_content) %in% names(wb)) &&
+    identical(dim(openxlsx::readWorkbook(wb, "Table S4")), dim(comp_supp))) {
+  message("Workbook already assembled; nothing to do.")
 } else {
-  # ---- shift every numbered sheet from S3 upward by one -----------------------
-  # Handles single sheets (Table S7) and lettered sub-sheets (Table S3A/B/C).
-  # Rename from the highest number downwards so names never collide.
-  for (n in 11:3) {
+  # Rename via a temporary prefix so an old name can never collide with a new
+  # one mid-pass (old "Table S2" -> new "Table S3" while an old "Table S3" still
+  # exists). Two passes: to temp names, then to final names.
+  renames <- final_layout %>%
+    dplyr::filter(!is.na(old), old != new)
+
+  tmp_map <- list()
+  for (i in seq_len(nrow(renames))) {
     for (suf in c("", LETTERS[1:6])) {
-      old <- paste0("Table S", n, suf)
-      if (old %in% names(wb)) {
-        openxlsx::renameWorksheet(wb, old, paste0("Table S", n + 1, suf))
+      old_i <- paste0(renames$old[i], suf)
+      new_i <- paste0(renames$new[i], suf)
+      if (old_i %in% names(wb)) {
+        tmp_i <- paste0("__tmp__", new_i)
+        openxlsx::renameWorksheet(wb, old_i, tmp_i)
+        tmp_map[[tmp_i]] <- new_i
       }
     }
   }
+  for (tmp_i in names(tmp_map)) {
+    openxlsx::renameWorksheet(wb, tmp_i, tmp_map[[tmp_i]])
+  }
+  message("Renamed ", length(tmp_map), " sheet(s)")
 
-  # ---- insert the new Table S3 and place it directly after Table S2 -----------
-  openxlsx::addWorksheet(wb, "Table S3")
-  openxlsx::writeData(wb, "Table S3", comp_supp,
-    withFilter  = TRUE,
-    headerStyle = openxlsx::createStyle(textDecoration = "bold")
-  )
-  openxlsx::setColWidths(wb, "Table S3", cols = seq_along(comp_supp), widths = "auto")
-
-  nm        <- names(wb)
-  pos_new   <- which(nm == "Table S3")
-  pos_after <- which(nm == "Table S2")
-  ord       <- append(seq_along(nm)[-pos_new], pos_new, after = pos_after)
-  openxlsx::worksheetOrder(wb) <- ord
-
-  # ---- rebuild the Index sheet ------------------------------------------------
-  # Shift existing labels from S3 up (high -> low so nothing double-shifts),
-  # then insert the new S3 row after S2.
-  shift_label <- function(x) {
-    for (n in 11:3) {
-      x <- gsub(paste0("Table S", n, "([A-Z]?)"),
-                paste0("Table S", n + 1, "\\1"), x)
+  ## ---- 4. Insert the new tables ---------------------------------------------
+  hdr <- openxlsx::createStyle(textDecoration = "bold")
+  for (nm in names(new_content)) {
+    if (nm %in% names(wb)) openxlsx::removeWorksheet(wb, nm)
+    openxlsx::addWorksheet(wb, nm)
+    dat <- new_content[[nm]]
+    openxlsx::writeData(wb, nm, dat, withFilter = TRUE, headerStyle = hdr)
+    # auto-width is very slow on a sheet with tens of thousands of rows
+    if (nrow(dat) < 5000) {
+      openxlsx::setColWidths(wb, nm, cols = seq_along(dat), widths = "auto")
+    } else {
+      openxlsx::setColWidths(wb, nm, cols = seq_along(dat), widths = 18)
     }
-    x
+    message("Wrote ", nm, " (", nrow(dat), " rows)")
   }
-  if ("Index" %in% names(wb)) {
-    idx <- openxlsx::readWorkbook(wb, sheet = "Index")
-    idx[[1]] <- vapply(as.character(idx[[1]]), shift_label, character(1), USE.NAMES = FALSE)
-    new_row  <- idx[1, ]
-    new_row[1, ] <- NA
-    new_row[[1]] <- "Table S3"
-    new_row[[2]] <- paste(
-      "Cell-type composition statistics: per-sample cell-type proportions compared",
-      "between each exposure group and its matched within-cohort control",
-      "(two-sided Wilcoxon rank-sum test, Bonferroni-adjusted)"
-    )
-    after <- which(idx[[1]] == "Table S2")
-    idx   <- rbind(idx[seq_len(after), ], new_row, idx[-seq_len(after), ])
 
-    openxlsx::removeWorksheet(wb, "Index")
-    openxlsx::addWorksheet(wb, "Index")
-    openxlsx::writeData(wb, "Index", idx,
-      headerStyle = openxlsx::createStyle(textDecoration = "bold"))
-    openxlsx::setColWidths(wb, "Index", cols = 1:2, widths = c(14, 110))
-    openxlsx::worksheetOrder(wb) <- c(
-      which(names(wb) == "Index"),
-      setdiff(seq_along(names(wb)), which(names(wb) == "Index"))
-    )
-  } else {
-    message("No 'Index' sheet found; skipping Index rebuild.")
-  }
+  ## ---- 5. Order the sheets to match final_layout ----------------------------
+  want <- unlist(lapply(final_layout$new, function(nm) {
+    present <- c(nm, paste0(nm, LETTERS[1:6]))
+    present[present %in% names(wb)]
+  }))
+  other <- setdiff(names(wb), c(want, "Index"))
+  ord_names <- c("Index"[("Index" %in% names(wb))], want, other)
+  openxlsx::worksheetOrder(wb) <- match(ord_names, names(wb))
+
+  ## ---- 6. Rebuild the Index sheet -------------------------------------------
+  # Built from final_layout rather than patched, so the Index cannot drift out of
+  # step with the sheet names.
+  idx <- data.frame(
+    Table = final_layout$new,
+    Description = final_layout$description,
+    stringsAsFactors = FALSE
+  )
+  idx <- idx[idx$Table %in% names(wb) |
+               paste0(idx$Table, "A") %in% names(wb), , drop = FALSE]
+
+  if ("Index" %in% names(wb)) openxlsx::removeWorksheet(wb, "Index")
+  openxlsx::addWorksheet(wb, "Index")
+  openxlsx::writeData(wb, "Index", idx, headerStyle = hdr)
+  openxlsx::setColWidths(wb, "Index", cols = 1:2, widths = c(14, 110))
+  openxlsx::worksheetOrder(wb) <- c(
+    which(names(wb) == "Index"),
+    setdiff(seq_along(names(wb)), which(names(wb) == "Index"))
+  )
 
   openxlsx::saveWorkbook(wb, supp_out, overwrite = TRUE)
   message("Wrote ", supp_out)
-  message("APPLY THIS RENUMBERING TO THE MANUSCRIPT TEXT:")
-  print(data.frame(
-    old = c("Table S3 (and S3A/B/C)", paste0("Table S", 4:11)),
-    new = c("Table S4 (and S4A/B/C)", paste0("Table S", 5:12))
-  ))
-  message("New Table S3 = cell-type composition statistics.")
+
+  ## ---- 7. Renumbering map for the manuscript text ---------------------------
+  map_df <- final_layout %>%
+    dplyr::filter(!is.na(old)) %>%
+    dplyr::transmute(old, new, changed = old != new)
+  message("\nAPPLY THIS RENUMBERING TO THE MANUSCRIPT TEXT ",
+          "(work from the HIGHEST number down, so replacements do not collide):")
+  print(as.data.frame(map_df[map_df$changed, c("old", "new")])[
+    order(-as.numeric(sub("Table S", "", map_df$old[map_df$changed]))), ])
+  message("\nNew tables: S2 = snmC-seq per-cell annotation, ",
+          "S4 = cell-type composition statistics.")
+  message("NB sub-sheets move with their parent (old S3A/B/C -> S5A/B/C).")
 }
+
+#####################################################################

@@ -30,6 +30,7 @@ suppressPackageStartupMessages({
   library(ArchR)
   library(ChrAccR)
   library(dplyr)
+  library(readxl)
   library(ggplot2)
 })
 set.seed(12)
@@ -45,8 +46,50 @@ if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 fig_dir <- file.path(repo_dir, "figures")
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
-# adjustment columns to add on top of any existing ones
-qc_adj_cols <- c("mean_TSS", "mean_FRIP")
+## ---- Adjustment-set grid ----------------------------------------------------
+# Rather than a single fixed adjustment set, every comparison is refitted under
+# several designs so we can see whether the DAR calls depend on WHICH covariates
+# are adjusted for, not just on whether any adjustment happened.
+#
+# Read the resulting table across a row: if a comparison gives the same DARs
+# under all feasible designs, the result is robust to the adjustment. If it only
+# changes under one design, that design is the thing to explain.
+#
+# NOTE ON POWER: these comparisons have few samples per group (e.g. 6 severe vs
+# 7 control). Every covariate costs residual degrees of freedom, so the larger
+# sets are expected to be under-powered and some will be rejected outright by
+# the feasibility check below. That is reported, not silently worked around.
+adj_sets <- list(
+  TSS               = "mean_TSS",
+  FRIP              = "mean_FRIP",
+  nFrags            = "mean_log10_nFrags",
+  nCells            = "n_cells",
+  TSS_FRIP          = c("mean_TSS", "mean_FRIP"),
+  QC_all            = c("mean_TSS", "mean_FRIP", "mean_log10_nFrags", "n_cells"),
+  Sex               = "Sex_predicted",
+  Donor             = "Donor_ID",
+  TSS_FRIP_Sex      = c("mean_TSS", "mean_FRIP", "Sex_predicted"),
+  TSS_FRIP_Donor    = c("mean_TSS", "mean_FRIP", "Donor_ID")
+)
+
+# The set applied to EVERY discovered comparison (the headline analysis).
+default_set <- "TSS_FRIP"
+
+# Which comparisons additionally get the full grid. "all" is the complete sweep
+# and is very long; the default is the comparisons the manuscript rests on.
+# Match is on "<cell> | <grp1> vs <grp2>".
+combo_scope <- c(
+  "Mono_CD14 | C19_sev vs C19_ctrl",
+  "Mono_CD14 | C19_mod vs C19_ctrl",
+  "T_mem_CD8 | HIV_ctrl vs HIV_acu",
+  "T_mem_CD8 | HIV_ctrl vs HIV_chr"
+)
+
+# Minimum residual degrees of freedom a design must retain to be attempted.
+min_resid_df <- 2L
+
+# the grouping column the comparisons are defined on
+grp_col <- "sample_exposure_group"
 
 # Reuse an adjusted fit that is already on disk instead of refitting it. The
 # sweep below covers every cell type and every saved comparison, so this makes an
@@ -63,6 +106,29 @@ norm_key <- function(x) {
   x <- sub("\\.tsv\\.gz.*$", "", x)   # drop .tsv.gz and anything after it
   x <- sub("_fragments$", "", x)      # drop a trailing _fragments
   x
+}
+
+## ---- 0. Donor and predicted sex from Table S1 -------------------------------
+# Donor_ID and Sex_predicted are written by 01_v2_quality_control.R. They are
+# needed here because two of the adjustment sets use them, and because donor
+# matters structurally: the HIV cohort is longitudinal (3 samples per donor),
+# so donor is a real repeated-measures factor there, whereas in the COVID-19
+# cohort donor is almost one-to-one with sample and will be rejected as
+# collinear by the feasibility check.
+suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables_updated.xlsx")
+if (!file.exists(suppTables)) {
+  suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables.xlsx")
+}
+s1 <- readxl::read_excel(suppTables, sheet = "Table S1")
+donor_sex <- data.frame(
+  Sample        = as.character(s1$arrow_name),
+  Donor_ID      = if ("Donor_ID" %in% names(s1)) as.character(s1$Donor_ID) else NA_character_,
+  Sex_predicted = if ("Sex_predicted" %in% names(s1)) as.character(s1$Sex_predicted) else NA_character_,
+  stringsAsFactors = FALSE
+)
+if (all(is.na(donor_sex$Donor_ID))) {
+  message("NB Table S1 has no Donor_ID column -- run 01_v2_quality_control.R ",
+    "first if you want the Donor adjustment sets.")
 }
 
 ## ---- 1. Per-sample QC metrics from the ArchR project ------------------------
@@ -100,13 +166,80 @@ id_lookup <- id_lookup[!duplicated(id_lookup$key), ]
 rm(project)
 gc()
 
+## ---- 1b. Helper: is an adjustment design feasible for this comparison? -------
+# Refusing to fit an impossible model is the point of this function. Three ways
+# a covariate fails, each of which would otherwise surface as an opaque DESeq2
+# error or, worse, as a silently meaningless fit:
+#   constant   -- no variation within the compared samples (e.g. Sex in the HIV
+#                 cohort, where every donor is male)
+#   collinear  -- a factor with as many levels as samples is the sample itself
+#   nested     -- every level sits inside exactly one compared group, so the
+#                 covariate absorbs the effect being tested (donor in COVID-19,
+#                 where each donor appears in only one severity group)
+# Plus a residual-degrees-of-freedom floor, since these comparisons have 4-7
+# samples per group and a large adjustment set exhausts them.
+feasible_adj <- function(sa, cols, comp) {
+  grps <- strsplit(sub(" \\[.*", "", comp), " vs ", fixed = TRUE)[[1]]
+  keep <- as.character(sa[[grp_col]]) %in% grps
+  sub  <- sa[keep, , drop = FALSE]
+  n    <- nrow(sub)
+  grp  <- droplevels(factor(as.character(sub[[grp_col]])))
+  reasons <- character(0)
+  df_used <- 0L
+
+  for (cc in cols) {
+    v <- if (cc %in% colnames(sub)) sub[[cc]] else NULL
+    if (is.null(v) || all(is.na(v))) {
+      reasons <- c(reasons, paste0(cc, ": absent or all NA"))
+      next
+    }
+    if (anyNA(v)) reasons <- c(reasons, paste0(cc, ": has NA values"))
+    if (is.numeric(v)) {
+      if (!is.finite(stats::sd(v, na.rm = TRUE)) || stats::sd(v, na.rm = TRUE) == 0) {
+        reasons <- c(reasons, paste0(cc, ": constant"))
+      }
+      df_used <- df_used + 1L
+    } else {
+      f <- droplevels(factor(as.character(v)))
+      if (nlevels(f) < 2) {
+        reasons <- c(reasons, paste0(cc, ": single level"))
+      } else if (nlevels(f) >= n) {
+        reasons <- c(reasons, paste0(cc, ": one sample per level (collinear with sample)"))
+      } else {
+        tb <- table(f, grp)
+        if (all(rowSums(tb > 0) == 1)) {
+          reasons <- c(reasons, paste0(cc, ": nested within the compared groups"))
+        }
+      }
+      df_used <- df_used + max(0L, nlevels(f) - 1L)
+    }
+  }
+
+  df_resid <- n - 1L - (nlevels(grp) - 1L) - df_used
+  if (df_resid < min_resid_df) {
+    reasons <- c(reasons, sprintf("residual df %d < %d", df_resid, min_resid_df))
+  }
+  list(ok = length(reasons) == 0, n = n, df_resid = df_resid,
+       reason = paste(unique(reasons), collapse = "; "))
+}
+
 ## ---- 2. Helper: run one comparison, adjusted vs unadjusted ------------------
 # anaDir_existing : ChrAccR run directory containing <cell>/data/dsATAC_processed
 # comp            : "GRP1 vs GRP2 [sample_exposure_group]"
 # extra_adj       : adjustment columns already used in the original run
-run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0)) {
+run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0),
+                         set_name = default_set) {
+  set_cols <- adj_sets[[set_name]]
   tag <- gsub("[^A-Za-z0-9]+", "_", sub(" \\[.*", "", comp))
-  ana_adj <- file.path(out_dir, paste0(cell, "__", tag, "__adjusted"))
+  # Directory carries the adjustment set, so the designs never overwrite each
+  # other. The legacy "__adjusted" name is treated as the TSS_FRIP set, which is
+  # what those runs actually were.
+  ana_adj <- if (identical(set_name, "TSS_FRIP") &&
+                 dir.exists(file.path(out_dir, paste0(cell, "__", tag, "__adjusted")))) {
+    file.path(out_dir, paste0(cell, "__", tag, "__adjusted"))
+  } else {
+    file.path(out_dir, paste0(cell, "__", tag, "__adj-", set_name))
+  }
 
   # Resume support: the full sweep over every cell type is long, and the adjusted
   # DESeq2 fit is the expensive part. If this comparison has already been fitted
@@ -114,8 +247,8 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0)) 
   done <- list.files(ana_adj, pattern = "diffTab.*\\.tsv$",
     recursive = TRUE, full.names = TRUE)
   if (resume && length(done) > 0) {
-    message("  adjusted table already on disk, reusing it (resume = TRUE)")
-    return(compare_adjusted(anaDir_existing, cell, comp, ana_adj))
+    message("  [", set_name, "] adjusted table already on disk, reusing it")
+    return(compare_adjusted(anaDir_existing, cell, comp, ana_adj, set_name))
   }
 
   ds <- ChrAccR::loadDsAcc(file.path(anaDir_existing, cell, "data", "dsATAC_filtered"))
@@ -149,9 +282,22 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0)) 
       " samples could not be mapped to QC metrics; fix the id_lookup / bridge ",
       "column (see mapping scores above) before adjusting.")
   }
-  for (cc in c(qc_adj_cols, "mean_log10_nFrags", "n_cells")) {
+  # attach every covariate any adjustment set might use
+  for (cc in c("mean_TSS", "mean_FRIP", "mean_log10_nFrags", "n_cells")) {
     sa[[cc]] <- qc_by_sample[[cc]][idx]
   }
+  ds_i <- match(arch_samp, donor_sex$Sample)
+  sa[["Donor_ID"]]      <- donor_sex$Donor_ID[ds_i]
+  sa[["Sex_predicted"]] <- donor_sex$Sex_predicted[ds_i]
+
+  # refuse designs that cannot be fitted, with the reason recorded
+  fs <- feasible_adj(sa, unique(c(extra_adj, set_cols)), comp)
+  if (!fs$ok) {
+    message("  [", set_name, "] not feasible: ", fs$reason)
+    return(skip_row(cell, comp, set_name, set_cols, fs))
+  }
+  message("  [", set_name, "] n = ", fs$n, ", residual df = ", fs$df_resid)
+
   # write the augmented annotation back onto the object
   ds@sampleAnnot <- sa
 
@@ -175,20 +321,20 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0)) 
 
   setConfigElement("differentialColumns", c("sample_exposure_group"))
   setConfigElement("differentialCompNames", comp)
-  setConfigElement("differentialAdjColumns", unique(c(extra_adj, qc_adj_cols)))
+  setConfigElement("differentialAdjColumns", unique(c(extra_adj, set_cols)))
   setConfigElement("differentialCutoffL2FC", 0.5)
   setConfigElement("filteringSexChroms", TRUE)
   run_atac_differential(ds, ana_adj)
   rm(ds)
   gc()
 
-  compare_adjusted(anaDir_existing, cell, comp, ana_adj)
+  compare_adjusted(anaDir_existing, cell, comp, ana_adj, set_name)
 }
 
 ## ---- 2b. Helper: compare an adjusted run against its unadjusted counterpart --
 # Split out of run_adjusted so a comparison that has already been fitted can be
 # summarised from disk without refitting (see the resume branch above).
-compare_adjusted <- function(anaDir_existing, cell, comp, ana_adj) {
+compare_adjusted <- function(anaDir_existing, cell, comp, ana_adj, set_name) {
   read_diff <- function(dir) {
     f <- list.files(dir, pattern = "diffTab.*archrPeaks.*\\.tsv$",
       recursive = TRUE, full.names = TRUE
@@ -251,29 +397,49 @@ compare_adjusted <- function(anaDir_existing, cell, comp, ana_adj) {
 
   data.frame(
     cell = cell, comparison = want,
+    adj_set = set_name,
+    adj_columns = paste(adj_sets[[set_name]], collapse = " + "),
     DARs_unadjusted = length(a), DARs_adjusted = length(b),
     shared = length(shared),
     recovered_pct = ifelse(length(a) > 0, round(100 * length(shared) / length(a), 1), NA),
     sign_concordance_pct = round(conc, 1),
     lfc_pearson_all = round(cor(m$log2FC_unadj, m$log2FC_adj, use = "complete.obs"), 3),
     n_regions_tested = nrow(m),
+    n_samples = NA_integer_, residual_df = NA_integer_,
     status = "ok",
     stringsAsFactors = FALSE
   )
 }
 
-# A row with the same columns for a comparison that could not be completed, so
-# failures stay visible in the summary table instead of silently vanishing.
-fail_row <- function(cell, comp, msg) {
+# Rows with the same columns for a comparison that could not be completed, so
+# failures and skips stay visible in the summary instead of silently vanishing.
+# `status` distinguishes the two: a "failed" row is a design that should have
+# worked and errored; a "not feasible" row is a design that was correctly
+# refused, and the reason is the scientifically interesting part.
+blank_row <- function(cell, comp, set_name, status) {
   data.frame(
     cell = cell, comparison = sub(" \\[.*", "", comp),
+    adj_set = set_name,
+    adj_columns = paste(adj_sets[[set_name]], collapse = " + "),
     DARs_unadjusted = NA_integer_, DARs_adjusted = NA_integer_,
     shared = NA_integer_, recovered_pct = NA_real_,
     sign_concordance_pct = NA_real_, lfc_pearson_all = NA_real_,
     n_regions_tested = NA_integer_,
-    status = paste0("failed: ", msg),
+    n_samples = NA_integer_, residual_df = NA_integer_,
+    status = status,
     stringsAsFactors = FALSE
   )
+}
+
+fail_row <- function(cell, comp, set_name, msg) {
+  blank_row(cell, comp, set_name, paste0("failed: ", msg))
+}
+
+skip_row <- function(cell, comp, set_name, set_cols, fs) {
+  r <- blank_row(cell, comp, set_name, paste0("not feasible: ", fs$reason))
+  r$n_samples   <- fs$n
+  r$residual_df <- fs$df_resid
+  r
 }
 
 ## ---- 3. Discover every cell type and comparison with saved differential data -
@@ -354,21 +520,44 @@ write.csv(skip_df, file.path(fig_dir, "confounder_adjusted_skipped_cells.csv"),
 message("Skipped ", nrow(skip_df), " cell-type directory(ies); see ",
   "confounder_adjusted_skipped_cells.csv")
 
-## ---- 3b. Run the sweep ------------------------------------------------------
-# The summary is rewritten after every comparison, so a crash or a wall-clock
-# limit part-way through still leaves a usable table (and `resume` picks the run
-# back up from where it stopped).
+## ---- 3b. Expand each comparison over the adjustment sets --------------------
+# Every comparison gets the default set. The comparisons in combo_scope
+# additionally get the whole grid, so the "does the choice of covariates matter"
+# question is answered where it counts without refitting hundreds of models for
+# cell types the manuscript does not discuss.
+label_of <- function(j) paste0(j$cell, " | ", sub(" \\[.*", "", j$comp))
+use_all_sets <- identical(combo_scope, "all")
+
+runs <- list()
+for (j in jobs) {
+  sets <- if (use_all_sets || label_of(j) %in% combo_scope) {
+    names(adj_sets)
+  } else {
+    default_set
+  }
+  for (sn in sets) {
+    runs[[length(runs) + 1L]] <- c(j, list(set_name = sn))
+  }
+}
+message("Comparisons discovered: ", length(jobs),
+  "; model fits queued (comparison x adjustment set): ", length(runs))
+
+## ---- 3c. Run the sweep ------------------------------------------------------
+# The summary is rewritten after every fit, so a crash or a wall-clock limit
+# part-way through still leaves a usable table (and `resume` picks the run back
+# up from where it stopped).
 summary_csv <- file.path(fig_dir, "confounder_adjusted_DAR_summary.csv")
 res_list <- list()
 
-for (k in seq_along(jobs)) {
-  j <- jobs[[k]]
-  message("=== [", k, "/", length(jobs), "] ", j$cell, " | ", j$comp)
+for (k in seq_along(runs)) {
+  j <- runs[[k]]
+  message("=== [", k, "/", length(runs), "] ", j$cell, " | ", j$comp,
+    "  {", j$set_name, "}")
   r <- tryCatch(
-    run_adjusted(j$dir, j$cell, j$comp, j$adj),
+    run_adjusted(j$dir, j$cell, j$comp, j$adj, set_name = j$set_name),
     error = function(e) {
       message("  FAILED: ", conditionMessage(e))
-      fail_row(j$cell, j$comp, conditionMessage(e))
+      fail_row(j$cell, j$comp, j$set_name, conditionMessage(e))
     }
   )
   res_list[[k]] <- r
@@ -378,9 +567,40 @@ for (k in seq_along(jobs)) {
 }
 
 res <- do.call(rbind, res_list)
-n_ok <- sum(res$status == "ok", na.rm = TRUE)
-message(n_ok, " of ", nrow(res), " comparisons completed")
-print(res)
+n_ok   <- sum(res$status == "ok", na.rm = TRUE)
+n_skip <- sum(grepl("^not feasible", res$status), na.rm = TRUE)
+n_fail <- sum(grepl("^failed", res$status), na.rm = TRUE)
+message(sprintf("%d fitted, %d refused as not feasible, %d failed (of %d)",
+  n_ok, n_skip, n_fail, nrow(res)))
+
+## ---- 3d. Does the choice of covariates change the answer? -------------------
+# The headline question, answered per comparison: across every design that could
+# be fitted, how much do the DAR counts move, and do the effect sizes stay
+# correlated with the unadjusted fit?
+stability <- res %>%
+  dplyr::filter(status == "ok") %>%
+  dplyr::group_by(cell, comparison) %>%
+  dplyr::summarise(
+    n_designs        = dplyr::n(),
+    DARs_unadjusted  = dplyr::first(DARs_unadjusted),
+    DARs_adj_min     = min(DARs_adjusted),
+    DARs_adj_max     = max(DARs_adjusted),
+    recovered_min    = min(recovered_pct, na.rm = TRUE),
+    recovered_max    = max(recovered_pct, na.rm = TRUE),
+    lfc_r_min        = min(lfc_pearson_all, na.rm = TRUE),
+    designs          = paste(adj_set, collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    DAR_range_pct = ifelse(DARs_unadjusted > 0,
+      round(100 * (DARs_adj_max - DARs_adj_min) / DARs_unadjusted, 1), NA_real_)
+  )
+write.csv(stability,
+  file.path(fig_dir, "confounder_adjusted_DAR_design_stability.csv"),
+  row.names = FALSE)
+message("Per-comparison stability across designs written to ",
+  "confounder_adjusted_DAR_design_stability.csv")
+print(as.data.frame(stability))
 
 ## ---- 4. Figures ------------------------------------------------------------
 # All figures are drawn by src/atac/07_4_confounder_adjusted_DAR_plots.R, which

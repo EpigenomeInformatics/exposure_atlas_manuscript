@@ -506,9 +506,13 @@ write.csv(
 )
 
 # add inferred sex, confidence, raw signals and the flag to the covariate table
+# Carry the raw chrX / chrY / XIST signals through as well, not just the derived
+# call: these are the features the classifier was fitted on, and Table S1 should
+# show them so the sex prediction can be checked rather than taken on trust.
 covar <- dplyr::left_join(covar,
   dplyr::select(
-    sex_metrics, Sample, chrY_frac, xist_frac, p_male,
+    sex_metrics, Sample, chrY, chrX, xist, chrY_frac, xist_frac,
+    chrY_chrX_ratio, p_male,
     Sex_predicted, Sex_by_xist, Sex_by_chrY, sex_flag
   ),
   by = c("arrow_name" = "Sample")
@@ -706,14 +710,27 @@ if (length(rec_col) == 1) {
 # write the new columns directly.
 s1_ncol <- ncol(s1_now)
 new_cols <- data.frame(
-  # recovered donor metadata (reported values)
+  # recovered donor metadata (reported values). Donor_ID matters beyond this
+  # table: the HIV cohort is longitudinal (3 samples per donor), so any analysis
+  # treating samples as independent needs to know which share a donor.
+  Donor_ID = covar$donor_id,
   Age_reported = covar$Age_reported,
   Sex_reported = as.character(covar$Sex),
   Sampling_day_rel_onset = covar$sampling_day,
   Viral_load = covar$viral_load,
-  # final molecular sex call (supporting features are kept out of Table S1 and
-  # written to figures/sex_prediction_metrics.csv instead)
+  # molecular sex call together with the features it was derived from, so the
+  # prediction is auditable from Table S1 alone. The full per-sample detail
+  # (including the marker-threshold calls and the discrepancy flag) stays in
+  # figures/sex_prediction_metrics.csv.
   Sex_predicted = as.character(covar$Sex_predicted),
+  P_male = covar$p_male,
+  chrY_fragments = covar$chrY,
+  chrX_fragments = covar$chrX,
+  XIST_fragments = covar$xist,
+  chrY_fraction = signif(covar$chrY_frac, 4),
+  XIST_fraction = signif(covar$xist_frac, 4),
+  chrY_chrX_ratio = signif(covar$chrY_chrX_ratio, 4),
+  Sex_metadata_flag = covar$sex_flag,
   stringsAsFactors = FALSE
 )
 # cells behind each sample x cell-type pseudobulk, one column per cell type

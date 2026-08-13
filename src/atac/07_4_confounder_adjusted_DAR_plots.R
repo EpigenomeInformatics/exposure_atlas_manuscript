@@ -40,6 +40,11 @@ if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 # readable scatter. Draw the panels with the most unadjusted DARs and say so.
 max_scatter_panels <- 24
 
+# 07_3 fits each comparison under several adjustment designs. The overlap and
+# scatter figures show ONE design so they stay readable; the design-comparison
+# figure below covers the rest.
+focus_set <- "TSS_FRIP"
+
 # original (unadjusted) ChrAccR analysis directories, as in 07_3
 covid_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/"
 other_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_2023-10-02/"
@@ -54,7 +59,7 @@ stopifnot(dir.exists(out_dir))
 # comparison with every non-alphanumeric character replaced by "_", e.g.
 # "Mono_CD14__C19_sev_vs_C19_ctrl__adjusted".
 adj_dirs <- list.dirs(out_dir, recursive = FALSE, full.names = TRUE)
-adj_dirs <- adj_dirs[grepl("__adjusted$", basename(adj_dirs))]
+adj_dirs <- adj_dirs[grepl("__adjusted$|__adj-", basename(adj_dirs))]
 if (length(adj_dirs) == 0) {
   stop("No '*__adjusted' directories found in ", out_dir,
     " -- run 07_3_confounder_adjusted_DARs.R first.")
@@ -62,15 +67,20 @@ if (length(adj_dirs) == 0) {
 message("Found ", length(adj_dirs), " adjusted run(s):\n  ",
   paste(basename(adj_dirs), collapse = "\n  "))
 
+# 07_3 writes "<cell>__<grp1>_vs_<grp2>__adj-<set>" once the adjustment-set grid
+# is in play. The older "<cell>__<grp1>_vs_<grp2>__adjusted" directories are the
+# TSS + FRIP design, so they are read as that set rather than ignored.
 parse_adj_dir <- function(d) {
   parts <- strsplit(basename(d), "__", fixed = TRUE)[[1]]
   if (length(parts) < 3) return(NULL)
   cell <- parts[1]
   tag <- parts[2]
+  suffix <- parts[3]
+  adj_set <- if (identical(suffix, "adjusted")) "TSS_FRIP" else sub("^adj-", "", suffix)
   grps <- strsplit(tag, "_vs_", fixed = TRUE)[[1]]
   if (length(grps) != 2) return(NULL)
   list(dir = d, cell = cell, grp1 = grps[1], grp2 = grps[2],
-    comparison = paste(grps[1], "vs", grps[2]))
+    adj_set = adj_set, comparison = paste(grps[1], "vs", grps[2]))
 }
 
 ## ---- 2. Locate diffTab files ------------------------------------------------
@@ -125,7 +135,9 @@ pick_unadjusted <- function(anaDir, cell, grp1, grp2) {
   files[i]
 }
 
-key_of <- function(cell, comparison) paste(cell, comparison)
+key_of <- function(cell, comparison, adj_set = focus_set) {
+  paste(cell, comparison, adj_set, sep = " | ")
+}
 
 read_diff <- function(f) {
   dm <- read.delim(f)
@@ -182,13 +194,14 @@ dar_list <- list()
 cat_list <- list()
 
 summarise_one <- function(j) {
-  message("=== ", j$cell, " | ", j$comparison)
+  message("=== ", j$cell, " | ", j$comparison, "  {", j$adj_set, "}")
   m <- build_merged(j)
   if (is.null(m)) return(NULL)
+  m$adj_set <- j$adj_set
 
   keep <- m$isDiff_unadj | m$isDiff_adj
   if (any(keep)) {
-    dar_list[[key_of(j$cell, j$comparison)]] <<- m[keep, , drop = FALSE]
+    dar_list[[key_of(j$cell, j$comparison, j$adj_set)]] <<- m[keep, , drop = FALSE]
   }
 
   a <- m$id[m$isDiff_unadj]
@@ -227,7 +240,8 @@ summarise_one <- function(j) {
   names(cnt_df)[names(cnt_df) == "Freq"] <- "n"
   cnt_df$cell <- j$cell
   cnt_df$comparison <- j$comparison
-  cat_list[[key_of(j$cell, j$comparison)]] <<- cnt_df
+  cnt_df$adj_set <- j$adj_set
+  cat_list[[key_of(j$cell, j$comparison, j$adj_set)]] <<- cnt_df
 
   get_n <- function(o, d) {
     v <- cnt_df$n[cnt_df$overlap == o & cnt_df$direction == d]
@@ -235,7 +249,7 @@ summarise_one <- function(j) {
   }
 
   data.frame(
-    cell = j$cell, comparison = j$comparison,
+    cell = j$cell, comparison = j$comparison, adj_set = j$adj_set,
     DARs_unadjusted = length(a), DARs_adjusted = length(b),
     shared = length(shared),
     recovered_pct = ifelse(length(a) > 0, round(100 * length(shared) / length(a), 1), NA),
@@ -271,8 +285,19 @@ if (is.null(res) || nrow(res) == 0) {
 }
 
 print(res)
-write.csv(res, file.path(fig_dir, "confounder_adjusted_DAR_summary.csv"),
+write.csv(res_all, file.path(fig_dir, "confounder_adjusted_DAR_summary.csv"),
   row.names = FALSE)
+
+## ---- 3b. Split the results: one design for the detail figures ---------------
+res_all <- res
+if (!focus_set %in% res_all$adj_set) {
+  message("focus_set '", focus_set, "' not present; using the most common design")
+  focus_set <- names(sort(table(res_all$adj_set), decreasing = TRUE))[1]
+}
+res <- res_all[res_all$adj_set == focus_set, , drop = FALSE]
+message("Detail figures use the '", focus_set, "' design (", nrow(res),
+  " comparisons); ", nrow(res_all), " comparison x design fits in total")
+cat_list <- cat_list[vapply(cat_list, function(d) d$adj_set[1] == focus_set, logical(1))]
 
 ## ---- 4. Figure 1: overlap and direction of the DAR calls --------------------
 # A side-by-side count of "unadjusted DARs" against "adjusted DARs" is hard to
@@ -451,6 +476,57 @@ if (nrow(dar_regions) > 0) {
 write.csv(dar_regions,
   file.path(out_dir, "confounder_adjusted_DAR_regions.csv"), row.names = FALSE)
 message("Wrote ", nrow(dar_regions), " region rows (DAR in either model)")
+
+## ---- 6. Figure 3: does the choice of adjustment covariates matter? ----------
+# For the comparisons fitted under more than one design, plot the DAR count per
+# design against the unadjusted count (dashed line). Flat across designs means
+# the result does not depend on which covariates were adjusted for -- which is
+# the claim the reviewer is asking us to support.
+multi <- res_all %>%
+  dplyr::group_by(cell, comparison) %>%
+  dplyr::filter(dplyr::n_distinct(adj_set) > 1) %>%
+  dplyr::ungroup()
+
+if (nrow(multi) > 0) {
+  multi <- multi %>%
+    dplyr::mutate(
+      panel = paste0(cell, " | ", comparison),
+      adj_set = factor(adj_set, levels = unique(adj_set[order(nchar(adj_set), adj_set)]))
+    )
+  unadj_ref <- multi %>%
+    dplyr::group_by(panel) %>%
+    dplyr::summarise(DARs_unadjusted = dplyr::first(DARs_unadjusted), .groups = "drop")
+
+  p_design <- ggplot(multi, aes(x = adj_set, y = DARs_adjusted)) +
+    geom_hline(data = unadj_ref, aes(yintercept = DARs_unadjusted),
+      linetype = "dashed", colour = "grey50") +
+    geom_col(fill = "#3C5488", width = 0.7) +
+    geom_text(aes(label = DARs_adjusted), vjust = -0.35, size = 2.6) +
+    facet_wrap(~panel, scales = "free_y") +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+    labs(
+      title = "DAR count by adjustment design",
+      subtitle = paste0(
+        "Dashed line = unadjusted DAR count. Designs that could not be fitted ",
+        "(constant, collinear or nested covariates, or too few residual\n",
+        "degrees of freedom) are absent by design and are listed with their ",
+        "reason in confounder_adjusted_DAR_summary.csv."),
+      x = "Adjustment covariates", y = "Number of DARs"
+    ) +
+    theme_classic(base_size = 11) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.subtitle = element_text(size = 8),
+      strip.background = element_blank(), strip.text = element_text(face = "bold"))
+
+  n_panels <- dplyr::n_distinct(multi$panel)
+  ggsave(file.path(fig_dir, "confounder_adjusted_DARs_by_design.pdf"), p_design,
+    width = max(8, 3.2 * min(3, n_panels)),
+    height = 3.2 * ceiling(n_panels / 3) + 2, limitsize = FALSE)
+  message("Design-comparison figure covers ", n_panels, " comparison(s)")
+} else {
+  message("Only one adjustment design present; skipping the design-comparison ",
+    "figure. Set combo_scope in 07_3 to fit more designs.")
+}
 
 message("Done. Figures and summary tables in ", fig_dir,
   "; per-region table in ", out_dir)
