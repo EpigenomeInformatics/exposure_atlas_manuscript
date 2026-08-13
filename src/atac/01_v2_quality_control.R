@@ -202,6 +202,59 @@ qc_by_sample <- getCellColData(project,
   )
 covar <- dplyr::left_join(covar, qc_by_sample, by = c("arrow_name" = "Sample"))
 
+## ---- Cells behind each pseudobulk (sample x cell type) ----------------------
+# The pseudobulks used across the atlas are one per sample x cell type
+# (05_pseudobulk.R). The cell number behind each one is added to Table S1 as one
+# column per cell type, so the table stays one row per sample.
+#
+# These are the RAW counts from the ArchR project: every sample x cell-type
+# combination is reported, including the ones below the >50-cell cutoff that
+# 05_pseudobulk.R applies and the Plasma compartment it drops. Reporting them
+# makes it visible which groups were excluded and why, rather than leaving gaps.
+ct_col <- "ClusterCellTypes" # cell-type annotation used across the atlas
+
+pb_ct <- as.data.frame(getCellColData(project, select = c("Sample", ct_col)))
+names(pb_ct)[names(pb_ct) == ct_col] <- "CellType"
+n_unannotated <- sum(is.na(pb_ct$CellType))
+pb_ct <- pb_ct[!is.na(pb_ct$CellType), , drop = FALSE]
+
+# one row per sample, one column per cell type (zeros where a sample has none)
+pb_wide <- as.data.frame.matrix(table(pb_ct$Sample, pb_ct$CellType))
+pb_wide <- pb_wide[, sort(colnames(pb_wide)), drop = FALSE]
+pb_cellnames <- colnames(pb_wide)
+colnames(pb_wide) <- paste0("n_cells_", gsub("[^A-Za-z0-9]+", "_", pb_cellnames))
+pb_wide$arrow_name <- rownames(pb_wide)
+rownames(pb_wide) <- NULL
+pb_count_cols <- setdiff(colnames(pb_wide), "arrow_name")
+
+covar <- dplyr::left_join(covar, pb_wide, by = "arrow_name")
+
+# Consistency check: the per-cell-type counts must add back up to the per-sample
+# cell number, once cells with no cell-type annotation are set aside.
+# covar is a tibble, so coerce to a plain matrix before the arithmetic
+pb_mat <- as.matrix(as.data.frame(covar)[, pb_count_cols, drop = FALSE])
+pb_rowsum <- rowSums(pb_mat, na.rm = TRUE)
+n_match <- sum(pb_rowsum == covar$n_cells, na.rm = TRUE)
+message(sprintf(
+  "Pseudobulk cell counts: %d cell type(s), %d/%d samples where the per-cell-type counts sum to n_cells (%d cell(s) carry no cell-type label)",
+  length(pb_count_cols), n_match, nrow(covar), n_unannotated
+))
+if (n_match < sum(!is.na(covar$n_cells))) {
+  message("  samples where the sums differ (per-cell-type total vs n_cells):")
+  d <- which(pb_rowsum != covar$n_cells)
+  print(data.frame(
+    arrow_name = covar$arrow_name[d], per_celltype_total = pb_rowsum[d],
+    n_cells = covar$n_cells[d]
+  ))
+}
+
+# how many pseudobulks clear the >50-cell threshold 05_pseudobulk.R uses
+message(sprintf(
+  "Pseudobulks with > 50 cells: %d of %d sample x cell-type combinations",
+  sum(pb_mat > 50, na.rm = TRUE),
+  nrow(pb_mat) * length(pb_count_cols)
+))
+
 ## ---- Predict donor sex from chrY and XIST accessibility ---------------------
 # Two orthogonal, depth-normalised molecular features:
 #   chrY_frac : chrY fragments / total fragments  (HIGH in XY / male)
@@ -661,8 +714,12 @@ new_cols <- data.frame(
   Sex_predicted = as.character(covar$Sex_predicted),
   stringsAsFactors = FALSE
 )
+# cells behind each sample x cell-type pseudobulk, one column per cell type
+new_cols <- cbind(new_cols, as.data.frame(covar)[, pb_count_cols, drop = FALSE])
 openxlsx::writeData(wb, "Table S1", x = new_cols,
   startCol = s1_ncol + 1, startRow = 1)
+message("Added ", length(pb_count_cols),
+  " per-cell-type pseudobulk count column(s) to Table S1")
 
 sheet_name <- "Table S1B" # per-PC association results
 if (sheet_name %in% names(wb)) openxlsx::removeWorksheet(wb, sheet_name)
@@ -725,7 +782,7 @@ ggsave(p_assoc,
 # sample x cell type, where every covariate -- cell type, cohort, control status,
 # exposure group, the donor covariates and the technical QC metrics -- is present
 # and each is tested separately (univariate) against each PC.
-ct_col <- "ClusterCellTypes"   # cell-type annotation used across the atlas
+# (ct_col is defined with the pseudobulk cell counts above.)
 
 assoc_ct_results <- list()
 for (emb in embeddings_to_test) {
