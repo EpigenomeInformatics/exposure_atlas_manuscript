@@ -38,6 +38,7 @@ l2fc_cut <- 1
 motif_fdr_cut <- 0.1
 motif_l2fc_cut <- 0.5
 n_top_motifs <- 25 # tracked across folds
+n_panel_motifs <- 10 # rows in the compact supplementary panel
 
 # subject assignment and palette as in 10_tcells.R
 sample_to_subject <- c(
@@ -260,8 +261,9 @@ p_a <- ggplot(plot_pts, aes(x = Log2FC_full, y = Log2FC, colour = class)) +
   theme(legend.position = "top", plot.subtitle = element_text(size = 7),
     strip.background = element_blank(), strip.text = element_text(face = "bold"))
 
+# response-letter material, not the supplementary figure
 ggsave(p_a, file = paste0(fig_dir, "tex_leave_one_donor_out_l2fc.pdf"),
-  width = 12, height = 3.8)
+  width = 10, height = 3.2)
 
 ## ---- 7. Panel B: motif enrichment across folds -----------------------------
 # Figure 2G is a motif claim, so this is the panel that has to hold. Track the
@@ -305,8 +307,9 @@ if (length(fold_motifs) > 0) {
       strip.background = element_blank(), strip.text = element_text(face = "bold"),
       axis.text.y = element_text(size = 6))
 
+  # full 25-motif version, superseded for the paper by the compact panel below
   ggsave(p_b, file = paste0(fig_dir, "tex_leave_one_donor_out_motifs.pdf"),
-    width = 12, height = 5)
+    width = 11, height = 4.5)
 
   write.csv(
     dplyr::bind_rows(fold_motifs) %>%
@@ -326,6 +329,69 @@ if (length(fold_motifs) > 0) {
     message("\nFOXP motif enrichment across the ", length(fold_motifs), " folds:")
     print(as.data.frame(fox_sig))
   }
+}
+
+## ---- 8. Compact panel for the supplementary figure --------------------------
+# One panel, footprint comparable to the donor-composition bar plot. Rows are
+# the top motifs from the full cohort, columns are the full cohort and each
+# leave-one-donor-out fold. The recovery statistics go in the legend text, not
+# in a second panel -- there is only one figure slot.
+if (length(fold_motifs) > 0) {
+  panel_tf <- motifs_full %>%
+    dplyr::filter(direction == "up") %>%
+    dplyr::arrange(dplyr::desc(mlog10Padj)) %>%
+    utils::head(n_panel_motifs) %>%
+    dplyr::pull(TF)
+
+  panel_df <- dplyr::bind_rows(
+    motifs_full %>% dplyr::filter(direction == "up", TF %in% panel_tf) %>%
+      dplyr::mutate(panel = "All four\ndonors"),
+    dplyr::bind_rows(fold_motifs) %>%
+      dplyr::filter(direction == "up", TF %in% panel_tf) %>%
+      dplyr::mutate(panel = paste0("without\n", unname(subject_label[held_out])))
+  )
+  panel_df$TF <- factor(panel_df$TF, levels = rev(panel_tf))
+  panel_df$panel <- factor(panel_df$panel,
+    levels = c("All four\ndonors", paste0("without\n", unname(subject_label[donors]))))
+  panel_df$sig <- panel_df$mlog10Padj > -log10(0.05)
+
+  # FOX family bolded on the axis, since that is the family the text names
+  tf_levels <- levels(panel_df$TF)
+  tf_face <- ifelse(grepl("^FOX", tf_levels), "bold", "plain")
+  tf_col <- ifelse(grepl("^FOX", tf_levels), "#B2182B", "grey20")
+
+  p_panel <- ggplot(panel_df, aes(x = panel, y = TF, fill = mlog10Padj)) +
+    geom_tile(colour = "white", linewidth = 0.6) +
+    geom_text(aes(label = ifelse(sig, sprintf("%.0f", mlog10Padj), "ns")),
+      size = 2.6, colour = "grey15") +
+    scale_fill_gradient(low = "#F2F7F4", high = "#238B45",
+      name = "-log10\n(adj. p)") +
+    scale_x_discrete(position = "top") +
+    labs(x = NULL, y = NULL) +
+    theme_classic(base_size = 9) +
+    theme(
+      axis.text.y = element_text(face = tf_face, colour = tf_col, size = 7),
+      axis.text.x = element_text(size = 7),
+      axis.line = element_blank(), axis.ticks = element_blank(),
+      legend.key.width = unit(0.3, "cm"), legend.key.height = unit(0.5, "cm"),
+      legend.title = element_text(size = 7), legend.text = element_text(size = 6)
+    )
+
+  ggsave(p_panel, file = paste0(fig_dir, "tex_leave_one_donor_out_panel.pdf"),
+    width = 5.2, height = 3.2)
+  message("Compact supplementary panel: tex_leave_one_donor_out_panel.pdf")
+
+  # the numbers for the legend, so they are quoted rather than recalled
+  message("\nFor the legend:")
+  message("  DARs (full cohort): ", sum(full$isDAR))
+  message("  recovered per fold: ",
+    paste0(summary_tbl$recovered_pct, "%", collapse = ", "))
+  message("  recovered in all folds: ", n_all, " (",
+    round(100 * n_all / max(1, nrow(core)), 1), "%)")
+  message("  sign concordance: ",
+    paste0(range(summary_tbl$sign_concordance_pct), collapse = "-"), "%")
+  message("  log2FC r on full-cohort DARs: ",
+    paste0(range(summary_tbl$r_full_DARs), collapse = "-"))
 }
 
 message("\nDone. Figures and tables in ", fig_dir)
