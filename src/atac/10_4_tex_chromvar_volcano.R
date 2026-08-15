@@ -43,14 +43,12 @@ tex_clusters <- c("C1", "C2")
 matrices <- c("MotifMatrix", "altiusMatrix")
 
 zdiff_cut <- 0.25   # |difference in mean chromVAR z| to call differential
-padj_cut <- 0.05    # threshold used to CALL motifs differential
+padj_cut <- 0.01    # threshold used to CALL motifs differential
 
-# The red line marks padj_cut, i.e. -log10(0.05) = 1.3, which sits at the very
-# bottom of the panel. That is not a bug: with ~7000 cells the weakest motif we
-# actually call is at -log10(padj) = 6.6 (cisbp) / 11.6 (Altius), so padj never
-# binds and the line separates nothing. |zdiff| and donor consistency do all the
-# work. Raise padj_cut only if the intention is to genuinely tighten the call;
-# moving the line on its own would misreport the threshold.
+# The red line marks padj_cut and therefore sits low in the panel. With ~7000
+# cells the weakest motif we call is at -log10(padj) = 6.6 (cisbp) / 11.6
+# (Altius), so padj does not bind at any conventional threshold; |zdiff| and
+# donor consistency do the selecting. Keep the line reporting the real cutoff.
 padj_line <- padj_cut
 padj_cap <- 50      # -log10 cap; cell-level p underflows to 0
 n_label_each <- 10  # top motifs labelled per direction
@@ -176,11 +174,14 @@ volcano_plot <- function(v, mat_name) {
       colour = "#B22222", linewidth = 0.3, linetype = "dashed") +
     annotate("text", x = x_lim[2], y = -log10(padj_line),
       label = paste0("padj = ", padj_line), colour = "#B22222",
-      size = 2.6, hjust = 1, vjust = -0.6) +
+      size = 3.2, hjust = 1, vjust = -0.6) +
     geom_point(size = 1.4, alpha = 0.85) +
-    ggrepel::geom_text_repel(data = lab, aes(label = motif), size = 2.5,
-      max.overlaps = Inf, min.segment.length = 0, segment.size = 0.2,
-      box.padding = 0.3, seed = 12, show.legend = FALSE) +
+    ggrepel::geom_text_repel(data = lab, aes(label = motif), size = 3.6,
+      max.overlaps = Inf, min.segment.length = Inf, segment.size = 0,
+      # no leader lines, so keep the repulsion weak or a label drifts away
+      # from the point it belongs to
+      box.padding = 0.4, point.padding = 0.2, force = 0.6,
+      seed = 12, show.legend = FALSE) +
     scale_colour_manual(
       values = c("Tex" = "#B22222", "NO" = "grey75", "Other" = "#3C6EB4"),
       breaks = c("Tex", "NO", "Other"),
