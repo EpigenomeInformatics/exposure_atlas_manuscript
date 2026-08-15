@@ -47,9 +47,16 @@ padj_cut <- 0.05
 padj_cap <- 50      # -log10 cap; cell-level p underflows to 0
 n_label_each <- 10  # top motifs labelled per direction
 
-# always labelled if present, whatever their rank (cisbp names)
-tf_always <- c("TOX", "TOX2", "NR4A1", "NR4A2", "NR4A3", "TCF7",
-  "TBX21", "EOMES", "FOXP1", "FOXP2", "FOXP3", "RUNX1")
+# always labelled if present, whatever their rank; motif names differ between
+# the two sets (cisbp keeps gene symbols, Altius collapses families into
+# lowercase archetypes), so one list per matrix
+tf_always <- list(
+  MotifMatrix = c("TOX", "TOX2", "NR4A1", "NR4A2", "NR4A3", "TCF7", "TCF7L2",
+    "LEF1", "TBX21", "EOMES", "FOXP1", "FOXP2", "FOXP3", "FOXP4", "FOXO1",
+    "FOXK1", "RUNX1", "BATF", "PRDM1"),
+  altiusMatrix = c("fox_4", "fox_6", "tcf_lef", "lef1", "runx_1", "runx_2",
+    "batf", "ap1_1", "ap1_2", "nfat_1", "nfat_2", "tbx_1", "nr_11", "prdm1")
+)
 
 sample_to_subject <- c(
   "hiv6_fragments.tsv.gz" = "sub1", "hiv12_fragments.tsv.gz" = "sub1", "hiv9_fragments.tsv.gz" = "sub1",
@@ -143,12 +150,14 @@ test_matrix <- function(zmat, status, subj, donors) {
 
 ## ---- 4. Volcano, same style as the zdiff volcanoes elsewhere ----------------
 volcano_plot <- function(v, mat_name) {
+  keep_lab <- tf_always[[mat_name]]
+  if (is.null(keep_lab)) keep_lab <- character(0)
   lab <- dplyr::bind_rows(
     v %>% dplyr::filter(group != "NO") %>%
       dplyr::group_by(group) %>%
       dplyr::slice_max(order_by = abs(zdiff), n = n_label_each, with_ties = FALSE) %>%
       dplyr::ungroup(),
-    v %>% dplyr::filter(motif %in% tf_always)
+    v %>% dplyr::filter(motif %in% keep_lab)
   ) %>% dplyr::distinct()
 
   ggplot(v, aes(x = zdiff, y = mlog10padj, colour = group)) +
@@ -212,7 +221,7 @@ for (mat_name in use_matrices) {
     dplyr::transmute(motif, zdiff = round(zdiff, 3), padj = signif(padj, 3),
       donors_consistent, group) %>% utils::head(12)))
 
-  hits <- v %>% dplyr::filter(motif %in% tf_always)
+  hits <- v %>% dplyr::filter(motif %in% tf_always[[mat_name]])
   if (nrow(hits) > 0) {
     message("  exhaustion vs activation discriminators:")
     print(as.data.frame(hits %>%
