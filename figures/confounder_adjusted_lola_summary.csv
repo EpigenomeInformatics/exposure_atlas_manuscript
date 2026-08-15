@@ -1,5 +1,5 @@
-"cell","comparison","adj_set","universe_regions","DARs_unadjusted","DARs_adjusted","terms_tested","terms_sig_both","terms_sig_unadjusted_only","terms_sig_adjusted_only","terms_recovered_pct","log2OR_pearson"
-"Mono_CD14","C19_sev vs C19_ctrl","TSS_FRIP",169852,923,574,3032,166,110,28,60.1,0.88
-"Mono_CD14","C19_mod vs C19_ctrl","TSS_FRIP",169852,373,230,3032,82,26,9,75.9,NA
-"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS_FRIP",155539,95,292,3032,39,1,33,97.5,0.637
-"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS_FRIP",155539,4,51,3032,0,0,0,NA,NA
+"cell","comparison","adj_set","universe_regions","DARs_unadjusted","DARs_adjusted","terms_tested","terms_sig_both","terms_sig_unadjusted_only","terms_sig_adjusted_only","terms_recovered_pct","DAR_size_ratio","log2OR_pearson"
+"Mono_CD14","C19_sev vs C19_ctrl","TSS_FRIP",169852,923,574,3032,166,110,28,60.1,0.62,0.88
+"Mono_CD14","C19_mod vs C19_ctrl","TSS_FRIP",169852,373,230,3032,82,26,9,75.9,0.62,0.774
+"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS_FRIP",155539,95,292,3032,39,1,33,97.5,3.07,0.637
+"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS_FRIP",155539,4,51,3032,0,0,0,NA,12.75,0.268

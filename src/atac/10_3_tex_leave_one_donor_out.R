@@ -17,7 +17,6 @@ suppressPackageStartupMessages({
   library(ArchR)
   library(dplyr)
   library(ggplot2)
-  library(Matrix)
 })
 set.seed(12)
 addArchRThreads(threads = 8)
@@ -332,94 +331,76 @@ if (length(fold_motifs) > 0) {
 }
 
 ## ---- 8. Supplementary panel -------------------------------------------------
-# One scatter, footprint comparable to the donor-composition plot. Effect sizes
-# with each donor held out against the full cohort, coloured by which donor was
-# dropped. Points are the DARs that carry a FOX-family motif -- the regions the
-# Figure 2G enrichment is built from -- so the panel shows in one place that
-# both the enrichment and the regions behind it survive dropping any donor.
-# Everything else is grey background.
-fox_peaks <- tryCatch({
-  mm <- ArchR::getMatches(project, "Motif")
-  fox_cols <- grep("^FOX", colnames(mm))
-  if (length(fox_cols) == 0) stop("no FOX motifs in the annotation")
-  hit <- Matrix::rowSums(SummarizedExperiment::assay(mm)[, fox_cols, drop = FALSE]) > 0
-  gr <- SummarizedExperiment::rowRanges(mm)
-  data.frame(
-    peak = paste0(as.character(GenomicRanges::seqnames(gr)), ":",
-      GenomicRanges::start(gr), "-", GenomicRanges::end(gr)),
-    has_FOX = as.logical(hit), stringsAsFactors = FALSE
-  )
-}, error = function(e) {
-  message("Could not read motif matches (", conditionMessage(e),
-    "); the panel will show all DARs instead.")
-  NULL
-})
+# Grouped horizontal bars, same orientation and footprint as the donor
+# composition plot. Motifs named in Figure 2G on the y axis, enrichment of the
+# Tex hyper-accessible regions on the x, one bar per analysis: the full cohort
+# and each leave-one-donor-out fold. All five bars clearing the significance
+# line means no single donor carries the enrichment.
+#
+# A scatter of fold vs full log2FC was tried first and was unreadable: 4 folds x
+# 4097 DARs overplot into two blobs and the last colour drawn hides the rest.
+# Those numbers are in the legend instead.
+panel_motifs <- c("FOXP1", "FOXP2", "FOXP3", "FOXP4", "RUNX1", "ETV2")
 
-panel_dat <- folds %>% dplyr::filter(isDAR_full)
-if (!is.null(fox_peaks)) {
-  panel_dat <- dplyr::left_join(panel_dat, fox_peaks, by = "peak")
-  panel_dat$has_FOX[is.na(panel_dat$has_FOX)] <- FALSE
-} else {
-  panel_dat$has_FOX <- TRUE
+if (length(fold_motifs) > 0) {
+  mo_all <- dplyr::bind_rows(
+    motifs_full %>% dplyr::mutate(analysis = "All four donors"),
+    dplyr::bind_rows(fold_motifs) %>%
+      dplyr::mutate(analysis = paste0("without ", unname(subject_label[held_out])))
+  ) %>%
+    dplyr::filter(direction == "up") %>%
+    # motif ids carry a numeric suffix (FOXP2_356); match on the symbol
+    dplyr::mutate(symbol = sub("_[0-9]+$", "", TF)) %>%
+    dplyr::filter(symbol %in% panel_motifs)
+
+  if (nrow(mo_all) == 0) {
+    message("None of panel_motifs found in the enrichment output; ",
+      "check the motif names in tex_leave_one_donor_out_motifs.csv")
+  } else {
+    # one row per symbol per analysis (a symbol can map to several motif ids)
+    mo_all <- mo_all %>%
+      dplyr::group_by(symbol, analysis) %>%
+      dplyr::summarise(mlog10Padj = max(mlog10Padj), .groups = "drop")
+
+    mo_all$symbol <- factor(mo_all$symbol, levels = rev(panel_motifs))
+    analysis_levels <- c("All four donors",
+      paste0("without ", unname(subject_label[donors])))
+    mo_all$analysis <- factor(mo_all$analysis, levels = analysis_levels)
+    pal <- stats::setNames(c("grey35", unname(colorPalette[donors])), analysis_levels)
+
+    p_panel <- ggplot(mo_all, aes(x = mlog10Padj, y = symbol, fill = analysis)) +
+      geom_col(position = position_dodge(width = 0.8), width = 0.75) +
+      geom_vline(xintercept = -log10(0.05), linetype = "dashed",
+        colour = "grey30", linewidth = 0.4) +
+      scale_fill_manual(values = pal, name = NULL) +
+      scale_x_continuous(expand = expansion(mult = c(0, 0.05))) +
+      labs(x = "-log10(adjusted p), motif enrichment", y = NULL) +
+      theme_classic(base_size = 9) +
+      theme(
+        legend.position = "right",
+        legend.key.size = unit(0.32, "cm"),
+        legend.text = element_text(size = 7),
+        axis.text.y = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "grey95", linewidth = 0.3)
+      )
+
+    ggsave(p_panel, file = paste0(fig_dir, "tex_leave_one_donor_out_panel.pdf"),
+      width = 5.6, height = 3.0)
+    message("Supplementary panel: tex_leave_one_donor_out_panel.pdf")
+  }
 }
-panel_dat$Subject <- unname(subject_label[panel_dat$held_out])
-
-n_fox <- dplyr::n_distinct(panel_dat$peak[panel_dat$has_FOX])
-message("FOX-motif DARs: ", n_fox, " of ", dplyr::n_distinct(panel_dat$peak))
-
-# per-donor correlation on the FOX-motif DARs, for the legend labels
-fox_r <- panel_dat %>%
-  dplyr::filter(has_FOX) %>%
-  dplyr::group_by(Subject) %>%
-  dplyr::summarise(r = stats::cor(Log2FC, Log2FC_full, use = "complete.obs"),
-    .groups = "drop") %>%
-  dplyr::mutate(lab = paste0(Subject, "  (r = ", sprintf("%.2f", r), ")"))
-
-lab_map <- stats::setNames(fox_r$lab, fox_r$Subject)
-panel_dat$SubjectLab <- unname(lab_map[panel_dat$Subject])
-pal <- stats::setNames(unname(colorPalette[donors]),
-  unname(lab_map[unname(subject_label[donors])]))
-
-p_panel <- ggplot() +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed",
-    colour = "grey50", linewidth = 0.4) +
-  geom_hline(yintercept = 0, colour = "grey85", linewidth = 0.3) +
-  geom_vline(xintercept = 0, colour = "grey85", linewidth = 0.3) +
-  geom_point(data = dplyr::filter(panel_dat, !has_FOX),
-    aes(x = Log2FC_full, y = Log2FC), colour = "grey85", size = 0.4, alpha = 0.4) +
-  geom_point(data = dplyr::filter(panel_dat, has_FOX),
-    aes(x = Log2FC_full, y = Log2FC, colour = SubjectLab),
-    size = 0.7, alpha = 0.65) +
-  scale_colour_manual(values = pal, name = "donor held out") +
-  guides(colour = guide_legend(override.aes = list(size = 2.5, alpha = 1), ncol = 1)) +
-  labs(
-    x = "log2FC, all four donors",
-    y = "log2FC, one donor held out"
-  ) +
-  theme_classic(base_size = 9) +
-  theme(
-    legend.position = "right",
-    legend.key.height = unit(0.38, "cm"),
-    legend.title = element_text(size = 8),
-    legend.text = element_text(size = 7)
-  )
-
-ggsave(p_panel, file = paste0(fig_dir, "tex_leave_one_donor_out_panel.pdf"),
-  width = 5.4, height = 3.4)
-message("Supplementary panel: tex_leave_one_donor_out_panel.pdf")
 
 # numbers for the legend, so they are quoted rather than recalled
 message("\nFor the legend:")
-message("  DARs (full cohort): ", sum(full$isDAR), "; carrying a FOX motif: ", n_fox)
-message("  FOX-motif DAR log2FC r per fold: ",
-  paste0(sprintf("%.2f", fox_r$r), collapse = ", "))
+message("  DARs (full cohort): ", sum(full$isDAR))
 message("  recovered per fold: ",
   paste0(summary_tbl$recovered_pct, "%", collapse = ", "))
 message("  recovered in all folds: ", n_all, " (",
   round(100 * n_all / max(1, nrow(core)), 1), "%)")
 message("  sign concordance: ",
   paste0(range(summary_tbl$sign_concordance_pct), collapse = "-"), "%")
-message("  FOXP motifs enriched in all ", length(fold_motifs), " folds (see CSV)")
+message("  log2FC r on full-cohort DARs: ",
+  paste0(range(summary_tbl$r_full_DARs), collapse = "-"))
 
 message("\nDone. Figures and tables in ", fig_dir)
 
