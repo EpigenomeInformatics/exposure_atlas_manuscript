@@ -516,7 +516,7 @@ if (nrow(multi) > 0) {
         "Dashed line = unadjusted DAR count. Designs that could not be fitted ",
         "(constant, collinear or nested covariates, or too few residual\n",
         "degrees of freedom) are absent by design and are listed with their ",
-        "reason in confounder_adjusted_DAR_summary.csv."),
+        "reason in confounder_adjusted_DAR_fit_log.csv, written by 07_3."),
       x = "Adjustment covariates", y = "Number of DARs"
     ) +
     theme_classic(base_size = 11) +

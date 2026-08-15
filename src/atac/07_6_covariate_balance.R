@@ -362,41 +362,83 @@ write.csv(direction, file.path(fig_dir, "covariate_balance_direction.csv"),
   row.names = FALSE)
 
 ## ---- 5. Figure --------------------------------------------------------------
-# Observed |SMD| against the permutation null median for the same comparison.
-# The diagonal is "exactly what chance produces at this group size", so distance
-# ABOVE the diagonal is the only thing that means anything. Plotting the null on
-# the x axis rather than drawing a fixed threshold is the whole point: the
-# threshold moves with the group sizes, and here it moves a lot (n = 3 to 8).
-plot_bal <- cont %>%
-  dplyr::mutate(
-    flag = ifelse(imbalanced == "imbalanced",
-      "imbalanced (BH < 0.05)", "not distinguishable from chance")
-  )
+# The earlier version plotted observed |SMD| against the permutation null and
+# coloured by significance. It was unreadable for three reasons: nothing was
+# significant so the colour carried no information, absolute values hid the
+# direction (which is the actual finding), and nothing identified WHICH
+# comparisons were shifted.
+#
+# This version plots the SIGNED standardised mean difference with cohort on the
+# y axis, so the eye goes straight to the question that matters: is a covariate
+# pushed to one side in a particular cohort? The shaded band is the chance
+# envelope -- the median |SMD| that label permutation produces at these group
+# sizes -- so anything inside it is what balance looks like at n = 3-8.
+# canonical cohort colours (same values as comp_group_colors in 14_l2fc.R)
+cohort_colors <- c(
+  "C19" = "#238B45", "HIV" = "#88419D",
+  "Influenza" = "#D95F0E", "OP" = "#084594"
+)
 
-p_bal <- ggplot(plot_bal, aes(x = null_median_abs_SMD, y = abs(SMD))) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey55") +
-  geom_hline(yintercept = smd_cut_convention, linetype = "dotted", colour = "grey75") +
-  geom_point(aes(colour = flag, size = n_grp1 + n_grp2), alpha = 0.75) +
+plot_bal <- cont %>%
+  dplyr::mutate(cohort = cohort_of(comparison)) %>%
+  dplyr::filter(is.finite(SMD))
+plot_bal$cohort <- factor(plot_bal$cohort,
+  levels = rev(intersect(names(cohort_colors), unique(plot_bal$cohort))))
+
+# chance envelope, one per covariate (the null median varies a little with the
+# group sizes, so the median across comparisons is used for the band)
+band <- plot_bal %>%
+  dplyr::group_by(covariate) %>%
+  dplyr::summarise(hi = stats::median(null_median_abs_SMD, na.rm = TRUE),
+    .groups = "drop") %>%
+  dplyr::mutate(lo = -hi)
+
+# label the covariate x cohort combinations that sit outside the band on
+# average -- these are the ones worth a sentence in the text
+callout <- plot_bal %>%
+  dplyr::group_by(covariate, cohort) %>%
+  dplyr::summarise(median_SMD = stats::median(SMD), n = dplyr::n(), .groups = "drop") %>%
+  dplyr::left_join(band, by = "covariate") %>%
+  dplyr::filter(abs(median_SMD) > hi)
+
+p_bal <- ggplot(plot_bal, aes(x = SMD, y = cohort)) +
+  geom_rect(data = band, inherit.aes = FALSE,
+    aes(xmin = lo, xmax = hi, ymin = -Inf, ymax = Inf),
+    fill = "grey88", alpha = 0.7) +
+  geom_vline(xintercept = 0, colour = "grey45", linewidth = 0.3) +
+  geom_point(aes(colour = cohort), size = 1.9, alpha = 0.75,
+    position = position_jitter(height = 0.18, width = 0)) +
+  # median per cohort, so a consistent shift is visible even when the individual
+  # points scatter across the band
+  stat_summary(fun = median, geom = "point", shape = 124, size = 5,
+    colour = "grey15") +
   facet_wrap(~covariate) +
-  scale_colour_manual(values = c(
-    "imbalanced (BH < 0.05)" = "#E64B35",
-    "not distinguishable from chance" = "grey60")) +
-  scale_size_continuous(range = c(1, 4), name = "samples") +
+  scale_colour_manual(values = cohort_colors, guide = "none") +
   labs(
     title = "Technical covariate balance within each differential comparison",
     subtitle = paste0(
-      "Dashed line: the median |SMD| produced by chance alone at that comparison's group sizes (", n_perm,
-      " label permutations).\n",
-      "Points near or below it are what balanced groups look like at n = 3-8. Dotted line marks the |SMD| = ",
-      smd_cut_convention, " convention, which does not apply at these sample sizes."),
-    x = "permutation null median |SMD|", y = "observed |SMD|", colour = NULL
+      "Each point is one comparison; positive values mean the covariate is higher in the first group of the contrast.\n",
+      "Grey band: the range that label permutation alone produces at these group sizes (n = 3-8, ", n_perm,
+      " permutations). Vertical tick: cohort median.\n",
+      "Points inside the band are indistinguishable from chance. A cohort whose points sit consistently to one side is systematically shifted."),
+    x = "standardised mean difference between the compared groups", y = NULL
   ) +
   theme_classic(base_size = 11) +
-  theme(legend.position = "top", plot.subtitle = element_text(size = 8),
-    strip.background = element_blank(), strip.text = element_text(face = "bold"))
+  theme(plot.subtitle = element_text(size = 8),
+    strip.background = element_blank(), strip.text = element_text(face = "bold"),
+    panel.grid.major.y = element_line(colour = "grey94", linewidth = 0.3))
 
 ggsave(file.path(fig_dir, "covariate_balance.pdf"), p_bal,
-  width = 9, height = 7)
+  width = 9.5, height = 5.5)
+
+if (nrow(callout) > 0) {
+  message("\nCovariate x cohort combinations whose median sits outside the chance band:")
+  print(as.data.frame(callout %>%
+    dplyr::transmute(covariate, cohort, n_comparisons = n,
+      median_SMD = round(median_SMD, 3), chance_band = round(hi, 3))))
+} else {
+  message("\nNo covariate x cohort combination sits outside the chance band.")
+}
 
 message("\nDone. Tables and figure in ", fig_dir)
 message("Read alongside confounder_adjusted_DARs.pdf: this script asks whether ",

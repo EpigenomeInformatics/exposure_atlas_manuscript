@@ -546,7 +546,12 @@ message("Comparisons discovered: ", length(jobs),
 # The summary is rewritten after every fit, so a crash or a wall-clock limit
 # part-way through still leaves a usable table (and `resume` picks the run back
 # up from where it stopped).
-summary_csv <- file.path(fig_dir, "confounder_adjusted_DAR_summary.csv")
+# NB distinct filename from 07_4's output. Both scripts used to write
+# "confounder_adjusted_DAR_summary.csv" and whichever ran last silently
+# overwrote the other -- which lost exactly the columns only this script
+# produces (status, adj_columns, n_samples, residual_df), i.e. the record of
+# which designs were refused as not feasible and why.
+summary_csv <- file.path(fig_dir, "confounder_adjusted_DAR_fit_log.csv")
 res_list <- list()
 
 for (k in seq_along(runs)) {
@@ -608,6 +613,8 @@ print(as.data.frame(stability))
 # script means the sweep and the figures cannot drift apart, and the figures can
 # be redrawn or restyled without touching the fits.
 ok <- res[!is.na(res$status) & res$status == "ok", , drop = FALSE]
+message("Fit log written to confounder_adjusted_DAR_fit_log.csv (status per ",
+  "comparison x design, including designs refused as not feasible)")
 message(nrow(ok), " comparison(s) available for plotting. Run ",
   "src/atac/07_4_confounder_adjusted_DAR_plots.R to write the figures into ",
   fig_dir, " (nothing is re-fitted there).")
