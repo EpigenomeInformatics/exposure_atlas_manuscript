@@ -942,16 +942,32 @@ ggsave(p_dot,
 ## Same distributions as before, but log1p-transformed so the zero-inflated bulk
 ## is resolved instead of being flattened by the tail. Kept as the companion to
 ## the dot plot for anyone who wants the full distribution rather than a summary.
+# Axis capped at the 99.5th percentile: the tail above it is a handful of
+# individual cells that were taking roughly half the panel height. coord_cartesian
+# clips the VIEW rather than the data, so the violins and the median/IQR are
+# still computed from every cell.
+y_cap <- as.numeric(stats::quantile(log1p(tcell_df$Activity), 0.995, na.rm = TRUE))
+
 tcell_violin <- ggplot(tcell_df,
     aes(x = CellType, y = log1p(Activity), fill = CellType)) +
   geom_violin(scale = "width", trim = TRUE, linewidth = 0.2) +
-  geom_boxplot(width = 0.12, outlier.shape = NA, fill = "white", linewidth = 0.2) +
+  # A narrow crossbar rather than a boxplot: the old white box was wider than
+  # most of the violins it sat inside, so the box read as the data.
+  stat_summary(fun = median, geom = "crossbar", width = 0.45,
+    linewidth = 0.25, colour = "grey15", fatten = 0) +
+  stat_summary(
+    fun.min = function(z) stats::quantile(z, 0.25, na.rm = TRUE),
+    fun.max = function(z) stats::quantile(z, 0.75, na.rm = TRUE),
+    fun = median, geom = "linerange", linewidth = 0.5, colour = "grey15") +
   facet_wrap(~ Gene, nrow = 1) +
   scale_fill_manual(values = tcell_palette) +
-  labs(x = "T-cell type", y = expression(log[1 * p] ~ "(gene activity)")) +
+  coord_cartesian(ylim = c(0, y_cap)) +
+  labs(x = "T-cell type", y = expression(log[1 * p] ~ "(gene activity)"),
+    caption = sprintf("Bar, median; line, interquartile range. Y axis clipped at the 99.5th percentile (%.2f); violins use all cells.", y_cap)) +
   theme_classic(base_size = 10) +
   theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1))
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.caption = element_text(size = 7, hjust = 0))
 
 ggsave(tcell_violin,
        file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_violin.pdf"),
