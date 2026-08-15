@@ -36,11 +36,9 @@ source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/archr
 addArchRThreads(threads = 30)
 fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
-# --- HIV T-cell project cache -------------------------------------------------
-# Build the subsetted/clustered/peak-called project once and save it as an RDS.
-# On later runs we read the RDS and skip the expensive steps (LSI, clustering,
-# UMAP, peak calling, chromVAR deviations), so only the plots/analyses re-run.
-# NB: the Arrow files under outputDir must remain in place for the RDS to load.
+# Cache the subsetted/clustered/peak-called project as RDS so LSI, clustering,
+# UMAP, peak calling and chromVAR are not redone on every run. The Arrow files
+# under outputDir must stay put for the RDS to load.
 hiv_rds <- file.path(outputDir, "hiv_tcell_project.rds")
 build_project <- !file.exists(hiv_rds)
 
@@ -300,13 +298,8 @@ ggsave(tex_traj, file = paste0(fig_dir, "tex_proportion_trajectory.pdf"),
        width = 6, height = 5)
 
 ## <<< REVISION (R2/R3): donor composition of each Tex cluster -----------------
-## Reviewer (R2, annotation reproducibility across individuals) and co-author
-## comments (Fabian 64/65/66) asked for the percentage of cells in each
-## exhausted (Tex) cluster contributed by each HIV subject, to show that both
-## Tex clusters (C1, C2) are made up of cells from all four subjects rather than
-## being driven by a single individual. This is the ClustersHIV x Subject
-## cross-tabulation (as percentages) promised in the response letter
-## (Response Figure N).
+## ClustersHIV x Subject as percentages, to show C1/C2 are not one donor.
+## Asked for by R2 and by Fabian (comments 64/65/66).
 cluster_levels_all <- paste0("C", 1:6)   # C1/C2 are the exhausted (Tex) clusters
 donor_comp_df <- getCellColData(project, select = c("ClustersHIV", "Sample")) %>%
   as.data.frame() %>%
@@ -346,9 +339,7 @@ ggsave(donor_comp_bar,
        width = 6, height = 4)
 ## <<< END REVISION -----------------------------------------------------------
 
-## NOTE: the previous pooled Fisher test is retained below but commented out,
-## so the change from the original submission is transparent. Do not use for
-## the manuscript claim.
+## Previous pooled Fisher test kept below, commented out. Do not use.
 # status_time_table <- table(df$Status, df$TimePoint)
 # run_pairwise_fisher <- function(tbl) {
 #   stages <- colnames(tbl)
@@ -403,13 +394,9 @@ ggsave(lp, file = paste0(fig_dir, "viral_load_subject.pdf"), width = 7, height =
 
 
 ## <<< REVISION (R2/R3): CD8 identity + Treg-exclusion markers -----------------
-## Reviewers asked (a) how CD4 vs CD8 T cells were distinguished, and (b) that
-## the possibility of CD4 Treg / activated-CD4 contamination in the Tex clusters
-## be excluded, since CTLA4 is also a Treg marker. We add lineage markers
-## (CD4, CD8A, CD8B) and canonical Treg markers (FOXP3, IL2RA) to the exhaustion
-## panel so the Tex clusters can be shown to be CD8+ and FOXP3-/IL2RA-low.
+## CTLA4 is also a Treg marker, so add lineage (CD4/CD8A/CD8B) and Treg
+## (FOXP3/IL2RA) genes to the panel to show Tex is CD8+ and FOXP3-/IL2RA-low.
 
-# Exhaustion markers (original) + lineage and Treg markers (added)
 markerGenes <- c(
   "HAVCR2", "CTLA4", "NCAM1", "ROBO2", "ROBO1", "TIGIT",  # exhaustion (original)
   "CD8A", "CD8B", "CD4",                                   # lineage (added)
@@ -442,12 +429,9 @@ dev.off()
 
 project <- addImputeWeights(project)
 
-## <<< REVISION (R2/R3): keep a compact colour scale on each UMAP panel --------
-## Previously each gene-activity UMAP dropped its colour guide
-## (guides(color = FALSE, fill = FALSE)), so the panels had no min-to-max scale.
-## Reviewers/co-authors need to read the gene-activity range, so we keep a small
-## per-panel colour bar (each gene keeps its own scale, since e.g. CD8A and FOXP3
-## span different ranges). Axis ticks stay off to keep the panels clean.
+## <<< REVISION (R2/R3): keep a colour bar on each gene-activity UMAP ----------
+## guides(color = FALSE) dropped the scale entirely. Per-gene scales, since
+## CD8A and FOXP3 span different ranges.
 style_umap_gene <- function(x) {
   x +
     theme_ArchR(baseSize = 6.5) +
@@ -477,9 +461,8 @@ pdf(file = paste0(fig_dir, "exhaustion_markers_umap.pdf"), width = 12, height = 
 do.call(cowplot::plot_grid, c(list(ncol = 3), p2))
 dev.off()
 
-## <<< REVISION (R2/R3): dedicated lineage/Treg UMAP panel ---------------------
-## A separate, clearly labelled panel for the CD8-identity / Treg-exclusion
-## markers, so it can be cited directly in the annotation-justification text.
+## <<< REVISION (R2/R3): separate lineage/Treg UMAP panel, so it can be cited --
+## directly in the annotation text.
 lineage_treg_genes <- c("CD8A", "CD8B", "CD4", "FOXP3", "IL2RA")
 p_lin <- plotEmbedding(
   ArchRProj = project,
@@ -510,16 +493,11 @@ write.csv(as.data.frame(tex_summary),
 ## <<< END REVISION -----------------------------------------------------------
 
 
-## <<< REVISION (R2): per-cluster lineage + exhaustion activity distributions ---
-## Side-by-side violin/box plots of the lineage markers (CD8A, CD8B, CD4) and the
-## two canonical exhaustion markers (CTLA4, HAVCR2) across the six HIV CD8
-## subclusters. Shows that all clusters remain CD8A/CD8B-positive and CD4-low,
-## and that CTLA4/HAVCR2 gene activity is elevated in the Tex clusters (C1/C2).
-## This is the quantitative, per-cluster companion to the marker UMAPs and shows
-## the CD8A gradient within the compartment.
+## <<< REVISION (R2): lineage + exhaustion activity per HIV CD8 subcluster -----
+## Quantitative companion to the marker UMAPs: CD8A/CD8B high and CD4 low in all
+## six clusters, CTLA4/HAVCR2 up in C1/C2.
 comp_genes_wanted <- c("CD8A", "CD8B", "CD4", "CTLA4", "HAVCR2")
-# gs_sub above holds only the lineage/Treg panel, so the exhaustion markers are
-# taken straight from the full gene-score matrix instead.
+# gs_sub holds only the lineage/Treg panel, so pull these from the full matrix
 comp_genes <- intersect(comp_genes_wanted, gs_rownames)
 comp_mat   <- assay(gsm)[match(comp_genes, gs_rownames), , drop = FALSE]
 rownames(comp_mat) <- comp_genes
@@ -835,22 +813,15 @@ ComplexHeatmap::draw(hm_motifs)
 dev.off()
 
 #####################################################################
-## <<< REVISION: lineage + exhaustion marker activity across ALL T-cell types --
-## The panel above is restricted to the HIV CD8 subclusters. This is the same
-## marker set (CD8A, CD8B, CD4, CTLA4, HAVCR2) across the T-cell compartment of
-## the whole atlas, with the annotated cell type on the x axis instead of the HIV
-## subcluster, so the exhaustion markers can be read against the lineage markers
-## in every T-cell population rather than only in the HIV subset.
-##
-## T_mix is excluded: it is the mixed/unresolved T-cell cluster, so its marker
-## distributions are a blend of the populations either side of it and would be
-## read as intermediate biology rather than as an annotation artefact.
+## <<< REVISION: same marker set across ALL T-cell types in the atlas ----------
+## Cell type on the x axis instead of HIV subcluster, so exhaustion markers can
+## be read against lineage markers outside the HIV subset.
+## T_mix dropped: mixed cluster, its distributions blend the neighbours.
 #####################################################################
 
 tcell_types <- c("T_naive", "T_mem_CD4", "T_mem_CD8", "T_mait") # T_mix excluded
 
-# Canonical atlas cell-type colours (same values as 13_cvar_analysis.R and
-# 14_l2fc.R), so this panel is comparable with the rest of the figures.
+# atlas cell-type colours, as in 13_cvar_analysis.R / 14_l2fc.R
 tcell_palette <- c(
   "T_naive"   = "#C7E9B4",
   "T_mem_CD4" = "#4292c6",
@@ -858,8 +829,7 @@ tcell_palette <- c(
   "T_mait"    = "#41B6C4"
 )
 
-# `project` above is the HIV-only subset, so reload the full atlas if the build
-# branch did not already put it in the session.
+# `project` is the HIV subset here, so reload the full atlas if needed
 if (!exists("echo_full")) {
   echo_full <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
 }
@@ -870,11 +840,10 @@ message("T-cell compartment: ", length(t_cells), " cells across ",
         length(tcell_types), " cell types (T_mix excluded)")
 tproj <- ArchR::subsetCells(echo_full, cellNames = t_cells)
 
-# Subset the cells FIRST, so only the T-cell compartment is pulled into memory.
+# subset cells first, so only the T-cell compartment is loaded
 gsm_t   <- getMatrixFromProject(tproj, useMatrix = "GeneScoreMatrix")
 gs_t_rn <- rowData(gsm_t)$name
-# Reuse the marker set from the HIV panel so the two figures stay identical;
-# fall back to the literal list if only this section is being re-run.
+# reuse the HIV panel's marker set; fall back if only this section is re-run
 marker_genes_t <- if (exists("comp_genes_wanted")) comp_genes_wanted else
   c("CD8A", "CD8B", "CD4", "CTLA4", "HAVCR2")
 genes_t <- intersect(marker_genes_t, gs_t_rn)
@@ -899,17 +868,12 @@ tcell_df <- do.call(rbind, lapply(genes_t, function(g) {
     Gene     = factor(Gene, levels = genes_t)
   )
 
-## Gene-activity scores are zero-inflated with long right tails: nearly all the
-## mass sits at zero and a few cells reach 50. On a linear axis with scale =
-## "width", the drawn shape is set by those few extreme cells and everything
-## informative is compressed into the bottom of the panel. Two readable views:
+## Gene activity is zero-inflated with long right tails, so a plain linear
+## violin is set by a handful of extreme cells. Two readable views:
 
-## ---- (a) Dot plot: detection rate and mean level ----------------------------
-## The standard readout for zero-inflated single-cell data. Dot SIZE is the
-## percentage of cells with non-zero activity, dot COLOUR is the mean activity
-## scaled within each gene (so genes on different absolute scales are
-## comparable). This separates "how many cells have the marker at all" from
-## "how strong it is where present", which a violin conflates.
+## ---- (a) Dot plot ----------------------------------------------------------
+## Size = % cells with non-zero activity, colour = mean scaled within gene.
+## Separates detection rate from level, which a violin conflates.
 tcell_dot <- tcell_df %>%
   dplyr::group_by(Gene, CellType) %>%
   dplyr::summarise(
@@ -942,17 +906,9 @@ ggsave(p_dot,
 ## Same distributions as before, but log1p-transformed so the zero-inflated bulk
 ## is resolved instead of being flattened by the tail. Kept as the companion to
 ## the dot plot for anyone who wants the full distribution rather than a summary.
-# Linear gene-activity units, matching every other gene-activity panel in the
-# manuscript, with a free y scale so each gene gets a range suited to its own
-# distribution.
-#
-# A per-gene trim is still needed: within a single gene the bulk of cells sit
-# near zero while a handful reach 30-50, and on a linear axis those few cells set
-# the range and flatten everything else (this is what the first version of this
-# panel looked like). The violin layer is therefore drawn from the cells at or
-# below each gene's 99.5th percentile, while the median and IQR are computed from
-# EVERY cell -- so no reported statistic is affected by the trim, only the shape
-# of the drawn tail.
+# Linear units and free y, matching the other gene-activity panels. Violins are
+# drawn from cells at or below each gene's 99.5th percentile; median and IQR use
+# every cell, so only the drawn tail is affected.
 viol_caps <- tcell_df %>%
   dplyr::group_by(Gene) %>%
   dplyr::summarise(cap = stats::quantile(Activity, 0.995, na.rm = TRUE),
@@ -967,8 +923,7 @@ message("Violin panel: trimmed ",
 tcell_violin <- ggplot(mapping = aes(x = CellType, y = Activity)) +
   geom_violin(data = viol_df, aes(fill = CellType),
     scale = "width", trim = TRUE, linewidth = 0.2) +
-  # A narrow crossbar rather than a boxplot: the old white box was wider than
-  # most of the violins it sat inside, so the box read as the data.
+  # crossbar not boxplot: the box was wider than most violins
   stat_summary(data = tcell_df, fun = median, geom = "crossbar",
     width = 0.45, linewidth = 0.25, colour = "grey15", fatten = 0) +
   stat_summary(data = tcell_df,
@@ -990,10 +945,8 @@ ggsave(tcell_violin,
        file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_violin.pdf"),
        width = 12, height = 4)
 
-## ---- Numbers behind both panels ---------------------------------------------
-## NB the unit here is the CELL. Every cell is one observation, so these are
-## descriptive only -- a formal comparison between cell types would be
-## pseudoreplicated across the cells of a donor and must be done at donor level.
+## Unit is the CELL, so descriptive only. A formal test between cell types
+## would be pseudoreplicated across a donor's cells and needs donor-level means.
 write.csv(
   tcell_dot %>%
     dplyr::mutate(dplyr::across(c(pct_detected, mean_all, mean_detected,
@@ -1002,7 +955,7 @@ write.csv(
   row.names = FALSE
 )
 
-# wide per-cell-type means, kept for the figure legend
+# wide means for the legend
 tcell_means <- tcell_df %>%
   dplyr::group_by(Gene, CellType) %>%
   dplyr::summarise(mean_activity = round(mean(Activity, na.rm = TRUE), 3),

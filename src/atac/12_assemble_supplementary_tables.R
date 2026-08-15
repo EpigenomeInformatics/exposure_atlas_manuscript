@@ -15,14 +15,10 @@
 #   - src/meth/01b_meth_pseudobulk_qc.R -> figures/meth_pseudobulk_qc.csv
 #         and figures/meth_pseudobulk_qc_by_group.csv
 #
-# Several new tables are inserted here, so the numbering shifts more than once. Rather than
-# chaining two rename passes (which is where off-by-one errors creep in), the
-# final layout is declared once in `final_layout` below and every rename is
-# derived from it. Edit that table if the order changes; nothing else needs
-# touching.
-#
-# The script always reads the pre-shift workbook and writes a fresh final file,
-# so it is idempotent (safe to re-run).
+# Several tables are inserted, so the numbering shifts more than once. The final
+# layout is declared once in `final_layout` and every rename derives from it;
+# edit that table if the order changes. Always reads the pre-shift workbook and
+# writes a fresh final file, so re-running is safe.
 #
 # FINAL NUMBERING
 #   S1   Sample metadata of the scATAC dataset
@@ -70,7 +66,7 @@ if (!all(file.exists(pbqc_csv, pbqc_grp_csv))) {
 message("Reading workbook: ", supp_in)
 
 ## ---- 1. Old -> new numbering -----------------------------------------------
-# `old` is the sheet name in the incoming workbook, NA for the two new tables.
+# `old` is the incoming sheet name, NA for new tables
 final_layout <- tibble::tribble(
   ~new,          ~old,          ~description,
   "Table S1",    "Table S1",    "Sample metadata of the scATAC dataset",
@@ -135,12 +131,9 @@ comp_supp <- read.csv(comp_csv, stringsAsFactors = FALSE) %>%
     `p (Bonferroni-adjusted)`     = signif(p_adj, 3)
   )
 
-# (b) snmC-seq per-cell annotation.
-# Two columns are deliberately dropped:
-#   - the unnamed row-number column written by write.csv (no information)
-#   - allC_FilePathfull, an absolute path under /icbb/projects/igunduz/... The
-#     relative allC_FilePath is kept; publishing internal filesystem layout in a
-#     supplementary table serves no reader and is easy to overlook.
+# (b) snmC-seq per-cell annotation. Drops the write.csv row-number column and
+# allC_FilePathfull (absolute path under /icbb/projects/igunduz/...); the
+# relative allC_FilePath is kept.
 allc_raw <- read.csv(allc_csv, stringsAsFactors = FALSE, check.names = FALSE)
 drop_cols <- c("", "X", "allC_FilePathfull")
 allc_supp <- allc_raw[, !colnames(allc_raw) %in% drop_cols, drop = FALSE]
@@ -172,9 +165,8 @@ if (all(names(new_content) %in% names(wb)) &&
     identical(dim(openxlsx::readWorkbook(wb, "Table S5")), dim(comp_supp))) {
   message("Workbook already assembled; nothing to do.")
 } else {
-  # Rename via a temporary prefix so an old name can never collide with a new
-  # one mid-pass (old "Table S2" -> new "Table S3" while an old "Table S3" still
-  # exists). Two passes: to temp names, then to final names.
+  # temp prefix first, so an old name cannot collide with a new one mid-pass
+  # (old S2 -> new S3 while an old S3 still exists)
   renames <- final_layout %>%
     dplyr::filter(!is.na(old), old != new)
 
@@ -202,7 +194,7 @@ if (all(names(new_content) %in% names(wb)) &&
     openxlsx::addWorksheet(wb, nm)
     dat <- new_content[[nm]]
     openxlsx::writeData(wb, nm, dat, withFilter = TRUE, headerStyle = hdr)
-    # auto-width is very slow on a sheet with tens of thousands of rows
+    # auto-width is slow on tens of thousands of rows
     if (nrow(dat) < 5000) {
       openxlsx::setColWidths(wb, nm, cols = seq_along(dat), widths = "auto")
     } else {
@@ -221,8 +213,7 @@ if (all(names(new_content) %in% names(wb)) &&
   openxlsx::worksheetOrder(wb) <- match(ord_names, names(wb))
 
   ## ---- 6. Rebuild the Index sheet -------------------------------------------
-  # Built from final_layout rather than patched, so the Index cannot drift out of
-  # step with the sheet names.
+  # built from final_layout, so it cannot drift from the sheet names
   idx <- data.frame(
     Table = final_layout$new,
     Description = final_layout$description,

@@ -54,15 +54,11 @@ covar <- readxl::read_excel(suppTables, sheet = "Table S1") %>%
   dplyr::mutate(
     # Cohort: C19 / HIV / Influenza / OP
     exposure_type = factor(exposure_type),
-    # Exposure group: the within-cohort condition arm (C19_mild/mod/sev/ctrl,
-    # HIV_ctrl/acu/chr, Influenza_ctrl/d3/d6/d28, OP_low/med/high). Tested as its
-    # own covariate so that within-cohort structure is not attributed to cohort.
+    # within-cohort condition arm, tested separately from cohort
     exposure_group = factor(exposure_group),
-    # Control vs non-control. The unexposed arms are the "healthy" groups
-    # (C19_ctrl, HIV_ctrl, Influenza_ctrl; n = 16). NB the OP cohort has no
-    # unexposed arm -- OP_low is a low-exposure, not a healthy, group -- so every
-    # OP sample is "Exposed" and this covariate is partly nested in cohort. The
-    # cohort-adjusted column is therefore the one to read for it.
+    # "healthy" arms are C19_ctrl / HIV_ctrl / Influenza_ctrl (n = 16). OP has
+    # no unexposed arm (OP_low is low-exposure), so every OP sample is Exposed
+    # and this is partly nested in cohort. Read the cohort-adjusted column.
     control_status = factor(
       ifelse(exposure_grouping == "healthy", "Control", "Exposed"),
       levels = c("Control", "Exposed")
@@ -203,14 +199,9 @@ qc_by_sample <- getCellColData(project,
 covar <- dplyr::left_join(covar, qc_by_sample, by = c("arrow_name" = "Sample"))
 
 ## ---- Cells behind each pseudobulk (sample x cell type) ----------------------
-# The pseudobulks used across the atlas are one per sample x cell type
-# (05_pseudobulk.R). The cell number behind each one is added to Table S1 as one
-# column per cell type, so the table stays one row per sample.
-#
-# These are the RAW counts from the ArchR project: every sample x cell-type
-# combination is reported, including the ones below the >50-cell cutoff that
-# 05_pseudobulk.R applies and the Plasma compartment it drops. Reporting them
-# makes it visible which groups were excluded and why, rather than leaving gaps.
+# One column per cell type in Table S1, so the table stays one row per sample.
+# Raw counts: every combination is reported, including those below the >50-cell
+# cutoff 05_pseudobulk.R applies and the Plasma compartment it drops.
 ct_col <- "ClusterCellTypes" # cell-type annotation used across the atlas
 
 pb_ct <- as.data.frame(getCellColData(project, select = c("Sample", ct_col)))
@@ -229,9 +220,8 @@ pb_count_cols <- setdiff(colnames(pb_wide), "arrow_name")
 
 covar <- dplyr::left_join(covar, pb_wide, by = "arrow_name")
 
-# Consistency check: the per-cell-type counts must add back up to the per-sample
-# cell number, once cells with no cell-type annotation are set aside.
-# covar is a tibble, so coerce to a plain matrix before the arithmetic
+# per-cell-type counts should sum to n_cells, minus unannotated cells
+# covar is a tibble, so coerce before the arithmetic
 pb_mat <- as.matrix(as.data.frame(covar)[, pb_count_cols, drop = FALSE])
 pb_rowsum <- rowSums(pb_mat, na.rm = TRUE)
 n_match <- sum(pb_rowsum == covar$n_cells, na.rm = TRUE)
@@ -506,9 +496,8 @@ write.csv(
 )
 
 # add inferred sex, confidence, raw signals and the flag to the covariate table
-# Carry the raw chrX / chrY / XIST signals through as well, not just the derived
-# call: these are the features the classifier was fitted on, and Table S1 should
-# show them so the sex prediction can be checked rather than taken on trust.
+# carry the raw chrX / chrY / XIST signals, not just the call, so the
+# prediction can be checked from Table S1
 covar <- dplyr::left_join(covar,
   dplyr::select(
     sex_metrics, Sample, chrY, chrX, xist, chrY_frac, xist_frac,
@@ -656,8 +645,7 @@ var_summary <- assoc_df %>%
   dplyr::summarise(
     total_var_marginal = sum(r2 * var_explained, na.rm = TRUE),
     total_var_adjCohort = sum(r2_partial_adjCohort * var_explained, na.rm = TRUE),
-    # largest single-PC R^2, which is what the heatmap tiles show; quoting this
-    # alongside the variance-weighted total lets the text match the figure
+    # largest single-PC R^2, i.e. what the heatmap tiles show
     max_r2 = max(r2, na.rm = TRUE),
     max_r2_PC = PC[which.max(r2)],
     .groups = "drop"
@@ -714,18 +702,14 @@ if (length(rec_col) == 1) {
 # write the new columns directly.
 s1_ncol <- ncol(s1_now)
 new_cols <- data.frame(
-  # recovered donor metadata (reported values). Donor_ID matters beyond this
-  # table: the HIV cohort is longitudinal (3 samples per donor), so any analysis
-  # treating samples as independent needs to know which share a donor.
+  # Donor_ID matters beyond this table: HIV is longitudinal, 3 samples/donor
   Donor_ID = covar$donor_id,
   Age_reported = covar$Age_reported,
   Sex_reported = as.character(covar$Sex),
   Sampling_day_rel_onset = covar$sampling_day,
   Viral_load = covar$viral_load,
-  # molecular sex call together with the features it was derived from, so the
-  # prediction is auditable from Table S1 alone. The full per-sample detail
-  # (including the marker-threshold calls and the discrepancy flag) stays in
-  # figures/sex_prediction_metrics.csv.
+  # sex call plus the features behind it. Full detail (marker-threshold calls,
+  # discrepancy flag) stays in figures/sex_prediction_metrics.csv.
   Sex_predicted = as.character(covar$Sex_predicted),
   P_male = covar$p_male,
   chrY_fragments = covar$chrY,
@@ -763,18 +747,14 @@ write.csv(assoc_df,
 )
 
 ## ---- Visualise: -log10(adjusted p) per PC x covariate -----------------------
-# NB on the colour scale: for a strong association pf() returns a p-value that
-# underflows to exactly 0, and -log10(0) is Inf. ggplot treats Inf as
-# out-of-bounds and paints it with na.value, so the STRONGEST tiles came out the
-# same pale grey as the missing ones -- CellType at R^2 = 0.98 looked weaker than
-# CellType at 0.82. Floor the p-value at the smallest representable double and
-# cap the scale so those tiles saturate at the top of the ramp instead.
+# pf() underflows to 0 for a strong association and -log10(0) is Inf, which
+# ggplot paints with na.value -- so the strongest tiles came out the same grey
+# as the missing ones. Floor the p and cap the scale.
 p_cap <- 50
 neglog10 <- function(p, cap = p_cap) {
   pmin(-log10(pmax(p, .Machine$double.xmin)), cap)
 }
-# Fixed row order: the three design covariates (cohort, control status, exposure
-# group) first, then the donor covariates, then the technical QC metrics.
+# design covariates first, then donor, then technical
 covariate_order <- c(
   "CellType", "Cohort", "Control_status", "Exposure_group",
   "Age", "Sex_observed", "Sex_predicted", "Sampling_day",
@@ -816,12 +796,9 @@ ggsave(p_assoc,
 )
 
 ## ---- Per-(sample x cell type) association: adds Cell type and Exposure -------
-# The analysis above aggregates over cell types (one profile per sample), so cell
-# type does not vary within it and cannot be tested there at all. This section is
-# therefore the COMPLETE heatmap: the same PCA repeated at the pseudobulk level of
-# sample x cell type, where every covariate -- cell type, cohort, control status,
-# exposure group, the donor covariates and the technical QC metrics -- is present
-# and each is tested separately (univariate) against each PC.
+# Cell type does not vary in the sample-level PCA above, so it cannot be tested
+# there. This repeats the PCA on sample x cell-type pseudobulks, where every
+# covariate is present and each is tested separately against each PC.
 # (ct_col is defined with the pseudobulk cell counts above.)
 
 assoc_ct_results <- list()
@@ -835,8 +812,7 @@ for (emb in embeddings_to_test) {
   pb_emb <- sums / n_grp                       # (sample x cell type) x dims
   keep   <- n_grp >= 20                        # drop tiny, noisy pseudobulks
   pb_emb <- pb_emb[keep, , drop = FALSE]
-  # NB subset n_grp with the same filter, so the pseudobulk cell counts stay
-  # aligned with the retained rows and can be tested as a technical covariate.
+  # same filter as pb_emb, or the counts misalign with the retained rows
   pb_ncells <- n_grp[keep]
 
   pca <- stats::prcomp(pb_emb, center = TRUE, scale. = TRUE)
@@ -849,8 +825,7 @@ for (emb in embeddings_to_test) {
   pb_ct     <- key[, 2]
   cvp       <- covar[match(pb_sample, covar$arrow_name), ]
 
-  # Same covariate set as the sample-level heatmap, plus CellType. QC_nCells is
-  # the number of cells behind each pseudobulk here, not the per-sample count.
+  # as the sample-level set plus CellType. QC_nCells is per pseudobulk here.
   covariate_cols <- list(
     CellType          = factor(pb_ct),
     Cohort            = cvp$exposure_type,
@@ -888,11 +863,8 @@ write.csv(assoc_ct_df,
   row.names = FALSE
 )
 
-# Variance-weighted summary at the pseudobulk level, matching the one computed
-# for the sample-level PCs above. The Results text quotes these numbers, so they
-# have to exist for the SAME unit of observation as the panel that is shown --
-# quoting the sample-level totals under a pseudobulk-level figure would be a
-# mismatch a reader cannot detect but a reviewer can.
+# Same summary at the pseudobulk level. The Results text quotes these, so they
+# have to exist for the same unit as the panel that is shown.
 var_summary_ct <- assoc_ct_df %>%
   dplyr::group_by(embedding, covariate) %>%
   dplyr::summarise(

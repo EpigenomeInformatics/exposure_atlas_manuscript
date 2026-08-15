@@ -1,0 +1,5 @@
+"held_out","peaks_tested","DARs_full","DARs_fold","recovered","recovered_pct","sign_concordance_pct","r_all_peaks","r_full_DARs"
+"Subject 1",120419,4097,4314,1430,34.9,96.4,0.563,0.839
+"Subject 2",120419,4097,5177,1659,40.5,96.1,0.536,0.835
+"Subject 3",120419,4097,4050,1628,39.7,97.2,0.623,0.86
+"Subject 4",120419,4097,3208,1035,25.3,92.1,0.467,0.777

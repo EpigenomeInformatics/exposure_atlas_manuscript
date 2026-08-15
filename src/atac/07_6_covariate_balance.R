@@ -3,50 +3,29 @@
 #####################################################################
 # 07_6_covariate_balance.R
 # created on 2026-08-12 by Irem B. Gunduz
-# Are the technical covariates balanced between the groups being compared?
+# Are the technical covariates balanced between the compared groups?
 #
-# This is the analysis that justifies the unadjusted differential model, and it
-# is a different question from the one 07_3/07_4 answer.
+# Different question from 07_3/07_4:
+#   07_3/07_4  if we adjust, do the DAR calls change?   (sensitivity)
+#   here       is there anything to adjust FOR?         (confounding)
 #
-#   07_3/07_4 ask: if we adjust, do the DAR calls change?   (sensitivity)
-#   this script asks: is there anything to adjust FOR?      (confounding)
+# Adjustment only removes confounding if the covariate differs between the two
+# groups being compared. TSS enrichment differs a lot BETWEEN cohorts (Supp Fig
+# 1A) but every comparison is WITHIN a cohort, so that variation never enters
+# the model.
 #
-# Adjustment removes confounding only when a covariate is associated with BOTH
-# the outcome and the group being compared. Supplementary Figure 1A shows TSS
-# enrichment differing sharply BETWEEN cohorts (COVID-19 ~11, HIV ~17, OP ~15) --
-# but every differential comparison is WITHIN a cohort (C19_sev vs C19_ctrl,
-# HIV_ctrl vs HIV_acu, ...), so that between-cohort variation never enters the
-# model. The question is narrower: within each comparison, do the two groups
-# differ in TSS enrichment, FRIP, fragment number or cell number?
-#
-# HOW TO READ THE OUTPUT -- and how NOT to
-#
-# (1) The rank-sum p-value is close to useless here. With 4-7 samples per group
-#     it has almost no power, and a two-sided exact test at n = 4 vs 4 cannot
-#     return anything below 0.029. A p above 0.05 is evidence of a small sample,
-#     not evidence of balance. It is reported, and flagged where its floor makes
-#     it uninformative, but nothing should be concluded from it.
-#
-# (2) The conventional |SMD| < 0.25 threshold does NOT apply at these group
-#     sizes. That convention comes from propensity-score matching in large
-#     observational studies. Under the null of exchangeable groups, SMD has a
-#     standard error of about sqrt(2/n): 0.63 at n = 5, 0.82 at n = 3. So even
-#     with no systematic imbalance whatsoever, the median |SMD| would land near
-#     0.43 at n = 5 and 0.65 at n = 3. Counting how many comparisons exceed 0.25
-#     therefore measures the sample size, not the confounding. An earlier version
-#     of this script did exactly that and reported 203 of 300 covariate x
-#     comparison tests as "imbalanced", which was an artefact of the threshold.
-#
-# (3) The calibrated test is a PERMUTATION null: shuffle the group labels within
-#     the comparison, recompute |SMD|, and ask where the observed value falls in
-#     that distribution. This is exact for these group sizes, needs no
-#     distributional assumption, and automatically accounts for n. It is the
-#     primary result; p_perm and its BH-adjusted value are the columns to read.
-#
-# (4) A permutation test is still per comparison. A covariate that differs in a
-#     CONSISTENT DIRECTION across many comparisons sharing a control group is one
-#     fact repeated, not many independent ones -- so the per-covariate direction
-#     summary at the end matters as much as any single p-value.
+# Reading the output:
+#  - ignore the rank-sum p. At 4-7 per group it has no power, and n = 4 vs 4
+#    cannot go below 0.029.
+#  - |SMD| < 0.25 does NOT apply here. That convention is for large matched
+#    studies. Under the null SMD has SE ~ sqrt(2/n), so median |SMD| lands near
+#    0.43 at n = 5 and 0.65 at n = 3. An earlier version used 0.25 and called
+#    203/300 tests imbalanced, which was the threshold, not the data.
+#  - use p_perm / p_perm_BH: permute group labels within the comparison and see
+#    where the observed |SMD| falls. Exact at these group sizes.
+#  - permutation is per comparison. A covariate shifted the same way across many
+#    comparisons sharing a control arm is one fact repeated, so read the
+#    direction summary at the end too.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -68,16 +47,13 @@ archr_dir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_
 
 grp_col <- "sample_exposure_group"
 
-# Permutation settings. These groups have 3-8 samples, so the label space is
-# small; n_perm well above the number of distinct splits costs nothing and makes
-# the p-values stable.
+# groups are 3-8 samples, so the label space is small; this is plenty
 n_perm <- 5000
 
-# Retained only to annotate the figure with where the (inapplicable) convention
-# would sit. Nothing is classified with it -- see note (2) in the header.
+# only drawn on the figure for reference; nothing is classified with it
 smd_cut_convention <- 0.25
 
-# Same normalisation as 07_3, so the ChrAccR <-> ArchR bridge behaves identically
+# as in 07_3, so the ChrAccR -> ArchR bridge behaves the same
 norm_key <- function(x) {
   x <- basename(as.character(x))
   x <- sub("\\.tsv\\.gz.*$", "", x)
@@ -127,9 +103,7 @@ continuous_covs <- c("mean_TSS", "mean_FRIP", "mean_log10_nFrags", "n_cells")
 categorical_covs <- c("Sex_predicted", "Donor_ID")
 
 ## ---- 2. Balance for one comparison -----------------------------------------
-# SMD uses the pooled standard deviation. If both groups are constant the
-# difference is either exactly zero (balanced) or undefined; both are reported
-# rather than silently returned as NA.
+# pooled SD. Both groups constant -> 0 if means match, Inf otherwise.
 smd <- function(x1, x2) {
   s1 <- stats::sd(x1, na.rm = TRUE); s2 <- stats::sd(x2, na.rm = TRUE)
   pooled <- sqrt((s1^2 + s2^2) / 2)
@@ -148,7 +122,7 @@ balance_one <- function(sa, cell, grp1, grp2) {
     return(NULL)
   }
 
-  # smallest p a two-sided exact rank-sum test can return at these group sizes
+  # p floor for these group sizes
   p_floor <- tryCatch(
     stats::wilcox.test(seq_len(sum(i1)), sum(i1) + seq_len(sum(i2)))$p.value,
     error = function(e) NA_real_
@@ -160,9 +134,7 @@ balance_one <- function(sa, cell, grp1, grp2) {
       error = function(e) NA_real_)
     obs <- smd(x1, x2)
 
-    # Permutation null: reassign the same values to groups of the same sizes.
-    # This is the reference the observed |SMD| has to be judged against, and it
-    # is calibrated to THIS comparison's group sizes.
+    # null: same values, same group sizes, shuffled labels
     xall <- c(x1, x2)
     n1 <- length(x1)
     null_smd <- replicate(n_perm, {
@@ -170,7 +142,7 @@ balance_one <- function(sa, cell, grp1, grp2) {
       smd(xall[idx[seq_len(n1)]], xall[idx[-seq_len(n1)]])
     })
     null_smd <- null_smd[is.finite(null_smd)]
-    # +1 in numerator and denominator: a permutation p can never be 0
+    # +1 so p is never exactly 0
     p_perm <- if (length(null_smd) == 0 || !is.finite(obs)) NA_real_ else
       (1 + sum(abs(null_smd) >= abs(obs))) / (1 + length(null_smd))
 
@@ -181,7 +153,7 @@ balance_one <- function(sa, cell, grp1, grp2) {
       mean_grp1 = mean(x1, na.rm = TRUE), mean_grp2 = mean(x2, na.rm = TRUE),
       sd_grp1 = stats::sd(x1, na.rm = TRUE), sd_grp2 = stats::sd(x2, na.rm = TRUE),
       SMD = obs,
-      # what "no systematic imbalance" looks like at these group sizes
+      # what balance looks like at these group sizes
       null_median_abs_SMD = if (length(null_smd)) stats::median(abs(null_smd)) else NA_real_,
       null_q95_abs_SMD = if (length(null_smd)) as.numeric(stats::quantile(abs(null_smd), 0.95)) else NA_real_,
       p_perm = p_perm,
@@ -276,14 +248,13 @@ if (is.null(bal) || nrow(bal) == 0) {
 
 bal <- bal %>%
   dplyr::mutate(
-    # BH across all continuous tests; a per-covariate family would be defensible
-    # too, but the broader family is the conservative choice
+    # BH over all continuous tests (conservative; per-covariate also defensible)
     p_perm_BH = ifelse(type == "continuous",
       stats::p.adjust(ifelse(type == "continuous", p_perm, NA_real_), method = "BH"),
       NA_real_),
     imbalanced = ifelse(type == "continuous" & !is.na(p_perm_BH) & p_perm_BH < 0.05,
       "imbalanced", "not distinguishable from chance"),
-    # the observed effect relative to what chance alone produces at this n
+    # observed effect relative to chance at this n
     SMD_vs_null = ifelse(is.finite(SMD) & !is.na(null_median_abs_SMD) &
         null_median_abs_SMD > 0, abs(SMD) / null_median_abs_SMD, NA_real_),
     p_uninformative = !is.na(p_floor) & p_floor > 0.05
@@ -327,10 +298,8 @@ per_cov <- cont %>%
     max_abs_SMD       = round(max(abs(SMD)), 3),
     n_imbalanced_perm = sum(imbalanced == "imbalanced", na.rm = TRUE),
     min_p_perm        = signif(min(p_perm, na.rm = TRUE), 3),
-    # Direction consistency: a covariate that is higher in group 1 in nearly
-    # every comparison is systematically shifted even if no single comparison
-    # reaches significance. This is the column that caught the cell-number
-    # difference between COVID-19 cases and controls.
+    # consistent direction across comparisons, even if none is significant
+    # on its own. This is what caught the COVID-19 cell-number difference.
     pct_higher_in_grp1 = round(100 * mean(SMD > 0), 1),
     p_sign_test       = signif(stats::binom.test(sum(SMD > 0), dplyr::n())$p.value, 3),
     .groups = "drop"
@@ -341,10 +310,9 @@ write.csv(per_cov, file.path(fig_dir, "covariate_balance_summary.csv"),
   row.names = FALSE)
 
 ## ---- 4b. Direction consistency within a cohort ------------------------------
-# A covariate can be balanced in every individual comparison and still be
-# systematically shifted, if the comparisons share a control group. Grouping by
-# cohort and covariate makes that visible; note that comparisons sharing a
-# control arm are NOT independent, so this is descriptive, not a test.
+# Comparisons sharing a control arm are not independent, so this is
+# descriptive. It exists because per-comparison tests cannot see a consistent
+# shift across comparisons.
 cohort_of <- function(x) sub("_.*", "", x)
 direction <- cont %>%
   dplyr::mutate(cohort = cohort_of(comparison)) %>%
@@ -362,17 +330,11 @@ write.csv(direction, file.path(fig_dir, "covariate_balance_direction.csv"),
   row.names = FALSE)
 
 ## ---- 5. Figure --------------------------------------------------------------
-# The earlier version plotted observed |SMD| against the permutation null and
-# coloured by significance. It was unreadable for three reasons: nothing was
-# significant so the colour carried no information, absolute values hid the
-# direction (which is the actual finding), and nothing identified WHICH
-# comparisons were shifted.
-#
-# This version plots the SIGNED standardised mean difference with cohort on the
-# y axis, so the eye goes straight to the question that matters: is a covariate
-# pushed to one side in a particular cohort? The shaded band is the chance
-# envelope -- the median |SMD| that label permutation produces at these group
-# sizes -- so anything inside it is what balance looks like at n = 3-8.
+# Signed SMD, cohort on the y axis: is a covariate pushed to one side in a
+# given cohort? Shaded band is the chance envelope from the permutations.
+# (An earlier version plotted |SMD| against the null and was unreadable --
+# nothing was significant, so the colour carried nothing, and absolute values
+# hid the direction, which is the actual finding.)
 # canonical cohort colours (same values as comp_group_colors in 14_l2fc.R)
 cohort_colors <- c(
   "C19" = "#238B45", "HIV" = "#88419D",
@@ -385,16 +347,14 @@ plot_bal <- cont %>%
 plot_bal$cohort <- factor(plot_bal$cohort,
   levels = rev(intersect(names(cohort_colors), unique(plot_bal$cohort))))
 
-# chance envelope, one per covariate (the null median varies a little with the
-# group sizes, so the median across comparisons is used for the band)
+# one band per covariate; null median varies with group size, so take the median
 band <- plot_bal %>%
   dplyr::group_by(covariate) %>%
   dplyr::summarise(hi = stats::median(null_median_abs_SMD, na.rm = TRUE),
     .groups = "drop") %>%
   dplyr::mutate(lo = -hi)
 
-# label the covariate x cohort combinations that sit outside the band on
-# average -- these are the ones worth a sentence in the text
+# covariate x cohort combinations outside the band, i.e. worth a sentence
 callout <- plot_bal %>%
   dplyr::group_by(covariate, cohort) %>%
   dplyr::summarise(median_SMD = stats::median(SMD), n = dplyr::n(), .groups = "drop") %>%
@@ -408,8 +368,7 @@ p_bal <- ggplot(plot_bal, aes(x = SMD, y = cohort)) +
   geom_vline(xintercept = 0, colour = "grey45", linewidth = 0.3) +
   geom_point(aes(colour = cohort), size = 1.9, alpha = 0.75,
     position = position_jitter(height = 0.18, width = 0)) +
-  # median per cohort, so a consistent shift is visible even when the individual
-  # points scatter across the band
+  # cohort median, so a consistent shift shows even when points scatter
   stat_summary(fun = median, geom = "point", shape = 124, size = 5,
     colour = "grey15") +
   facet_wrap(~covariate) +

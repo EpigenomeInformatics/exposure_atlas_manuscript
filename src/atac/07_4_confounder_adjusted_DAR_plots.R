@@ -3,19 +3,13 @@
 #####################################################################
 # 07_4_confounder_adjusted_DAR_plots.R
 # created on 2026-08-12 by Irem B. Gunduz
-# Plot-only companion to 07_3_confounder_adjusted_DARs.R
+# Figures for 07_3, read off disk
 #
-# Why this exists
-#  - 07_3 builds its summary table inside a tryCatch and only draws the
-#    figure when that table is non-empty. If a comparison errors AFTER the
-#    adjusted DESeq2 run has already written its diffTab (or if `res` comes
-#    back NULL for any other reason), the adjusted results sit on disk but
-#    no PDF is produced.
-#  - This script does the reading and plotting half only: it discovers the
-#    "<cell>__<grp1>_vs_<grp2>__adjusted" directories 07_3 has already
-#    written, pairs each with the corresponding unadjusted diffTab from the
-#    original ChrAccR run, and writes the summary table and figures.
-#  - Nothing is re-fitted. No ArchR project, no ChrAccR object, no DESeq2.
+# 07_3 only draws its figure when the summary table comes back non-empty, so a
+# comparison that errors after the adjusted fit has already written its diffTab
+# leaves results on disk with no plot. This reads those tables instead.
+#
+# Nothing is refitted: no ArchR project, no ChrAccR object, no DESeq2.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -36,13 +30,10 @@ qc_adj_cols <- c("mean_TSS", "mean_FRIP")
 fig_dir <- file.path(repo_dir, "figures")
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
-# The sweep in 07_3 covers every cell type, which is far too many facets for one
-# readable scatter. Draw the panels with the most unadjusted DARs and say so.
+# too many comparisons for one scatter; draw the biggest and say so
 max_scatter_panels <- 24
 
-# 07_3 fits each comparison under several adjustment designs. The overlap and
-# scatter figures show ONE design so they stay readable; the design-comparison
-# figure below covers the rest.
+# overlap and scatter figures use one design; the design figure covers the rest
 focus_set <- "TSS_FRIP"
 
 # original (unadjusted) ChrAccR analysis directories, as in 07_3
@@ -67,9 +58,7 @@ if (length(adj_dirs) == 0) {
 message("Found ", length(adj_dirs), " adjusted run(s):\n  ",
   paste(basename(adj_dirs), collapse = "\n  "))
 
-# 07_3 writes "<cell>__<grp1>_vs_<grp2>__adj-<set>" once the adjustment-set grid
-# is in play. The older "<cell>__<grp1>_vs_<grp2>__adjusted" directories are the
-# TSS + FRIP design, so they are read as that set rather than ignored.
+# "<cell>__<grp1>_vs_<grp2>__adj-<set>"; older "__adjusted" dirs are TSS_FRIP
 parse_adj_dir <- function(d) {
   parts <- strsplit(basename(d), "__", fixed = TRUE)[[1]]
   if (length(parts) < 3) return(NULL)
@@ -84,8 +73,7 @@ parse_adj_dir <- function(d) {
 }
 
 ## ---- 2. Locate diffTab files ------------------------------------------------
-# Prefer the archrPeaks region set (the one the manuscript reports); fall back to
-# any diffTab if that naming is not used in a given run.
+# archrPeaks is the reported region set; fall back to any diffTab
 list_diff_tabs <- function(dir) {
   f <- list.files(dir, pattern = "diffTab.*archrPeaks.*\\.tsv$",
     recursive = TRUE, full.names = TRUE)
@@ -96,9 +84,8 @@ list_diff_tabs <- function(dir) {
   sort(f)
 }
 
-# The unadjusted run holds every comparison in one directory, so pick the file
-# for this comparison by name; if the filenames do not carry the group labels,
-# fall back to the comparisonTable row index (the indexing 07_3 used).
+# one dir holds every comparison, so pick by name, falling back to the
+# comparisonTable row index
 pick_unadjusted <- function(anaDir, cell, grp1, grp2) {
   ddir <- file.path(anaDir, cell, "reports", "differential_data")
   if (!dir.exists(ddir)) {
@@ -151,10 +138,8 @@ read_diff <- function(f) {
 }
 
 ## ---- 3. Summarise each comparison -------------------------------------------
-# Pass 1 computes the summary for EVERY comparison and deliberately discards each
-# merged table afterwards. Holding all of them at once would be tens of millions
-# of rows once the sweep covers every cell type; the scatter panels re-read the
-# handful of tables they need in pass 2.
+# Pass 1 summarises every comparison and drops each merged table; holding them
+# all would be tens of millions of rows. Pass 2 re-reads what the scatter needs.
 build_merged <- function(j) {
   adj_files <- list_diff_tabs(j$dir)
   if (length(adj_files) == 0) {
@@ -184,9 +169,7 @@ build_merged <- function(j) {
   m
 }
 
-# Regions called a DAR by either model are kept from pass 1 (a small fraction of
-# the merge), so the per-region table covers every comparison rather than only
-# the ones drawn in the scatter.
+# keep DAR rows from pass 1 so the region table covers every comparison
 dar_list <- list()
 
 # Per-comparison counts broken down by overlap category and direction, used for
@@ -215,10 +198,7 @@ summarise_one <- function(j) {
   message("  ", length(a), " unadjusted / ", length(b), " adjusted DARs, ",
     length(shared), " shared")
 
-  # Classify every DAR by which model called it and in which direction. Shared
-  # and unadjusted-only regions take their direction from the unadjusted fit,
-  # adjusted-only regions from the adjusted fit; the sign concordance above says
-  # how often the two agree where both called a region.
+  # direction from the unadjusted fit, except for adjusted-only regions
   cls <- dplyr::case_when(
     m$isDiff_unadj & m$isDiff_adj ~ "Shared",
     m$isDiff_unadj ~ "Unadjusted only",
@@ -256,7 +236,7 @@ summarise_one <- function(j) {
     sign_concordance_pct = round(conc, 1),
     lfc_pearson_all = round(cor(m$log2FC_unadj, m$log2FC_adj, use = "complete.obs"), 3),
     n_regions_tested = nrow(m),
-    # direction breakdown, so the stacked figure can be read off the table
+    # so the stacked figure can be read off the table
     shared_hyper = get_n("Shared", "Hyper-accessible"),
     shared_hypo = get_n("Shared", "Hypo-accessible"),
     unadj_only_hyper = get_n("Unadjusted only", "Hyper-accessible"),
@@ -285,9 +265,7 @@ if (is.null(res) || nrow(res) == 0) {
 }
 
 ## ---- 3b. Split the results: one design for the detail figures ---------------
-# res_all keeps every comparison x adjustment design and is what gets written to
-# the summary table; res is narrowed to a single design so the overlap and
-# scatter figures stay readable.
+# res_all = every comparison x design (written out); res = one design (figures)
 res_all <- res
 if (!focus_set %in% res_all$adj_set) {
   message("focus_set '", focus_set, "' not present; using the most common design")
@@ -306,12 +284,9 @@ write.csv(res_all, file.path(fig_dir, "confounder_adjusted_DAR_summary.csv"),
   row.names = FALSE)
 
 ## ---- 4. Figure 1: overlap and direction of the DAR calls --------------------
-# A side-by-side count of "unadjusted DARs" against "adjusted DARs" is hard to
-# read, because two similar-height bars can still be two different region sets.
-# This shows the partition instead: every DAR is one of shared / unadjusted-only
-# / adjusted-only, stacked, and split by direction. A result that is robust to
-# the adjustment looks like a tall "Shared" block with thin slivers either side,
-# balanced across the two direction panels.
+# Two similar-height bars can still be two different region sets, so show the
+# partition: every DAR is shared / unadjusted-only / adjusted-only, split by
+# direction. Robust = a fat Shared block with thin slivers either side.
 cat_all <- dplyr::bind_rows(cat_list) %>%
   dplyr::mutate(
     label = paste0(cell, " | ", comparison),
@@ -319,14 +294,14 @@ cat_all <- dplyr::bind_rows(cat_list) %>%
       levels = c("Unadjusted only", "Shared", "Adjusted only"))
   )
 
-# order the comparisons by total DAR count, largest at the top
+# largest at the top
 bar_order <- cat_all %>%
   dplyr::group_by(label) %>%
   dplyr::summarise(total = sum(n), .groups = "drop") %>%
   dplyr::arrange(total)
 cat_all$label <- factor(cat_all$label, levels = bar_order$label)
 
-# per-panel totals, annotated at the end of each bar
+# totals at the end of each bar
 tot_lab <- cat_all %>%
   dplyr::group_by(label, direction) %>%
   dplyr::summarise(n = sum(n), .groups = "drop")
@@ -362,9 +337,7 @@ p_stack <- ggplot(cat_all, aes(x = label, y = n, fill = overlap)) +
 ggsave(file.path(fig_dir, "confounder_adjusted_DARs.pdf"), p_stack,
   width = 11, height = max(5, 0.30 * nrow(res) + 2.2), limitsize = FALSE)
 
-# The same partition scaled to 100%, so a comparison with 60 DARs is as readable
-# as one with 6000. Read the two together: this one shows what fraction survives
-# the adjustment, the one above shows how many regions that is.
+# scaled to 100%, so 60 DARs reads as clearly as 6000
 p_stack_pct <- ggplot(cat_all, aes(x = label, y = n, fill = overlap)) +
   geom_col(width = 0.7, colour = "grey25", linewidth = 0.15, position = "fill") +
   coord_flip() +
@@ -385,14 +358,9 @@ ggsave(file.path(fig_dir, "confounder_adjusted_DARs_proportion.pdf"), p_stack_pc
   width = 11, height = max(5, 0.30 * nrow(res) + 2.2), limitsize = FALSE)
 
 ## ---- 5. Figure 2: per-region effect sizes, adjusted vs unadjusted -----------
-# The count bar chart alone does not show that the SAME regions move the same
-# way. This panel does: every tested region, unadjusted log2FC on x against
-# adjusted log2FC on y, with the Pearson correlation annotated per comparison.
-#
-# Across the full sweep there are far more comparisons than fit in one readable
-# figure, so the panels are the max_scatter_panels comparisons with the most
-# unadjusted DARs -- the ones the manuscript's claims actually rest on. The
-# summary table above covers all of them.
+# Counts do not show that the SAME regions move the same way; this does.
+# Limited to the max_scatter_panels comparisons with the most unadjusted DARs;
+# the summary table covers all of them.
 res_scatter <- res[order(-res$DARs_unadjusted), , drop = FALSE]
 res_scatter <- utils::head(res_scatter, max_scatter_panels)
 message("Drawing scatter panels for ", nrow(res_scatter), " of ", nrow(res),
@@ -419,10 +387,8 @@ merged_df$status <- factor(merged_df$status,
   levels = c("not significant", "DAR unadjusted only", "DAR adjusted only", "DAR in both"))
 merged_df <- merged_df[order(merged_df$status), ] # significant points drawn on top
 
-# A vector PDF with one point per tested region is unusably large, so thin the
-# grey background: every significant region is kept, the non-significant ones are
-# subsampled to at most 30k per panel. This changes the density of the grey cloud
-# only, not any reported number.
+# thin the grey background for file size; all significant regions kept, so no
+# reported number changes
 set.seed(12)
 max_bg <- 30000
 sig_pts <- merged_df[merged_df$status != "not significant", , drop = FALSE]
@@ -464,10 +430,9 @@ n_row <- ceiling(nrow(res_scatter) / n_col)
 ggsave(file.path(fig_dir, "confounder_adjusted_DAR_l2fc_scatter.pdf"), p_scatter,
   width = 2.6 * n_col + 1.5, height = 2.6 * n_row + 1.5, limitsize = FALSE)
 
-# Per-region table for every region called a DAR by either model, across ALL
-# comparisons, so each number in the two figures can be traced back. Regions
-# significant in neither model are left out; the full merge would be tens of
-# millions of rows. This one stays in the scratch dir, not the repo.
+# every region called a DAR by either model, so the figures can be traced back.
+# Not-significant-in-either is dropped; the full merge is far too big. Stays in
+# the scratch dir.
 dar_regions <- dplyr::bind_rows(dar_list)
 if (nrow(dar_regions) > 0) {
   dar_regions <- dar_regions %>%
@@ -484,10 +449,8 @@ write.csv(dar_regions,
 message("Wrote ", nrow(dar_regions), " region rows (DAR in either model)")
 
 ## ---- 6. Figure 3: does the choice of adjustment covariates matter? ----------
-# For the comparisons fitted under more than one design, plot the DAR count per
-# design against the unadjusted count (dashed line). Flat across designs means
-# the result does not depend on which covariates were adjusted for -- which is
-# the claim the reviewer is asking us to support.
+# DAR count per design against the unadjusted count. Flat across designs is the
+# claim the reviewer wants supported.
 multi <- res_all %>%
   dplyr::group_by(cell, comparison) %>%
   dplyr::filter(dplyr::n_distinct(adj_set) > 1) %>%

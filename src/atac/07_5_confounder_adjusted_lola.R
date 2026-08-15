@@ -3,29 +3,18 @@
 #####################################################################
 # 07_5_confounder_adjusted_lola.R
 # created on 2026-08-12 by Irem B. Gunduz
-# LOLA enrichment on the covariate-adjusted DARs, against the unadjusted ones
+# LOLA enrichment on the covariate-adjusted DARs vs the unadjusted ones
 #
-# Reviewer response: showing that the DAR COUNTS survive covariate adjustment is
-# necessary but not sufficient -- what the manuscript actually claims is the
-# BIOLOGY those regions are enriched for. This script re-runs LOLA on the
-# adjusted region sets and compares the enrichment to the uncorrected result.
-#
-# Targets
+# DAR counts surviving adjustment is not the claim; the enrichment is. Targets:
 #   COVID-19  Mono_CD14  C19_sev vs C19_ctrl, C19_mod vs C19_ctrl
 #   HIV       T_mem_CD8  HIV_ctrl vs HIV_acu, HIV_ctrl vs HIV_chr
-#             (the HIV CD8 comparisons still return DARs after adjustment, so
-#              their enrichment needs checking too, not just the COVID-19 one)
 #
-# Why LOLA is re-run here rather than read from the ChrAccR output
-#  - ChrAccR writes its own lolaRes_*.rds during run_atac_differential, but the
-#    adjusted runs in 07_3 were not configured with lolaDbPaths, so those files
-#    do not exist for them.
-#  - More importantly, a fair comparison needs the SAME region-selection rule and
-#    the SAME universe on both sides. Computing both here from the diffTab
-#    guarantees that; reading one from ChrAccR and computing the other would
-#    confound a change in enrichment with a change in how the sets were built.
+# LOLA is recomputed here rather than read from ChrAccR: the adjusted runs in
+# 07_3 had no lolaDbPaths set, and both sides need the same region cutoff and
+# the same universe or a change in enrichment is confounded with a change in
+# how the sets were built.
 #
-# Nothing is refitted. This reads the diffTab tables 07_3 has already written.
+# Nothing is refitted; this reads the diffTabs 07_3 wrote.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -42,7 +31,7 @@ fig_dir  <- file.path(repo_dir, "figures")
 out_dir  <- "/icbb/projects/igunduz/finalize_echo_050824/confounder_adjusted/"
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
-# original (unadjusted) ChrAccR runs, as in 07_3 / 07_4
+# unadjusted ChrAccR runs, as in 07_3 / 07_4
 covid_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/"
 other_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_2023-10-02/"
 
@@ -53,7 +42,7 @@ focus_set <- "TSS_FRIP"
 l2fc_cut <- 0.5
 padj_cut <- 0.05
 
-# collections to report (the ones the manuscript discusses)
+# collections the manuscript discusses
 collections_of_interest <- c("TF_motif_clusters", "TF_motifs", "codex", "encode_tfbs")
 
 ## ---- LOLA database ----------------------------------------------------------
@@ -77,7 +66,7 @@ targets <- list(
   list(dir = other_dir, cell = "T_mem_CD8", grp1 = "HIV_ctrl", grp2 = "HIV_chr")
 )
 
-## ---- Locating the diffTab tables --------------------------------------------
+## ---- diffTab lookup ---------------------------------------------------------
 list_diff_tabs <- function(dir) {
   f <- list.files(dir, pattern = "diffTab.*archrPeaks.*\\.tsv$",
     recursive = TRUE, full.names = TRUE)
@@ -92,7 +81,7 @@ adjusted_dir_for <- function(cell, grp1, grp2, set_name) {
   tag <- paste0(grp1, "_vs_", grp2)
   cands <- c(
     file.path(out_dir, paste0(cell, "__", tag, "__adj-", set_name)),
-    # legacy naming: the "__adjusted" runs are the TSS + FRIP design
+    # legacy "__adjusted" dirs are the TSS + FRIP design
     if (identical(set_name, "TSS_FRIP")) {
       file.path(out_dir, paste0(cell, "__", tag, "__adjusted"))
     }
@@ -137,11 +126,10 @@ split_dars <- function(gr) {
   )
 }
 
-## ---- Run LOLA for one region set --------------------------------------------
-# The universe is every region TESTED in that comparison, not the genome and not
-# the union of the two DAR sets. Using the tested regions is what makes the
-# adjusted and unadjusted enrichments comparable: both are asking "among the
-# regions we could have called, are the ones we did call enriched for X?".
+## ---- LOLA for one region set ------------------------------------------------
+# Universe = regions tested in that comparison, not the genome. Both models then
+# ask the same question: among the regions we could have called, are the ones we
+# did call enriched?
 run_lola_set <- function(userSets, universe, label) {
   userSets <- userSets[vapply(userSets, length, integer(1)) > 0]
   if (length(userSets) == 0) {
@@ -158,8 +146,7 @@ run_lola_set <- function(userSets, universe, label) {
     cores = 1
   )
   res <- as.data.frame(res)
-  # LOLA reports -log10 p; derive a BH q-value if the column is absent so both
-  # sides are thresholded the same way regardless of LOLA version.
+  # older LOLA versions have no qValue column
   if (!"qValue" %in% names(res)) {
     res$qValue <- stats::p.adjust(10^(-res$pValueLog), method = "BH")
   }
@@ -190,13 +177,9 @@ process_target <- function(tg) {
   adj_gr <- read_regions(adj_files[1])
   unadj_gr <- read_regions(unadj_file)
 
-  # Shared universe: the regions tested by BOTH models. Anything tested by only
-  # one of them would otherwise show up as an enrichment difference caused by a
-  # difference in the universe rather than by the adjustment.
-  #
-  # Matched on exact coordinates rather than with GenomicRanges::intersect(),
-  # which merges overlapping ranges and would silently return a region set whose
-  # boundaries no longer correspond to any tested peak.
+  # Universe = regions tested by both models, matched on exact coordinates.
+  # GenomicRanges::intersect() merges overlapping ranges and would return
+  # boundaries that match no tested peak.
   region_id <- function(gr) paste0(
     as.character(GenomicRanges::seqnames(gr)), ":",
     GenomicRanges::start(gr), "-", GenomicRanges::end(gr))
@@ -247,8 +230,15 @@ process_target <- function(tg) {
   n_both <- sum(both$agreement == "significant in both")
   n_un <- sum(both$agreement == "unadjusted only")
   n_ad <- sum(both$agreement == "adjusted only")
-  r <- suppressWarnings(stats::cor(both$log2OR_unadj, both$log2OR_adj,
-    use = "complete.obs"))
+  # cor() returns NA on any non-finite value; LOLA gives OR = 0 for some terms
+  fin <- is.finite(both$log2OR_unadj) & is.finite(both$log2OR_adj)
+  r <- if (sum(fin) >= 3) {
+    suppressWarnings(stats::cor(both$log2OR_unadj[fin], both$log2OR_adj[fin]))
+  } else NA_real_
+  if (sum(fin) < nrow(both)) {
+    message("  ", nrow(both) - sum(fin),
+      " term(s) had a non-finite log2 odds ratio and were excluded from the correlation")
+  }
   message(sprintf("  enrichment terms: %d significant in both, %d unadjusted only, %d adjusted only; log2OR r = %.3f",
     n_both, n_un, n_ad, r))
 
@@ -267,6 +257,10 @@ process_target <- function(tg) {
       terms_sig_adjusted_only = n_ad,
       terms_recovered_pct = ifelse((n_both + n_un) > 0,
         round(100 * n_both / (n_both + n_un), 1), NA_real_),
+      # ORs are not comparable across sets of very different size: a bigger DAR
+      # set includes weaker regions and dilutes the enrichment
+      DAR_size_ratio = round(sum(vapply(adj_sets_gr, length, integer(1))) /
+        pmax(1, sum(vapply(unadj_sets_gr, length, integer(1)))), 2),
       log2OR_pearson = round(r, 3),
       stringsAsFactors = FALSE
     )
@@ -309,7 +303,10 @@ if (nrow(plot_terms) > 0) {
   cor_lab <- plot_terms %>%
     dplyr::group_by(panel) %>%
     dplyr::summarise(
-      r = suppressWarnings(stats::cor(log2OR_unadj, log2OR_adj, use = "complete.obs")),
+      r = {
+        f <- is.finite(log2OR_unadj) & is.finite(log2OR_adj)
+        if (sum(f) >= 3) suppressWarnings(stats::cor(log2OR_unadj[f], log2OR_adj[f])) else NA_real_
+      },
       n_both = sum(agreement == "significant in both"), .groups = "drop") %>%
     dplyr::mutate(lab = paste0("r = ", sprintf("%.3f", r), "\n", n_both, " sig. in both"))
 
@@ -344,9 +341,8 @@ if (nrow(plot_terms) > 0) {
     height = 3.4 * ceiling(n_panels / 3) + 2, limitsize = FALSE)
 }
 
-## ---- Figure 2: top terms, side by side --------------------------------------
-# The scatter answers "did the enrichment change". This answers "and what are
-# the terms", which is what a reader actually wants to see named.
+## ---- Figure 2: top terms side by side ---------------------------------------
+# The scatter says whether enrichment changed; this names the terms.
 top_terms <- lola_terms %>%
   dplyr::filter(collection %in% collections_of_interest, sig_unadj | sig_adj) %>%
   dplyr::mutate(panel = paste0(cell, " | ", comparison, " (", userSet, ")")) %>%

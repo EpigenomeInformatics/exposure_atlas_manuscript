@@ -3,39 +3,19 @@
 #####################################################################
 # 01b_meth_pseudobulk_qc.R
 # created on 2026-08-12 by Irem B. Gunduz
-# QC statistics for the snmC-seq pseudobulks (supplementary table)
+# QC per snmC-seq pseudobulk (supplementary table)
 #
-# Reviewer response: the methylation analyses are all run on pseudobulks built in
-# 01_meth_pseudobulks.R, one per cell type x sample, but nothing in the paper
-# reports how much data sits behind each of them. This script measures that
-# directly from the bedGraph files and writes a per-pseudobulk QC table plus a
-# per exposure-group summary.
+# The methylation analyses all run on the pseudobulks built in
+# 01_meth_pseudobulks.R (one per cell type x sample), but nothing reports how
+# much data sits behind each one. Measured here from the bedGraphs.
 #
-# Per pseudobulk it reports
-#   - the donor, exposure group and cell type it belongs to
-#   - the number of cells pooled, and the per-cell sequencing metrics
-#     (unique mapped reads, mapping ratio, genome coverage) summarised over them
-#   - the number of CpGs called, total and mean coverage, and the fraction of
-#     CpGs reaching 1x / 5x / 10x
-#   - the global mCG level, and the CCC rate as the bisulfite non-conversion
-#     estimate (an upper bound on the false methylation rate)
-#
-# !! READ THIS BEFORE TRUSTING THE METHYLATION LEVELS !!
-# The bedGraph files written by utils/createPseudoBulks.R do not use a single
-# convention for their 5th column. In aggregateALLCSamples() the chunked branch
-# (taken when a pseudobulk pools MORE than 50 cells) ends with
-#     dplyr::mutate(cov = cov - mc)
-# so the column holds UNMETHYLATED counts, while the unchunked branch (50 cells
-# or fewer) writes total coverage and never applies that subtraction. In this
-# dataset 844 of 896 pseudobulks pool more than 50 cells and 52 do not, so both
-# conventions are present in the same directory.
-#
-# This script therefore derives the convention per file from the cell count and
-# records it in the `coverage_convention` column, so the numbers are correct
-# either way and the inconsistency is visible rather than silently averaged
-# over. The underlying fix belongs in createPseudoBulks.R -- the two branches
-# should agree -- but that requires rebuilding the pseudobulks, so it is flagged
-# here rather than papered over.
+# !! The bedGraph 5th column is not one convention. In aggregateALLCSamples()
+# the chunked branch (>50 cells pooled) ends with mutate(cov = cov - mc), so it
+# holds UNMETHYLATED counts; the unchunked branch (<=50) writes total coverage.
+# Here that is 844 of 896 pseudobulks vs 52, i.e. both conventions in the same
+# directory. This script derives which from the cell count and records it in
+# `coverage_convention`. The real fix is in createPseudoBulks.R, but that means
+# rebuilding the pseudobulks.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -52,14 +32,14 @@ pb_dir   <- "/icbb/projects/igunduz/DARPA/data/pseudoBulks/perSample"
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 stopifnot(dir.exists(pb_dir))
 
-# the chunk size in createPseudoBulks() that decides which branch is taken
+# branch threshold in createPseudoBulks()
 chunk_threshold <- 50
 
-# coverage thresholds reported as "fraction of called CpGs reaching Nx"
+# reported as fraction of called CpGs reaching Nx
 cov_thresholds <- c(1, 5, 10)
 
 ## ---- 1. Per-cell annotation -------------------------------------------------
-# Same filtering as 01_meth_pseudobulks.R: Other-cell is not pseudobulked.
+# as in 01_meth_pseudobulks.R: Other-cell is not pseudobulked
 sampleAnnot <- data.table::fread(
   file.path(annot, "allc_sample_annot_final.csv")
 ) %>%
@@ -70,9 +50,7 @@ message("Annotation: ", nrow(sampleAnnot), " cells, ",
   dplyr::n_distinct(sampleAnnot$cell_type), " cell types, ",
   dplyr::n_distinct(sampleAnnot$Common_Minimal_Informative_ID), " samples")
 
-# Exposure group naming: the condition labels in the methylation annotation use
-# a different vocabulary from the ATAC exposure_group labels, so map them onto
-# the ATAC names to keep the two supplementary tables readable side by side.
+# map the methylation condition labels onto the ATAC exposure_group names
 condition_to_group <- c(
   CommercialControl_healthy = "C19_ctrl",
   COVID_mild                = "C19_mild",
@@ -86,9 +64,7 @@ condition_to_group <- c(
   OP_medium                 = "OP_med",
   OP_high                   = "OP_high"
 )
-# NB "FLU_day30" is the same legacy mislabel corrected in Table S1: the final
-# influenza timepoint is day 28. The raw condition value is kept alongside the
-# corrected group label rather than renamed in place.
+# "FLU_day30" is the day-28 mislabel also corrected in Table S1. Raw value kept.
 
 cell_summary <- sampleAnnot %>%
   dplyr::group_by(cell_type, Common_Minimal_Informative_ID) %>%
@@ -120,10 +96,8 @@ if (any(is.na(cell_summary$exposure_group))) {
 }
 
 ## ---- 2. Measure each pseudobulk --------------------------------------------
-# bedGraph columns, written headerless by makeGRanges():
-#   seqnames, start, strand, mc, cov
-# where `cov` is unmethylated counts or total coverage depending on the branch
-# taken (see the header note).
+# headerless from makeGRanges(): seqnames, start, strand, mc, cov
+# cov is unmethylated or total depending on the branch (see header)
 read_pseudobulk_qc <- function(path, n_cells) {
   if (!file.exists(path)) {
     return(data.frame(file_found = FALSE, stringsAsFactors = FALSE))
@@ -177,7 +151,7 @@ message("Convention split: ",
     as.integer(table(pb_qc$coverage_convention))), collapse = ", "))
 
 ## ---- 3. Consistency checks --------------------------------------------------
-# Each has caught something real in this pipeline before, so they run every time.
+# these run every time
 message("\nChecks:")
 message("  cells in the pseudobulk table vs the annotation: ",
   sum(pb_qc$n_cells), " vs ", nrow(sampleAnnot),
@@ -237,8 +211,7 @@ write.csv(pb_supp, file.path(fig_dir, "meth_pseudobulk_qc.csv"), row.names = FAL
 message("\nWrote ", nrow(pb_supp), " rows to figures/meth_pseudobulk_qc.csv")
 
 ## ---- 5. Per exposure-group x cell-type summary ------------------------------
-# The per-pseudobulk table is what a reviewer checks; this is what goes in a
-# sentence in the methods.
+# the per-pseudobulk table is for checking; this is for the methods sentence
 group_supp <- pb_qc %>%
   dplyr::filter(file_found) %>%
   dplyr::group_by(cell_type, exposure_group) %>%
