@@ -43,9 +43,18 @@ tex_clusters <- c("C1", "C2")
 matrices <- c("MotifMatrix", "altiusMatrix")
 
 zdiff_cut <- 0.25   # |difference in mean chromVAR z| to call differential
-padj_cut <- 0.05
+padj_cut <- 0.05    # threshold used to CALL motifs differential
+
+# The red line marks padj_cut, i.e. -log10(0.05) = 1.3, which sits at the very
+# bottom of the panel. That is not a bug: with ~7000 cells the weakest motif we
+# actually call is at -log10(padj) = 6.6 (cisbp) / 11.6 (Altius), so padj never
+# binds and the line separates nothing. |zdiff| and donor consistency do all the
+# work. Raise padj_cut only if the intention is to genuinely tighten the call;
+# moving the line on its own would misreport the threshold.
+padj_line <- padj_cut
 padj_cap <- 50      # -log10 cap; cell-level p underflows to 0
 n_label_each <- 10  # top motifs labelled per direction
+x_lim <- c(-2, 2)   # clipped, not filtered; anything outside is reported below
 
 # always labelled if present, whatever their rank; motif names differ between
 # the two sets (cisbp keeps gene symbols, Altius collapses families into
@@ -163,8 +172,11 @@ volcano_plot <- function(v, mat_name) {
   ggplot(v, aes(x = zdiff, y = mlog10padj, colour = group)) +
     geom_vline(xintercept = c(-zdiff_cut, zdiff_cut),
       colour = "grey40", linewidth = 0.3) +
-    geom_hline(yintercept = -log10(padj_cut),
-      colour = "#B22222", linewidth = 0.3) +
+    geom_hline(yintercept = -log10(padj_line),
+      colour = "#B22222", linewidth = 0.3, linetype = "dashed") +
+    annotate("text", x = x_lim[2], y = -log10(padj_line),
+      label = paste0("padj = ", padj_line), colour = "#B22222",
+      size = 2.6, hjust = 1, vjust = -0.6) +
     geom_point(size = 1.4, alpha = 0.85) +
     ggrepel::geom_text_repel(data = lab, aes(label = motif), size = 2.5,
       max.overlaps = Inf, min.segment.length = 0, segment.size = 0.2,
@@ -174,6 +186,8 @@ volcano_plot <- function(v, mat_name) {
       breaks = c("Tex", "NO", "Other"),
       labels = c("Tex", "NO", "other clusters"),
       name = NULL) +
+    coord_cartesian(xlim = x_lim) +
+    scale_x_continuous(breaks = seq(x_lim[1], x_lim[2], by = 0.5)) +
     labs(x = "chromVAR z-score difference (Tex - other CD8+ clusters)",
       y = expression(-log[10] * "(padj)"),
       title = mat_name) +
@@ -211,6 +225,12 @@ for (mat_name in use_matrices) {
   ggsave(volcano_plot(v, mat_name),
     file = paste0(fig_dir, "tex_chromvar_volcano_", tag, ".pdf"),
     width = 6.4, height = 4.6)
+
+  off <- v %>% dplyr::filter(zdiff < x_lim[1] | zdiff > x_lim[2])
+  if (nrow(off) > 0) {
+    message("  outside the x range and therefore not drawn: ",
+      paste0(off$motif, " (", round(off$zdiff, 2), ")", collapse = ", "))
+  }
 
   message("  differential: ", sum(v$group == "Tex"), " up in Tex, ",
     sum(v$group == "Other"), " up in other clusters, of ", nrow(v),
