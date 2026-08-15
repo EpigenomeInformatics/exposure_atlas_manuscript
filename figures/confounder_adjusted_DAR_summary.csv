@@ -1,112 +1,100 @@
-"cell","comparison","adj_set","adj_columns","DARs_unadjusted","DARs_adjusted","shared","recovered_pct","sign_concordance_pct","lfc_pearson_all","n_regions_tested","n_samples","residual_df","status"
-"Mono_CD14","C19_mild vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","C19_mod vs C19_ctrl","TSS","mean_TSS",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_mod vs C19_ctrl","FRIP","mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_mod vs C19_ctrl","nFrags","mean_log10_nFrags",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_mod vs C19_ctrl","nCells","n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_mod vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","C19_mod vs C19_ctrl","QC_all","mean_TSS + mean_FRIP + mean_log10_nFrags + n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_mod vs C19_ctrl","Sex","Sex_predicted",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_mod vs C19_ctrl","Donor","Donor_ID",NA,NA,NA,NA,NA,NA,NA,10,-2,"not feasible: Donor_ID: one sample per level (collinear with sample); residual df -2 < 2"
-"Mono_CD14","C19_mod vs C19_ctrl","TSS_FRIP_Sex","mean_TSS + mean_FRIP + Sex_predicted",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_mod vs C19_ctrl","TSS_FRIP_Donor","mean_TSS + mean_FRIP + Donor_ID",NA,NA,NA,NA,NA,NA,NA,10,-4,"not feasible: Donor_ID: one sample per level (collinear with sample); residual df -4 < 2"
-"Mono_CD14","C19_sev vs C19_ctrl","TSS","mean_TSS",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_sev vs C19_ctrl","FRIP","mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_sev vs C19_ctrl","nFrags","mean_log10_nFrags",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_sev vs C19_ctrl","nCells","n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_sev vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","C19_sev vs C19_ctrl","QC_all","mean_TSS + mean_FRIP + mean_log10_nFrags + n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_sev vs C19_ctrl","Sex","Sex_predicted",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_sev vs C19_ctrl","Donor","Donor_ID",NA,NA,NA,NA,NA,NA,NA,11,-2,"not feasible: Donor_ID: one sample per level (collinear with sample); residual df -2 < 2"
-"Mono_CD14","C19_sev vs C19_ctrl","TSS_FRIP_Sex","mean_TSS + mean_FRIP + Sex_predicted",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"Mono_CD14","C19_sev vs C19_ctrl","TSS_FRIP_Donor","mean_TSS + mean_FRIP + Donor_ID",NA,NA,NA,NA,NA,NA,NA,11,-4,"not feasible: Donor_ID: one sample per level (collinear with sample); residual df -4 < 2"
-"NK_CD16","C19_mild vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","C19_mod vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","C19_sev vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","C19_mild vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","C19_mild vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","C19_mod vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","C19_sev vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","C19_mild vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","C19_mod vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","C19_sev vs C19_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_mem","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_mem","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_mem","HIV_ctrl vs HIV_acu","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_mem","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_mem","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_mem","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_mem","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_naive","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_naive","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_naive","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_naive","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_naive","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"B_naive","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","HIV_ctrl vs HIV_chr","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","HIV_ctrl vs HIV_acu","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD14","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD16","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD16","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD16","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD16","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD16","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"Mono_CD16","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","HIV_ctrl vs HIV_acu","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"NK_CD16","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mait","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mait","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","HIV_ctrl vs HIV_chr","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","HIV_ctrl vs HIV_acu","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD4","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS","mean_TSS",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","FRIP","mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","nFrags","mean_log10_nFrags",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","nCells","n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","HIV_ctrl vs HIV_chr","QC_all","mean_TSS + mean_FRIP + mean_log10_nFrags + n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","Sex","Sex_predicted",NA,NA,NA,NA,NA,NA,NA,8,6,"not feasible: Sex_predicted: single level"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","Donor","Donor_ID",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: variables in design formula cannot contain NA: Donor_ID"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS_FRIP_Sex","mean_TSS + mean_FRIP + Sex_predicted",NA,NA,NA,NA,NA,NA,NA,8,4,"not feasible: Sex_predicted: single level"
-"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS_FRIP_Donor","mean_TSS + mean_FRIP + Donor_ID",NA,NA,NA,NA,NA,NA,NA,8,1,"not feasible: residual df 1 < 2"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS","mean_TSS",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","FRIP","mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","nFrags","mean_log10_nFrags",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","nCells","n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","HIV_ctrl vs HIV_acu","QC_all","mean_TSS + mean_FRIP + mean_log10_nFrags + n_cells",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: invalid class “ReportGgPlot” object: ggp must be a ggplot object"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","Sex","Sex_predicted",NA,NA,NA,NA,NA,NA,NA,8,6,"not feasible: Sex_predicted: single level"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","Donor","Donor_ID",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: variables in design formula cannot contain NA: Donor_ID"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS_FRIP_Sex","mean_TSS + mean_FRIP + Sex_predicted",NA,NA,NA,NA,NA,NA,NA,8,4,"not feasible: Sex_predicted: single level"
-"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS_FRIP_Donor","mean_TSS + mean_FRIP + Donor_ID",NA,NA,NA,NA,NA,NA,NA,8,1,"not feasible: residual df 1 < 2"
-"T_mem_CD8","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mem_CD8","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mix","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mix","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mix","HIV_ctrl vs HIV_acu","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_mix","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","OP_high vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","OP_high vs OP_med","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","Influenza_d3 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","Influenza_d30 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","Influenza_d6 vs Influenza_ctrl","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
-"T_naive","OP_med vs OP_low","TSS_FRIP","mean_TSS + mean_FRIP",NA,NA,NA,NA,NA,NA,NA,NA,NA,"failed: could not find function ""cutL0.5fc2Padj05"""
+"cell","comparison","adj_set","DARs_unadjusted","DARs_adjusted","shared","recovered_pct","sign_concordance_pct","lfc_pearson_all","n_regions_tested","shared_hyper","shared_hypo","unadj_only_hyper","unadj_only_hypo","adj_only_hyper","adj_only_hypo"
+"B_mem","HIV_ctrl vs HIV_acu","TSS_FRIP",139,201,135,97.1,100,0.995,133060,32,103,0,4,20,46
+"B_mem","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.992,133060,0,0,0,0,0,0
+"B_mem","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",1,1,1,100,100,0.99,133060,1,0,0,0,0,0
+"B_mem","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",4,14,4,100,100,0.992,133060,4,0,0,0,8,2
+"B_mem","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.971,133060,0,0,0,0,0,0
+"B_mem","OP_high vs OP_med","TSS_FRIP",0,0,0,NA,NA,0.962,133060,0,0,0,0,0,0
+"B_mem","OP_med vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.984,133060,0,0,0,0,0,0
+"B_naive","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.985,104220,0,0,0,0,0,0
+"B_naive","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.992,104220,0,0,0,0,0,0
+"B_naive","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",0,3,0,NA,NA,0.994,104220,0,0,0,0,1,2
+"B_naive","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.953,104220,0,0,0,0,0,0
+"B_naive","OP_high vs OP_med","TSS_FRIP",0,0,0,NA,NA,0.973,104220,0,0,0,0,0,0
+"B_naive","OP_med vs OP_low","TSS_FRIP",0,1,0,NA,NA,0.981,104220,0,0,0,0,1,0
+"Mono_CD14","C19_mild vs C19_ctrl","TSS_FRIP",0,0,0,NA,NA,0.993,169852,0,0,0,0,0,0
+"Mono_CD14","C19_mod vs C19_ctrl","FRIP",373,219,200,53.6,100,0.972,169852,165,35,140,33,15,4
+"Mono_CD14","C19_mod vs C19_ctrl","nCells",373,41,38,10.2,100,0.907,169852,29,9,276,59,3,0
+"Mono_CD14","C19_mod vs C19_ctrl","nFrags",373,365,335,89.8,100,0.998,169852,272,63,33,5,23,7
+"Mono_CD14","C19_mod vs C19_ctrl","QC_all",373,20,15,4,100,0.804,169852,11,4,294,64,4,1
+"Mono_CD14","C19_mod vs C19_ctrl","Sex",373,336,318,85.3,100,0.997,169852,263,55,42,13,12,6
+"Mono_CD14","C19_mod vs C19_ctrl","TSS",373,270,246,66,100,0.981,169852,207,39,98,29,19,5
+"Mono_CD14","C19_mod vs C19_ctrl","TSS_FRIP_Sex",373,161,146,39.1,100,0.964,169852,118,28,187,40,13,2
+"Mono_CD14","C19_mod vs C19_ctrl","TSS_FRIP",373,230,200,53.6,100,0.968,169852,165,35,140,33,24,6
+"Mono_CD14","C19_sev vs C19_ctrl","FRIP",923,580,542,58.7,100,0.972,169852,357,185,241,140,28,10
+"Mono_CD14","C19_sev vs C19_ctrl","nCells",923,96,86,9.3,100,0.875,169852,62,24,536,301,10,0
+"Mono_CD14","C19_sev vs C19_ctrl","nFrags",923,872,825,89.4,100,0.997,169852,528,297,70,28,26,21
+"Mono_CD14","C19_sev vs C19_ctrl","QC_all",923,46,33,3.6,100,0.708,169852,23,10,575,315,9,4
+"Mono_CD14","C19_sev vs C19_ctrl","Sex",923,856,800,86.7,100,0.995,169852,518,282,80,43,44,12
+"Mono_CD14","C19_sev vs C19_ctrl","TSS",923,479,445,48.2,100,0.949,169852,288,157,310,168,19,15
+"Mono_CD14","C19_sev vs C19_ctrl","TSS_FRIP_Sex",923,535,444,48.1,100,0.934,169852,287,157,311,168,48,43
+"Mono_CD14","C19_sev vs C19_ctrl","TSS_FRIP",923,574,478,51.8,100,0.937,169852,304,174,294,151,52,44
+"Mono_CD14","HIV_ctrl vs HIV_acu","TSS_FRIP",1,1,1,100,100,0.995,246955,0,1,0,0,0,0
+"Mono_CD14","HIV_ctrl vs HIV_chr","TSS_FRIP",0,3,0,NA,NA,0.994,246955,0,0,0,0,3,0
+"Mono_CD14","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.991,246955,0,0,0,0,0,0
+"Mono_CD14","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.982,246955,0,0,0,0,0,0
+"Mono_CD14","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",513,352,307,59.8,100,0.973,246955,81,226,25,181,26,19
+"Mono_CD14","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.981,246955,0,0,0,0,0,0
+"Mono_CD14","OP_high vs OP_med","TSS_FRIP",0,0,0,NA,NA,0.979,246955,0,0,0,0,0,0
+"Mono_CD14","OP_med vs OP_low","TSS_FRIP",0,1,0,NA,NA,0.982,246955,0,0,0,0,1,0
+"Mono_CD16","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.989,135938,0,0,0,0,0,0
+"Mono_CD16","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.993,135938,0,0,0,0,0,0
+"Mono_CD16","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",2,4,2,100,100,0.961,135938,1,1,0,0,1,1
+"Mono_CD16","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.946,135938,0,0,0,0,0,0
+"Mono_CD16","OP_high vs OP_med","TSS_FRIP",1,1,1,100,100,0.982,135938,0,1,0,0,0,0
+"Mono_CD16","OP_med vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.991,135938,0,0,0,0,0,0
+"NK_CD16","C19_mild vs C19_ctrl","TSS_FRIP",0,0,0,NA,NA,0.996,64023,0,0,0,0,0,0
+"NK_CD16","C19_mod vs C19_ctrl","TSS_FRIP",0,14,0,NA,NA,0.938,64023,0,0,0,0,13,1
+"NK_CD16","C19_sev vs C19_ctrl","TSS_FRIP",0,0,0,NA,NA,0.945,64023,0,0,0,0,0,0
+"NK_CD16","HIV_ctrl vs HIV_acu","TSS_FRIP",2,2,1,50,100,0.997,165524,1,0,1,0,1,0
+"NK_CD16","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.984,165524,0,0,0,0,0,0
+"NK_CD16","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.99,165524,0,0,0,0,0,0
+"NK_CD16","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.98,165524,0,0,0,0,0,0
+"NK_CD16","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.975,165524,0,0,0,0,0,0
+"NK_CD16","OP_high vs OP_med","TSS_FRIP",0,0,0,NA,NA,0.985,165524,0,0,0,0,0,0
+"NK_CD16","OP_med vs OP_low","TSS_FRIP",0,4,0,NA,NA,0.993,165524,0,0,0,0,0,4
+"T_mait","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.967,61078,0,0,0,0,0,0
+"T_mait","OP_high vs OP_low","TSS_FRIP",1,2,1,100,100,0.967,61078,1,0,0,0,0,1
+"T_mem_CD4","C19_mild vs C19_ctrl","TSS_FRIP",0,87,0,NA,NA,0.911,76051,0,0,0,0,87,0
+"T_mem_CD4","HIV_ctrl vs HIV_acu","TSS_FRIP",263,354,256,97.3,100,0.996,197589,10,246,0,7,5,93
+"T_mem_CD4","HIV_ctrl vs HIV_chr","TSS_FRIP",1,2,1,100,100,0.997,197589,0,1,0,0,0,1
+"T_mem_CD4","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.98,197589,0,0,0,0,0,0
+"T_mem_CD4","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.988,197589,0,0,0,0,0,0
+"T_mem_CD4","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.989,197589,0,0,0,0,0,0
+"T_mem_CD4","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.979,197589,0,0,0,0,0,0
+"T_mem_CD4","OP_high vs OP_med","TSS_FRIP",0,3,0,NA,NA,0.978,197589,0,0,0,0,0,3
+"T_mem_CD4","OP_med vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.981,197589,0,0,0,0,0,0
+"T_mem_CD8","C19_mild vs C19_ctrl","TSS_FRIP",1,0,0,0,NA,0.983,96510,0,0,0,1,0,0
+"T_mem_CD8","C19_mod vs C19_ctrl","TSS_FRIP",4,0,0,0,NA,0.935,96510,0,0,2,2,0,0
+"T_mem_CD8","C19_sev vs C19_ctrl","TSS_FRIP",3,1,1,33.3,100,0.893,96510,0,1,2,0,0,0
+"T_mem_CD8","HIV_ctrl vs HIV_acu","FRIP",95,210,95,100,100,1,155539,21,74,0,0,27,88
+"T_mem_CD8","HIV_ctrl vs HIV_acu","nCells",95,229,95,100,100,0.995,155539,21,74,0,0,30,104
+"T_mem_CD8","HIV_ctrl vs HIV_acu","nFrags",95,175,95,100,100,0.997,155539,21,74,0,0,15,65
+"T_mem_CD8","HIV_ctrl vs HIV_acu","QC_all",95,402,95,100,100,0.983,155539,21,74,0,0,69,238
+"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS",95,200,95,100,100,0.998,155539,21,74,0,0,16,89
+"T_mem_CD8","HIV_ctrl vs HIV_acu","TSS_FRIP",95,292,95,100,100,0.997,155539,21,74,0,0,45,152
+"T_mem_CD8","HIV_ctrl vs HIV_chr","FRIP",4,16,4,100,100,0.997,155539,3,1,0,0,7,5
+"T_mem_CD8","HIV_ctrl vs HIV_chr","nCells",4,9,4,100,100,0.988,155539,3,1,0,0,3,2
+"T_mem_CD8","HIV_ctrl vs HIV_chr","nFrags",4,14,4,100,100,0.986,155539,3,1,0,0,5,5
+"T_mem_CD8","HIV_ctrl vs HIV_chr","QC_all",4,75,4,100,100,0.941,155539,3,1,0,0,34,37
+"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS",4,13,4,100,100,0.985,155539,3,1,0,0,2,7
+"T_mem_CD8","HIV_ctrl vs HIV_chr","TSS_FRIP",4,51,4,100,100,0.972,155539,3,1,0,0,20,27
+"T_mem_CD8","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.982,155539,0,0,0,0,0,0
+"T_mem_CD8","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.986,155539,0,0,0,0,0,0
+"T_mem_CD8","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.979,155539,0,0,0,0,0,0
+"T_mem_CD8","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.983,155539,0,0,0,0,0,0
+"T_mem_CD8","OP_high vs OP_med","TSS_FRIP",0,0,0,NA,NA,0.978,155539,0,0,0,0,0,0
+"T_mem_CD8","OP_med vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.988,155539,0,0,0,0,0,0
+"T_mix","HIV_ctrl vs HIV_acu","TSS_FRIP",0,0,0,NA,NA,0.989,71720,0,0,0,0,0,0
+"T_mix","OP_high vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.94,71720,0,0,0,0,0,0
+"T_mix","OP_high vs OP_med","TSS_FRIP",0,0,0,NA,NA,0.968,71720,0,0,0,0,0,0
+"T_mix","OP_med vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.967,71720,0,0,0,0,0,0
+"T_naive","C19_mild vs C19_ctrl","TSS_FRIP",0,0,0,NA,NA,0.997,77536,0,0,0,0,0,0
+"T_naive","C19_mod vs C19_ctrl","TSS_FRIP",33,37,25,75.8,100,0.958,77536,25,0,8,0,11,1
+"T_naive","C19_sev vs C19_ctrl","TSS_FRIP",1,1,1,100,100,0.911,77536,1,0,0,0,0,0
+"T_naive","Influenza_d3 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.966,134745,0,0,0,0,0,0
+"T_naive","Influenza_d30 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.989,134745,0,0,0,0,0,0
+"T_naive","Influenza_d6 vs Influenza_ctrl","TSS_FRIP",0,0,0,NA,NA,0.983,134745,0,0,0,0,0,0
+"T_naive","OP_high vs OP_low","TSS_FRIP",0,1,0,NA,NA,0.979,134745,0,0,0,0,0,1
+"T_naive","OP_high vs OP_med","TSS_FRIP",0,0,0,NA,NA,0.985,134745,0,0,0,0,0,0
+"T_naive","OP_med vs OP_low","TSS_FRIP",0,0,0,NA,NA,0.993,134745,0,0,0,0,0,0

@@ -1,0 +1,17 @@
+"cohort","covariate","n_comparisons","median_SMD","pct_same_direction"
+"C19","n_cells",13,-1.089,100
+"C19","mean_TSS",13,-0.719,100
+"C19","mean_FRIP",13,-0.573,61.5
+"HIV","n_cells",9,0.453,100
+"HIV","mean_TSS",9,-0.442,100
+"OP","n_cells",28,-0.336,67.9
+"OP","mean_TSS",28,0.327,67.9
+"Influenza","n_cells",25,-0.284,64
+"HIV","mean_log10_nFrags",9,0.178,100
+"OP","mean_FRIP",28,-0.167,67.9
+"Influenza","mean_FRIP",25,0.125,52
+"Influenza","mean_log10_nFrags",25,-0.097,56
+"HIV","mean_FRIP",9,-0.093,66.7
+"OP","mean_log10_nFrags",28,-0.068,71.4
+"C19","mean_log10_nFrags",13,0.032,53.8
+"Influenza","mean_TSS",25,0.002,64

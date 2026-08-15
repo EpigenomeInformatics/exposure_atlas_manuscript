@@ -1,0 +1,5 @@
+"covariate","n_comparisons","median_abs_SMD","null_median_abs_SMD","max_abs_SMD","n_imbalanced_perm","min_p_perm","pct_higher_in_grp1","p_sign_test"
+"mean_FRIP",75,0.289,0.41,0.969,0,0.281,40,0.105
+"mean_TSS",75,0.444,0.438,1.41,0,0.135,46.7,0.644
+"mean_log10_nFrags",75,0.202,0.418,1.409,0,0.0388,46.7,0.644
+"n_cells",75,0.453,0.43,1.843,0,0.0192,36,0.0203

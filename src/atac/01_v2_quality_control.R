@@ -656,6 +656,10 @@ var_summary <- assoc_df %>%
   dplyr::summarise(
     total_var_marginal = sum(r2 * var_explained, na.rm = TRUE),
     total_var_adjCohort = sum(r2_partial_adjCohort * var_explained, na.rm = TRUE),
+    # largest single-PC R^2, which is what the heatmap tiles show; quoting this
+    # alongside the variance-weighted total lets the text match the figure
+    max_r2 = max(r2, na.rm = TRUE),
+    max_r2_PC = PC[which.max(r2)],
     .groups = "drop"
   )
 message("Total sample-level variance associated with each covariate:")
@@ -881,6 +885,27 @@ assoc_ct_df <- dplyr::bind_rows(assoc_ct_results) %>%
 
 write.csv(assoc_ct_df,
   file = file.path(repo_dir, "figures/pc_covariate_association_by_celltype.csv"),
+  row.names = FALSE
+)
+
+# Variance-weighted summary at the pseudobulk level, matching the one computed
+# for the sample-level PCs above. The Results text quotes these numbers, so they
+# have to exist for the SAME unit of observation as the panel that is shown --
+# quoting the sample-level totals under a pseudobulk-level figure would be a
+# mismatch a reader cannot detect but a reviewer can.
+var_summary_ct <- assoc_ct_df %>%
+  dplyr::group_by(embedding, covariate) %>%
+  dplyr::summarise(
+    total_var = sum(r2 * var_explained, na.rm = TRUE),
+    max_r2 = max(r2, na.rm = TRUE),
+    max_r2_PC = PC[which.max(r2)],
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(embedding, dplyr::desc(total_var))
+message("Total pseudobulk-level variance associated with each covariate:")
+print(as.data.frame(var_summary_ct))
+write.csv(var_summary_ct,
+  file = file.path(repo_dir, "figures/pc_covariate_variance_summary_by_celltype.csv"),
   row.names = FALSE
 )
 

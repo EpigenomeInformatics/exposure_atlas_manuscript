@@ -284,20 +284,26 @@ if (is.null(res) || nrow(res) == 0) {
     "nothing to plot. See the messages above for which step failed.")
 }
 
-print(res)
-write.csv(res_all, file.path(fig_dir, "confounder_adjusted_DAR_summary.csv"),
-  row.names = FALSE)
-
 ## ---- 3b. Split the results: one design for the detail figures ---------------
+# res_all keeps every comparison x adjustment design and is what gets written to
+# the summary table; res is narrowed to a single design so the overlap and
+# scatter figures stay readable.
 res_all <- res
 if (!focus_set %in% res_all$adj_set) {
   message("focus_set '", focus_set, "' not present; using the most common design")
   focus_set <- names(sort(table(res_all$adj_set), decreasing = TRUE))[1]
 }
 res <- res_all[res_all$adj_set == focus_set, , drop = FALSE]
+if (nrow(res) == 0) {
+  stop("No comparison used the '", focus_set, "' design; nothing to plot.")
+}
 message("Detail figures use the '", focus_set, "' design (", nrow(res),
   " comparisons); ", nrow(res_all), " comparison x design fits in total")
 cat_list <- cat_list[vapply(cat_list, function(d) d$adj_set[1] == focus_set, logical(1))]
+
+print(res_all)
+write.csv(res_all, file.path(fig_dir, "confounder_adjusted_DAR_summary.csv"),
+  row.names = FALSE)
 
 ## ---- 4. Figure 1: overlap and direction of the DAR calls --------------------
 # A side-by-side count of "unadjusted DARs" against "adjusted DARs" is hard to
