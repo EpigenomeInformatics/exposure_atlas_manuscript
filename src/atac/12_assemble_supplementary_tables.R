@@ -21,23 +21,26 @@
 # writes a fresh final file, so re-running is safe.
 #
 # FINAL NUMBERING
-#   S1   Sample metadata of the scATAC dataset
-#   S1B  Per-PC covariate association (before/after Harmony batch correction)
-#   S2   snmC-seq per-cell annotation                                     [NEW]
-#   S2B  snmC-seq per-sample summary (donor x timepoint x cell type)      [NEW]
-#   S3   snmC-seq pseudobulk QC, per pseudobulk                           [NEW]
-#   S3B  snmC-seq pseudobulk QC, per exposure group x cell type           [NEW]
-#   S4   Cluster-to-cell-type annotation mapping                     (was S2)
-#   S5   Cell-type composition statistics                                 [NEW]
-#   S6   Variance partition of TF motif activity (S6A/B/C)      (was S3A/B/C)
-#   S7   Pairwise differential TF motif activity across cell types   (was S4)
-#   S8   Differentially accessible genes in CD8+ T-cell clusters    (was S5)
-#   S9   Differentially accessible cCREs in CD8+ T-cell clusters    (was S6)
-#   S10  Differential gene activity & expression, COVID-19 sev vs ctrl (was S7)
-#   S11  Differentially accessible cCREs, COVID-19 severe vs control (was S8)
-#   S12  Bulk RNA-seq differential expression, CD14+ monocytes      (was S9)
-#   S13  Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types (was S10)
-#   S14  Differentially methylated cCREs, COVID-19 CD14+ monocytes  (was S11)
+# ATAC tables first, in the order the Results use them, then the snmC-seq block,
+# then the tables that combine the two modalities.
+#
+#   S1    Sample metadata of the scATAC dataset
+#   S1B   Per-PC covariate association (before/after Harmony batch correction)
+#   S2    Cluster-to-cell-type annotation mapping                  (unchanged)
+#   S3    Cell-type composition statistics                              [NEW]
+#   S4    Variance partition of TF motif activity (S4A/B/C)    (was S3A/B/C)
+#   S5    Pairwise differential TF motif activity across cell types (was S4)
+#   S6    Differentially accessible genes in CD8+ T-cell clusters   (was S5)
+#   S7    Differentially accessible cCREs in CD8+ T-cell clusters   (was S6)
+#   S8    Differential gene activity & expression, COVID-19 sev vs ctrl (was S7)
+#   S9    Differentially accessible cCREs, COVID-19 severe vs control (was S8)
+#   S10   Bulk RNA-seq differential expression, CD14+ monocytes     (was S9)
+#   S11   snmC-seq per-cell annotation                                  [NEW]
+#   S11B  snmC-seq per-sample summary (donor x timepoint x cell type)   [NEW]
+#   S12   snmC-seq pseudobulk QC, per pseudobulk                        [NEW]
+#   S12B  snmC-seq pseudobulk QC, per exposure group x cell type        [NEW]
+#   S13   Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types (was S10)
+#   S14   Differentially methylated cCREs, COVID-19 CD14+ monocytes  (was S11)
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -75,48 +78,48 @@ final_layout <- tibble::tribble(
   "Table S1B",   "Table S1B",   paste(
     "Association of sample-level principal components with known covariates,",
     "before (IterativeLSI) and after (Harmony) batch correction"),
-  "Table S2",    NA,            paste(
+  "Table S2",    "Table S2",    paste(
+    "Cluster-to-cell-type annotation mapping: Jaccard similarity between each",
+    "graph-based scATAC cluster and predicted scRNA-seq labels, with final",
+    "assigned cell type and cluster size"),
+  "Table S3",    NA,            paste(
+    "Cell-type composition statistics: per-sample cell-type proportions compared",
+    "between each exposure group and its matched within-cohort control",
+    "(two-sided Wilcoxon rank-sum test, Bonferroni-adjusted)"),
+  "Table S4",    "Table S3",    paste(
+    "Variance partition of TF motif activity across cell type, exposure and donor",
+    "components (S4A: exposure model, S4B: stage/severity model,",
+    "S4C: COVID-19 severity)"),
+  "Table S5",    "Table S4",    paste(
+    "Pairwise differential TF motif activity (Wilcoxon test of chromVAR deviation",
+    "scores) across different cell types"),
+  "Table S6",    "Table S5",    "List of differentially accessible genes in different clusters within CD8+ T cells",
+  "Table S7",    "Table S6",    "List of differentially accessible cCREs in different clusters within CD8+ T cells",
+  "Table S8",    "Table S7",    paste(
+    "Differential gene activity and gene expression table of protein-coding genes",
+    "for COVID-19 severe vs control in CD14+ monocytes"),
+  "Table S9",    "Table S8",    "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
+  "Table S10",   "Table S9",    paste(
+    "Bulk RNA-seq differential expression results for CD14+ monocytes",
+    "(filtered: adj p < 0.05 & |log2FC| > 0.5)"),
+  "Table S11",   NA,            paste(
     "Per-cell annotation of the snmC-seq dataset: cell identifier, assigned cell",
     "type, donor sex and age, condition, mapping and coverage statistics, and",
     "global mCG / mCH / CCC methylation rates"),
-  "Table S2B",   NA,            paste(
+  "Table S11B",  NA,            paste(
     "Per-sample summary of the snmC-seq dataset: cohort, subject, timepoint,",
     "exposure level, donor sex and age, sequencing libraries, and the number of",
     "profiled nuclei in each FACS-sorted cell population, with per-sample means of",
     "the mapping, coverage and methylation-rate metrics"),
-  "Table S3",    NA,            paste(
+  "Table S12",   NA,            paste(
     "Quality-control statistics for each snmC-seq pseudobulk (one per cell type",
     "x sample): donor, exposure group, cells pooled, per-cell sequencing depth",
     "and mapping metrics, CpGs called, CpG coverage and its distribution, global",
     "mCG level, and the CCC rate as the bisulfite non-conversion estimate"),
-  "Table S3B",   NA,            paste(
+  "Table S12B",  NA,            paste(
     "snmC-seq pseudobulk quality control summarised per exposure group and cell",
     "type: number of pseudobulks and donors, cells pooled, CpGs called and global",
     "mCG level"),
-  "Table S4",    "Table S2",    paste(
-    "Cluster-to-cell-type annotation mapping: Jaccard similarity between each",
-    "graph-based scATAC cluster and predicted scRNA-seq labels, with final",
-    "assigned cell type and cluster size"),
-  "Table S5",    NA,            paste(
-    "Cell-type composition statistics: per-sample cell-type proportions compared",
-    "between each exposure group and its matched within-cohort control",
-    "(two-sided Wilcoxon rank-sum test, Bonferroni-adjusted)"),
-  "Table S6",    "Table S3",    paste(
-    "Variance partition of TF motif activity across cell type, exposure and donor",
-    "components (S6A: exposure model, S6B: stage/severity model,",
-    "S6C: COVID-19 severity)"),
-  "Table S7",    "Table S4",    paste(
-    "Pairwise differential TF motif activity (Wilcoxon test of chromVAR deviation",
-    "scores) across different cell types"),
-  "Table S8",    "Table S5",    "List of differentially accessible genes in different clusters within CD8+ T cells",
-  "Table S9",    "Table S6",    "List of differentially accessible cCREs in different clusters within CD8+ T cells",
-  "Table S10",   "Table S7",    paste(
-    "Differential gene activity and gene expression table of protein-coding genes",
-    "for COVID-19 severe vs control in CD14+ monocytes"),
-  "Table S11",   "Table S8",    "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
-  "Table S12",   "Table S9",    paste(
-    "Bulk RNA-seq differential expression results for CD14+ monocytes",
-    "(filtered: adj p < 0.05 & |log2FC| > 0.5)"),
   "Table S13",   "Table S10",   paste(
     "Pairwise Wilcoxon test between one vs other cell type manner for methylTFR",
     "and chromVAR z-scores"),
@@ -270,22 +273,23 @@ message("snmC-seq pseudobulk QC: ", nrow(pbqc_supp), " pseudobulks, ",
         nrow(pbqc_grp_supp), " exposure group x cell type combinations")
 
 new_content <- list(
-  "Table S2"  = allc_supp,
-  "Table S2B" = allc_sample_supp,
-  "Table S3"  = pbqc_supp,
-  "Table S3B" = pbqc_grp_supp,
-  "Table S5"  = comp_supp
+  "Table S3"   = comp_supp,
+  "Table S11"  = allc_supp,
+  "Table S11B" = allc_sample_supp,
+  "Table S12"  = pbqc_supp,
+  "Table S12B" = pbqc_grp_supp
 )
 
 ## ---- 3. Rename existing sheets ---------------------------------------------
 wb <- openxlsx::loadWorkbook(supp_in)
 
 if (all(names(new_content) %in% names(wb)) &&
-    identical(dim(openxlsx::readWorkbook(wb, "Table S5")), dim(comp_supp))) {
+    identical(dim(openxlsx::readWorkbook(wb, "Table S3")), dim(comp_supp))) {
   message("Workbook already assembled; nothing to do.")
 } else {
   # temp prefix first, so an old name cannot collide with a new one mid-pass
-  # (old S2 -> new S3 while an old S3 still exists)
+  # (old S3 -> new S4 while an old S4 still exists, and old S10/S11 -> S13/S14
+  # must vacate before the new S11/S12 sheets are inserted)
   renames <- final_layout %>%
     dplyr::filter(!is.na(old), old != new)
 
@@ -323,10 +327,13 @@ if (all(names(new_content) %in% names(wb)) &&
   }
 
   ## ---- 5. Order the sheets to match final_layout ----------------------------
-  want <- unlist(lapply(final_layout$new, function(nm) {
+  # unique() matters: a sub-sheet is reached twice, once by the suffix expansion
+  # of its parent (S11 -> S11B) and once by its own row in final_layout. Without
+  # it, ord_names is longer than the workbook and worksheetOrder<- rejects it.
+  want <- unique(unlist(lapply(final_layout$new, function(nm) {
     present <- c(nm, paste0(nm, LETTERS[1:6]))
     present[present %in% names(wb)]
-  }))
+  })))
   other <- setdiff(names(wb), c(want, "Index"))
   ord_names <- c("Index"[("Index" %in% names(wb))], want, other)
   openxlsx::worksheetOrder(wb) <- match(ord_names, names(wb))
@@ -361,11 +368,11 @@ if (all(names(new_content) %in% names(wb)) &&
           "(work from the HIGHEST number down, so replacements do not collide):")
   print(as.data.frame(map_df[map_df$changed, c("old", "new")])[
     order(-as.numeric(sub("Table S", "", map_df$old[map_df$changed]))), ])
-  message("\nNew tables: S2 = snmC-seq per-cell annotation, ",
-          "S2B = snmC-seq per-sample summary, ",
-          "S3/S3B = snmC-seq pseudobulk QC, ",
-          "S5 = cell-type composition statistics.")
-  message("NB sub-sheets move with their parent (old S3A/B/C -> S6A/B/C).")
+  message("\nNew tables: S3 = cell-type composition statistics, ",
+          "S11 = snmC-seq per-cell annotation, ",
+          "S11B = snmC-seq per-sample summary, ",
+          "S12/S12B = snmC-seq pseudobulk QC.")
+  message("NB sub-sheets move with their parent (old S3A/B/C -> S4A/B/C).")
 }
 
 #####################################################################
