@@ -24,6 +24,7 @@
 #   S1   Sample metadata of the scATAC dataset
 #   S1B  Per-PC covariate association (before/after Harmony batch correction)
 #   S2   snmC-seq per-cell annotation                                     [NEW]
+#   S2B  snmC-seq per-sample summary (donor x timepoint x cell type)      [NEW]
 #   S3   snmC-seq pseudobulk QC, per pseudobulk                           [NEW]
 #   S3B  snmC-seq pseudobulk QC, per exposure group x cell type           [NEW]
 #   S4   Cluster-to-cell-type annotation mapping                     (was S2)
@@ -41,6 +42,7 @@
 
 suppressPackageStartupMessages({
   library(dplyr)
+  library(tidyr)  # pivot_wider() for the snmC per-sample cell counts
   library(tibble) # tribble() for the layout table
   library(openxlsx)
 })
@@ -77,6 +79,11 @@ final_layout <- tibble::tribble(
     "Per-cell annotation of the snmC-seq dataset: cell identifier, assigned cell",
     "type, donor sex and age, condition, mapping and coverage statistics, and",
     "global mCG / mCH / CCC methylation rates"),
+  "Table S2B",   NA,            paste(
+    "Per-sample summary of the snmC-seq dataset: cohort, subject, timepoint,",
+    "exposure level, donor sex and age, sequencing libraries, and the number of",
+    "profiled nuclei in each FACS-sorted cell population, with per-sample means of",
+    "the mapping, coverage and methylation-rate metrics"),
   "Table S3",    NA,            paste(
     "Quality-control statistics for each snmC-seq pseudobulk (one per cell type",
     "x sample): donor, exposure group, cells pooled, per-cell sequencing depth",
@@ -145,6 +152,117 @@ if (nrow(allc_supp) > 1e5) {
           "but the workbook will be slow to open.")
 }
 
+# (b2) snmC-seq per-sample summary. Reviewer 1 comment 3 asks for the breakdown
+# of methylation cells across donors, timepoints and cell subsets; S2 holds one
+# row per cell, which does not answer that directly. Aggregated from the same
+# object so the two sheets cannot disagree.
+#
+# Subject / timepoint / exposure level are parsed from the sample identifier:
+#   CoV_S_S11_D1          severity (S / nS), subject, day
+#   Ctrl_10_M_White_39yo  index, sex, ethnicity, age
+#   Flu_S10_D28           subject, day
+#   HIV_S1_Pre            subject, stage (Pre / Acu / Cro)
+#   OP_S12_High_D28       subject, exposure level, day (or NonFarm)
+ct_levels <- c("B-cell", "Monocyte", "NK-cell",
+               "Th-Naive", "Th-Mem", "Th-Eff",
+               "Tc-Naive", "Tc-Mem", "Tc-Eff", "Other-cell")
+stopifnot(setequal(unique(allc_supp$cell_type), ct_levels))
+
+sid   <- allc_supp$Common_Minimal_Informative_ID
+part  <- function(x, i) vapply(strsplit(x, "_", fixed = TRUE), function(p)
+  if (length(p) >= i) p[i] else NA_character_, character(1))
+cohort <- dplyr::case_when(
+  startsWith(sid, "CoV_")  ~ "COVID-19",
+  startsWith(sid, "Ctrl_") ~ "Control",
+  startsWith(sid, "Flu_")  ~ "Influenza",
+  startsWith(sid, "HIV_")  ~ "HIV",
+  startsWith(sid, "OP_")   ~ "OP",
+  TRUE ~ NA_character_
+)
+stopifnot(!any(is.na(cohort)))
+
+allc_keyed <- allc_supp %>%
+  dplyr::mutate(
+    .sid    = sid,
+    Cohort  = cohort,
+    Subject = dplyr::case_when(
+      Cohort == "COVID-19" ~ part(.sid, 3),
+      Cohort == "Control"  ~ paste0("Ctrl", part(.sid, 2)),
+      TRUE                 ~ part(.sid, 2)
+    ),
+    Timepoint = dplyr::case_when(
+      Cohort == "COVID-19"  ~ part(.sid, 4),
+      Cohort == "Influenza" ~ part(.sid, 3),
+      Cohort == "HIV"       ~ dplyr::recode(part(.sid, 3),
+                                Pre = "pre", Acu = "acute", Cro = "chronic"),
+      Cohort == "OP"        ~ part(.sid, 4),
+      TRUE                  ~ NA_character_
+    ),
+    `Exposure level` = dplyr::case_when(
+      Cohort == "COVID-19" ~ dplyr::recode(part(.sid, 2), S = "severe", nS = "mild"),
+      Cohort == "OP"       ~ part(.sid, 3),
+      Cohort == "Control"  ~ "healthy",
+      TRUE                 ~ NA_character_
+    ),
+    cell_type = factor(cell_type, levels = ct_levels)
+  )
+
+allc_meta <- allc_keyed %>%
+  dplyr::group_by(`Sample ID` = .sid) %>%
+  dplyr::summarise(
+    Cohort           = dplyr::first(Cohort),
+    Condition        = dplyr::first(condition),
+    Subject          = dplyr::first(Subject),
+    Timepoint        = dplyr::first(Timepoint),
+    `Exposure level` = dplyr::first(`Exposure level`),
+    Sex              = dplyr::first(stats::na.omit(Sex))[1],
+    Age              = dplyr::first(stats::na.omit(age))[1],
+    Libraries        = dplyr::n_distinct(Salk_ID),
+    `Library IDs`    = paste(sort(unique(Salk_ID)), collapse = "; "),
+    `Total cells`    = dplyr::n(),
+    `Mean unique mapped reads` = round(mean(TotalUniqueMappedReads), 0),
+    `Mean mapped ratio (%)`    = round(mean(TotalMappedRatio), 2),
+    `Mean mCG rate`            = round(mean(CG_Rate), 4),
+    `Mean mCH rate`            = round(mean(CH_Rate), 4),
+    `Mean CCC rate`            = round(mean(CCC_Rate), 4),
+    `Mean genome coverage`     = round(mean(genome_cov), 4),
+    .groups = "drop"
+  )
+
+allc_counts <- allc_keyed %>%
+  dplyr::count(`Sample ID` = .sid, cell_type, .drop = FALSE) %>%
+  tidyr::pivot_wider(names_from = cell_type, values_from = n, values_fill = 0)
+
+allc_sample_supp <- allc_meta %>%
+  dplyr::left_join(allc_counts, by = "Sample ID") %>%
+  dplyr::relocate(dplyr::all_of(ct_levels), .after = `Total cells`) %>%
+  dplyr::arrange(Cohort, Subject, Timepoint)
+
+# the join must not add rows, and the per-cell-type counts must sum to the total
+stopifnot(nrow(allc_sample_supp) == dplyr::n_distinct(sid))
+stopifnot(sum(allc_sample_supp$`Total cells`) == nrow(allc_supp))
+stopifnot(all(rowSums(allc_sample_supp[, ct_levels]) ==
+                allc_sample_supp$`Total cells`))
+message("snmC-seq per-sample summary: ", nrow(allc_sample_supp), " samples, ",
+        dplyr::n_distinct(allc_sample_supp$Subject), " subjects")
+
+# Sex must not contradict itself within a subject. In the annotation as committed,
+# four subjects carry two different values across their own timepoints
+# (COVID-19 S11 and S17, OP S4 and S7); age is consistent throughout. Reviewer 1
+# comment 1 is about exactly this metadata, so this is a warning, not a stop.
+sex_clash <- allc_sample_supp %>%
+  dplyr::group_by(Cohort, Subject) %>%
+  dplyr::filter(dplyr::n_distinct(stats::na.omit(Sex)) > 1) %>%
+  dplyr::ungroup()
+if (nrow(sex_clash)) {
+  warning(nrow(sex_clash), " samples in ",
+          dplyr::n_distinct(sex_clash$Subject),
+          " subject(s) have inconsistent Sex across timepoints; resolve before ",
+          "submission (see Reviewer 1, comment 1)")
+  print(as.data.frame(sex_clash[, c("Sample ID", "Cohort", "Subject",
+                                    "Timepoint", "Sex", "Age")]))
+}
+
 # (c) snmC-seq pseudobulk QC, written by src/meth/01b_meth_pseudobulk_qc.R
 pbqc_supp     <- read.csv(pbqc_csv, stringsAsFactors = FALSE, check.names = FALSE)
 pbqc_grp_supp <- read.csv(pbqc_grp_csv, stringsAsFactors = FALSE, check.names = FALSE)
@@ -153,6 +271,7 @@ message("snmC-seq pseudobulk QC: ", nrow(pbqc_supp), " pseudobulks, ",
 
 new_content <- list(
   "Table S2"  = allc_supp,
+  "Table S2B" = allc_sample_supp,
   "Table S3"  = pbqc_supp,
   "Table S3B" = pbqc_grp_supp,
   "Table S5"  = comp_supp
@@ -243,6 +362,7 @@ if (all(names(new_content) %in% names(wb)) &&
   print(as.data.frame(map_df[map_df$changed, c("old", "new")])[
     order(-as.numeric(sub("Table S", "", map_df$old[map_df$changed]))), ])
   message("\nNew tables: S2 = snmC-seq per-cell annotation, ",
+          "S2B = snmC-seq per-sample summary, ",
           "S3/S3B = snmC-seq pseudobulk QC, ",
           "S5 = cell-type composition statistics.")
   message("NB sub-sheets move with their parent (old S3A/B/C -> S6A/B/C).")
