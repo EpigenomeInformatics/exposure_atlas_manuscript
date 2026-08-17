@@ -38,6 +38,8 @@
 #   S7    Differentially accessible cCREs in CD8+ T-cell clusters   (was S6)
 #   S8    Differential gene activity & expression, COVID-19 sev vs ctrl (was S7)
 #   S9    Differentially accessible cCREs, COVID-19 severe vs control (was S8)
+#   S9B   Covariate balance between compared groups                      [NEW]
+#   S9C   Confounder-adjusted DARs vs unadjusted, sensitivity            [NEW]
 #   S10   Bulk RNA-seq differential expression, CD14+ monocytes     (was S9)
 #   S11   snmC-seq per-cell annotation                                  [NEW]
 #   S11B  snmC-seq per-sample summary (donor x timepoint x cell type)   [NEW]
@@ -45,7 +47,7 @@
 #   S12B  snmC-seq pseudobulk QC, per exposure group x cell type        [NEW]
 #   S13   Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types (was S10)
 #   S14   Differentially methylated cCREs, COVID-19 CD14+ monocytes  (was S11)
-#   S15   Confounder-adjusted differential accessibility, sensitivity     [NEW]
+
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -104,6 +106,16 @@ final_layout <- tibble::tribble(
     "Differential gene activity and gene expression table of protein-coding genes",
     "for COVID-19 severe vs control in CD14+ monocytes"),
   "Table S9",    "Table S8",    "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
+  "Table S9B",   NA,            paste(
+    "Balance of the per-sample quality-control metrics between the groups compared",
+    "in each within-cohort differential analysis: median and maximum standardised",
+    "mean difference, the median expected under the null at these group sizes, and",
+    "the number of comparisons in which the metric is imbalanced by permutation"),
+  "Table S9C",   NA,            paste(
+    "Differentially accessible regions re-called with the per-sample quality-control",
+    "metrics included in the differential model, compared with the unadjusted calls,",
+    "per cell type, comparison and adjustment set: region counts, overlap, direction",
+    "concordance and the correlation of fold changes"),
   "Table S10",   "Table S9",    paste(
     "Bulk RNA-seq differential expression results for CD14+ monocytes",
     "(filtered: adj p < 0.05 & |log2FC| > 0.5)"),
@@ -128,12 +140,7 @@ final_layout <- tibble::tribble(
   "Table S13",   "Table S10",   paste(
     "Pairwise Wilcoxon test between one vs other cell type manner for methylTFR",
     "and chromVAR z-scores"),
-  "Table S14",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes",
-  "Table S15",   NA,            paste(
-    "Confounder-adjusted differential accessibility: balance of the per-sample QC",
-    "metrics between the compared groups (S15A), and differentially accessible",
-    "regions re-called with those metrics in the differential model compared with",
-    "the unadjusted calls, per cell type, comparison and adjustment set (S15B)")
+  "Table S14",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes"
 )
 
 ## ---- 2. New table content ---------------------------------------------------
@@ -387,8 +394,8 @@ new_content <- list(
   "Table S11B" = allc_sample_supp,
   "Table S12"  = pbqc_supp,
   "Table S12B" = pbqc_grp_supp,
-  "Table S15A" = bal_supp,
-  "Table S15B" = adj_supp
+  "Table S9B"  = bal_supp,
+  "Table S9C"  = adj_supp
 )
 
 ## ---- 3. Rename existing sheets ---------------------------------------------
@@ -483,7 +490,7 @@ if (all(names(new_content) %in% names(wb)) &&
           "S11 = snmC-seq per-cell annotation, ",
           "S11B = snmC-seq per-sample summary, ",
           "S12/S12B = snmC-seq pseudobulk QC, ",
-          "S15A/S15B = covariate balance and confounder-adjusted DARs.")
+          "S9B/S9C = covariate balance and confounder-adjusted DARs.")
   message("NB sub-sheets move with their parent (old S3A/B/C -> S4A/B/C).")
 }
 
