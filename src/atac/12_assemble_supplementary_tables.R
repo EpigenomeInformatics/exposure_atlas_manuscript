@@ -13,8 +13,9 @@
 #   - sample_annots/allc_sample_annot_final.csv
 #         (snmC-seq per-cell annotation; committed in the repo, PRE-filter —
 #          subset to the analysed cells via cellAnnot_meth.rds, see below)
-#   - src/atac/10_4_tex_chromvar_volcano.R -> figures/tex_chromvar_volcano_altius.csv
-#         (Tex vs other CD8+ consensus TFBS comparison)
+#   - src/atac/07_3_confounder_adjusted_DARs.R -> figures/confounder_adjusted_DAR_summary.csv
+#     src/atac/07_6_covariate_balance.R          -> figures/covariate_balance_summary.csv
+#         (covariate balance and the adjusted-vs-unadjusted DAR comparison)
 #   - src/meth/01b_meth_pseudobulk_qc.R -> figures/meth_pseudobulk_qc.csv
 #         and figures/meth_pseudobulk_qc_by_group.csv
 #
@@ -44,7 +45,7 @@
 #   S12B  snmC-seq pseudobulk QC, per exposure group x cell type        [NEW]
 #   S13   Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types (was S10)
 #   S14   Differentially methylated cCREs, COVID-19 CD14+ monocytes  (was S11)
-#   S15   Tex vs other CD8+ consensus TFBS comparison                     [NEW]
+#   S15   Confounder-adjusted differential accessibility, sensitivity     [NEW]
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -129,11 +130,10 @@ final_layout <- tibble::tribble(
     "and chromVAR z-scores"),
   "Table S14",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes",
   "Table S15",   NA,            paste(
-    "Differential TF motif activity between the exhausted (Tex) and the remaining",
-    "CD8+ memory T-cell subclusters of the HIV cohort, across 286 consensus TFBS",
-    "archetypes: difference in mean chromVAR deviation z-score, Wilcoxon p and",
-    "Benjamini-Hochberg adjusted p, the number of subjects in which the change has",
-    "the same direction, and whether the archetype was called")
+    "Confounder-adjusted differential accessibility: balance of the per-sample QC",
+    "metrics between the compared groups (S15A), and differentially accessible",
+    "regions re-called with those metrics in the differential model compared with",
+    "the unadjusted calls, per cell type, comparison and adjustment set (S15B)")
 )
 
 ## ---- 2. New table content ---------------------------------------------------
@@ -343,27 +343,43 @@ pbqc_grp_supp <- read.csv(pbqc_grp_csv, stringsAsFactors = FALSE, check.names = 
 message("snmC-seq pseudobulk QC: ", nrow(pbqc_supp), " pseudobulks, ",
         nrow(pbqc_grp_supp), " exposure group x cell type combinations")
 
-# (d) Tex vs other CD8+ consensus TFBS comparison, written by
-# src/atac/10_4_tex_chromvar_volcano.R and plotted in Supplementary Figure 3F.
-# Selection is on effect size and agreement across subjects, not on padj, so both
-# are reported and `Called` records the outcome.
-tex_csv  <- file.path(fig_dir, "tex_chromvar_volcano_altius.csv")
-stopifnot(file.exists(tex_csv))
-tex_supp <- read.csv(tex_csv, stringsAsFactors = FALSE) %>%
+# (d) Confounder adjustment, for Reviewer 1 comment 2 and Reviewer 3 comment 2.
+# Two questions, kept as separate sheets because they are different claims:
+#   S15A  is there anything to adjust for?   (07_6_covariate_balance.R)
+#   S15B  if we adjust, do the calls change? (07_3_confounder_adjusted_DARs.R)
+bal_csv <- file.path(fig_dir, "covariate_balance_summary.csv")
+adj_csv <- file.path(fig_dir, "confounder_adjusted_DAR_summary.csv")
+stopifnot(file.exists(bal_csv), file.exists(adj_csv))
+
+bal_supp <- read.csv(bal_csv, stringsAsFactors = FALSE) %>%
   dplyr::transmute(
-    `Consensus TFBS`                        = motif,
-    `Delta z (Tex - other CD8+)`            = signif(zdiff, 3),
-    `p (Wilcoxon)`                          = signif(p, 3),
-    `p adjusted (Benjamini-Hochberg)`       = signif(padj, 3),
-    `Subjects with same direction (of 4)`   = donors_consistent,
-    `Called`                                = dplyr::recode(group,
-                                                `Tex` = "higher in Tex",
-                                                `Other` = "higher in other CD8+",
-                                                `NO` = "not called")
+    `QC metric`                              = covariate,
+    `Comparisons tested`                     = n_comparisons,
+    `Median |SMD|`                           = signif(median_abs_SMD, 3),
+    `Median |SMD| expected under the null`    = signif(null_median_abs_SMD, 3),
+    `Max |SMD|`                              = signif(max_abs_SMD, 3),
+    `Comparisons imbalanced (permutation)`   = n_imbalanced_perm,
+    `Smallest permutation p`                 = signif(min_p_perm, 3)
+  )
+
+adj_supp <- read.csv(adj_csv, stringsAsFactors = FALSE) %>%
+  dplyr::transmute(
+    `Cell type`                    = cell,
+    `Comparison`                   = comparison,
+    `Adjustment set`               = adj_set,
+    `DARs, unadjusted`             = DARs_unadjusted,
+    `DARs, adjusted`               = DARs_adjusted,
+    `Shared`                       = shared,
+    `Recovered (%)`                = signif(recovered_pct, 3),
+    `Direction concordance (%)`    = signif(sign_concordance_pct, 3),
+    `Fold-change correlation (r)`  = signif(lfc_pearson_all, 3),
+    `Regions tested`               = n_regions_tested
   ) %>%
-  dplyr::arrange(dplyr::desc(`Delta z (Tex - other CD8+)`))
-message("Tex consensus TFBS comparison: ", nrow(tex_supp), " archetypes, ",
-        sum(tex_supp$Called != "not called"), " called")
+  dplyr::arrange(`Cell type`, `Comparison`, `Adjustment set`)
+
+message("Covariate balance: ", nrow(bal_supp), " metrics, ",
+        sum(bal_supp$`Comparisons imbalanced (permutation)`), " imbalanced comparisons in total")
+message("Confounder-adjusted DARs: ", nrow(adj_supp), " cell x comparison x design rows")
 
 new_content <- list(
   "Table S3"   = comp_supp,
@@ -371,7 +387,8 @@ new_content <- list(
   "Table S11B" = allc_sample_supp,
   "Table S12"  = pbqc_supp,
   "Table S12B" = pbqc_grp_supp,
-  "Table S15"  = tex_supp
+  "Table S15A" = bal_supp,
+  "Table S15B" = adj_supp
 )
 
 ## ---- 3. Rename existing sheets ---------------------------------------------
@@ -466,7 +483,7 @@ if (all(names(new_content) %in% names(wb)) &&
           "S11 = snmC-seq per-cell annotation, ",
           "S11B = snmC-seq per-sample summary, ",
           "S12/S12B = snmC-seq pseudobulk QC, ",
-          "S15 = Tex vs other CD8+ consensus TFBS comparison.")
+          "S15A/S15B = covariate balance and confounder-adjusted DARs.")
   message("NB sub-sheets move with their parent (old S3A/B/C -> S4A/B/C).")
 }
 
