@@ -11,7 +11,10 @@
 #   - 04_2_cellprops.R         -> figures/cell_prop_wilcox_bonferroni.csv
 #         (cell-type composition statistics)
 #   - sample_annots/allc_sample_annot_final.csv
-#         (snmC-seq per-cell annotation; committed in the repo)
+#         (snmC-seq per-cell annotation; committed in the repo, PRE-filter —
+#          subset to the analysed cells via cellAnnot_meth.rds, see below)
+#   - src/atac/10_4_tex_chromvar_volcano.R -> figures/tex_chromvar_volcano_altius.csv
+#         (Tex vs other CD8+ consensus TFBS comparison)
 #   - src/meth/01b_meth_pseudobulk_qc.R -> figures/meth_pseudobulk_qc.csv
 #         and figures/meth_pseudobulk_qc_by_group.csv
 #
@@ -41,6 +44,7 @@
 #   S12B  snmC-seq pseudobulk QC, per exposure group x cell type        [NEW]
 #   S13   Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types (was S10)
 #   S14   Differentially methylated cCREs, COVID-19 CD14+ monocytes  (was S11)
+#   S15   Tex vs other CD8+ consensus TFBS comparison                     [NEW]
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -123,7 +127,13 @@ final_layout <- tibble::tribble(
   "Table S13",   "Table S10",   paste(
     "Pairwise Wilcoxon test between one vs other cell type manner for methylTFR",
     "and chromVAR z-scores"),
-  "Table S14",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes"
+  "Table S14",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes",
+  "Table S15",   NA,            paste(
+    "Differential TF motif activity between the exhausted (Tex) and the remaining",
+    "CD8+ memory T-cell subclusters of the HIV cohort, across 286 consensus TFBS",
+    "archetypes: difference in mean chromVAR deviation z-score, Wilcoxon p and",
+    "Benjamini-Hochberg adjusted p, the number of subjects in which the change has",
+    "the same direction, and whether the archetype was called")
 )
 
 ## ---- 2. New table content ---------------------------------------------------
@@ -147,9 +157,66 @@ comp_supp <- read.csv(comp_csv, stringsAsFactors = FALSE) %>%
 allc_raw <- read.csv(allc_csv, stringsAsFactors = FALSE, check.names = FALSE)
 drop_cols <- c("", "X", "allC_FilePathfull")
 allc_supp <- allc_raw[, !colnames(allc_raw) %in% drop_cols, drop = FALSE]
-message("snmC-seq annotation: ", nrow(allc_supp), " cells x ",
+message("snmC-seq annotation as read: ", nrow(allc_supp), " cells x ",
         ncol(allc_supp), " columns (dropped: ",
         paste(intersect(drop_cols, colnames(allc_raw)), collapse = ", "), ")")
+
+# Restrict to the cells actually analysed. The CSV is the pre-filter annotation
+# (115 samples, 81,907 cells); the Results report 22,488 cells from the samples
+# that overlap the ATAC data, so S11 and S11B must match that set or they
+# contradict the sentence that cites them.
+#
+# The filter chain lives in src/integration/:
+#   01_prepare_sampleannot.R  exposure types COVID/FLU/HIV/OP        -> 105 samples
+#                             intersect with ATAC sample IDs         ->  39 samples
+#                             >= 200 ATAC and >= 50 snmC cells       ->  38 samples, 27,225 cells
+#   (7 FACS populations, Other-cell dropped)                         ->  38 samples, 23,981 cells
+#   03_quality_check.R        N_valid_sites in [5e5, 4e6]            ->  22,488 cells
+#
+# The last step cannot be reproduced here: the CSV has no N_valid_sites column.
+# So prefer the saved post-QC annotation, and fall back to the reproducible
+# subset with a loud warning if it is not reachable.
+meth_qc_rds <- "/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/cellAnnot_meth.rds"
+n_cells_expected <- 22488
+
+if (file.exists(meth_qc_rds)) {
+  qc_cells <- readRDS(meth_qc_rds)
+  cell_ids <- if ("Cell_UID" %in% colnames(qc_cells)) qc_cells[["Cell_UID"]] else rownames(qc_cells)
+  cell_ids <- unique(stats::na.omit(as.character(cell_ids)))
+  n_before <- nrow(allc_supp)
+  allc_supp <- allc_supp[allc_supp$Cell_UID %in% cell_ids, , drop = FALSE]
+  message("Restricted to the post-QC cell set from cellAnnot_meth.rds: ",
+          nrow(allc_supp), " of ", n_before, " cells")
+  if (nrow(allc_supp) != n_cells_expected) {
+    warning("Expected ", n_cells_expected, " cells to match the Results, got ",
+            nrow(allc_supp), ". Check that cellAnnot_meth.rds is the object the ",
+            "manuscript numbers came from, and that the Results text matches.")
+  }
+} else {
+  warning("cellAnnot_meth.rds not reachable at ", meth_qc_rds,
+          ". Falling back to the filters reproducible from the repo, which stop ",
+          "short of the N_valid_sites step, so the cell count will exceed the ",
+          n_cells_expected, " reported in the Results. Do not submit this sheet.")
+  atac_cc <- file.path(annot, "cellColData.tsv.gz")
+  stopifnot(file.exists(atac_cc))
+  cc <- read.delim(gzfile(atac_cc), stringsAsFactors = FALSE)
+  keep <- allc_supp$Common_Minimal_Informative_ID %in%
+    intersect(unique(cc$sample_sampleId_cminid),
+              unique(allc_supp$Common_Minimal_Informative_ID))
+  allc_supp <- allc_supp[keep, , drop = FALSE]
+  n_atac <- table(cc$sample_sampleId_cminid)
+  n_meth <- table(allc_supp$Common_Minimal_Informative_ID)
+  ok <- names(n_meth)[n_meth >= 50 &
+                        n_atac[names(n_meth)] >= 200 &
+                        !is.na(n_atac[names(n_meth)])]
+  allc_supp <- allc_supp[allc_supp$Common_Minimal_Informative_ID %in% ok, , drop = FALSE]
+  allc_supp <- allc_supp[allc_supp$cell_type != "Other-cell", , drop = FALSE]
+  message("Fallback subset: ", nrow(allc_supp), " cells, ",
+          length(unique(allc_supp$Common_Minimal_Informative_ID)), " samples")
+}
+
+message("snmC-seq annotation for S11: ", nrow(allc_supp), " cells, ",
+        length(unique(allc_supp$Common_Minimal_Informative_ID)), " samples")
 if (nrow(allc_supp) > 1e5) {
   message("NB this sheet is large; Excel's row limit is 1,048,576 so it fits, ",
           "but the workbook will be slow to open.")
@@ -169,7 +236,11 @@ if (nrow(allc_supp) > 1e5) {
 ct_levels <- c("B-cell", "Monocyte", "NK-cell",
                "Th-Naive", "Th-Mem", "Th-Eff",
                "Tc-Naive", "Tc-Mem", "Tc-Eff", "Other-cell")
-stopifnot(setequal(unique(allc_supp$cell_type), ct_levels))
+# Other-cell is absent once the analysed set is used, so intersect rather than
+# require equality
+ct_levels <- intersect(ct_levels, unique(allc_supp$cell_type))
+stopifnot(length(ct_levels) > 0,
+          all(unique(allc_supp$cell_type) %in% ct_levels))
 
 sid   <- allc_supp$Common_Minimal_Informative_ID
 part  <- function(x, i) vapply(strsplit(x, "_", fixed = TRUE), function(p)
@@ -272,12 +343,35 @@ pbqc_grp_supp <- read.csv(pbqc_grp_csv, stringsAsFactors = FALSE, check.names = 
 message("snmC-seq pseudobulk QC: ", nrow(pbqc_supp), " pseudobulks, ",
         nrow(pbqc_grp_supp), " exposure group x cell type combinations")
 
+# (d) Tex vs other CD8+ consensus TFBS comparison, written by
+# src/atac/10_4_tex_chromvar_volcano.R and plotted in Supplementary Figure 3F.
+# Selection is on effect size and agreement across subjects, not on padj, so both
+# are reported and `Called` records the outcome.
+tex_csv  <- file.path(fig_dir, "tex_chromvar_volcano_altius.csv")
+stopifnot(file.exists(tex_csv))
+tex_supp <- read.csv(tex_csv, stringsAsFactors = FALSE) %>%
+  dplyr::transmute(
+    `Consensus TFBS`                        = motif,
+    `Delta z (Tex - other CD8+)`            = signif(zdiff, 3),
+    `p (Wilcoxon)`                          = signif(p, 3),
+    `p adjusted (Benjamini-Hochberg)`       = signif(padj, 3),
+    `Subjects with same direction (of 4)`   = donors_consistent,
+    `Called`                                = dplyr::recode(group,
+                                                `Tex` = "higher in Tex",
+                                                `Other` = "higher in other CD8+",
+                                                `NO` = "not called")
+  ) %>%
+  dplyr::arrange(dplyr::desc(`Delta z (Tex - other CD8+)`))
+message("Tex consensus TFBS comparison: ", nrow(tex_supp), " archetypes, ",
+        sum(tex_supp$Called != "not called"), " called")
+
 new_content <- list(
   "Table S3"   = comp_supp,
   "Table S11"  = allc_supp,
   "Table S11B" = allc_sample_supp,
   "Table S12"  = pbqc_supp,
-  "Table S12B" = pbqc_grp_supp
+  "Table S12B" = pbqc_grp_supp,
+  "Table S15"  = tex_supp
 )
 
 ## ---- 3. Rename existing sheets ---------------------------------------------
@@ -371,7 +465,8 @@ if (all(names(new_content) %in% names(wb)) &&
   message("\nNew tables: S3 = cell-type composition statistics, ",
           "S11 = snmC-seq per-cell annotation, ",
           "S11B = snmC-seq per-sample summary, ",
-          "S12/S12B = snmC-seq pseudobulk QC.")
+          "S12/S12B = snmC-seq pseudobulk QC, ",
+          "S15 = Tex vs other CD8+ consensus TFBS comparison.")
   message("NB sub-sheets move with their parent (old S3A/B/C -> S4A/B/C).")
 }
 
