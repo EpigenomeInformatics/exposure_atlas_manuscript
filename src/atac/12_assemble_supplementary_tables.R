@@ -11,22 +11,18 @@
 #   - 04_2_cellprops.R         -> figures/cell_prop_wilcox_bonferroni.csv
 #         (cell-type composition statistics)
 #   - sample_annots/allc_sample_annot_final.csv
-#         (snmC-seq per-cell annotation; committed in the repo, PRE-filter —
-#          subset to the analysed cells via cellAnnot_meth.rds, see below)
+#         (snmC-seq per-cell annotation, pre-filter; subset below via
+#          cellAnnot_meth.rds)
 #   - src/atac/07_3_confounder_adjusted_DARs.R -> figures/confounder_adjusted_DAR_summary.csv
 #     src/atac/07_6_covariate_balance.R          -> figures/covariate_balance_summary.csv
 #         (covariate balance and the adjusted-vs-unadjusted DAR comparison)
 #   - src/meth/01b_meth_pseudobulk_qc.R -> figures/meth_pseudobulk_qc.csv
 #         and figures/meth_pseudobulk_qc_by_group.csv
 #
-# Several tables are inserted, so the numbering shifts more than once. The final
-# layout is declared once in `final_layout` and every rename derives from it;
-# edit that table if the order changes. Always reads the pre-shift workbook and
-# writes a fresh final file, so re-running is safe.
+# Numbering is declared once in `final_layout`; every rename derives from it.
+# Reads the pre-shift workbook and writes a fresh file, so re-running is safe.
 #
-# FINAL NUMBERING
-# ATAC tables first, in the order the Results use them, then the snmC-seq block,
-# then the tables that combine the two modalities.
+# FINAL NUMBERING (ATAC, then snmC-seq, then the combined-modality tables)
 #
 #   S1    Sample metadata of the scATAC dataset
 #   S1B   Per-PC covariate association (before/after Harmony batch correction)
@@ -158,9 +154,8 @@ comp_supp <- read.csv(comp_csv, stringsAsFactors = FALSE) %>%
     `p (Bonferroni-adjusted)`     = signif(p_adj, 3)
   )
 
-# (b) snmC-seq per-cell annotation. Drops the write.csv row-number column and
-# allC_FilePathfull (absolute path under /icbb/projects/igunduz/...); the
-# relative allC_FilePath is kept.
+# (b) snmC-seq per-cell annotation. Drops the row-number column and the absolute
+# allC_FilePathfull; the relative allC_FilePath is kept.
 allc_raw <- read.csv(allc_csv, stringsAsFactors = FALSE, check.names = FALSE)
 drop_cols <- c("", "X", "allC_FilePathfull")
 allc_supp <- allc_raw[, !colnames(allc_raw) %in% drop_cols, drop = FALSE]
@@ -168,21 +163,15 @@ message("snmC-seq annotation as read: ", nrow(allc_supp), " cells x ",
         ncol(allc_supp), " columns (dropped: ",
         paste(intersect(drop_cols, colnames(allc_raw)), collapse = ", "), ")")
 
-# Restrict to the cells actually analysed. The CSV is the pre-filter annotation
-# (115 samples, 81,907 cells); the Results report 22,488 cells from the samples
-# that overlap the ATAC data, so S11 and S11B must match that set or they
-# contradict the sentence that cites them.
-#
-# The filter chain lives in src/integration/:
-#   01_prepare_sampleannot.R  exposure types COVID/FLU/HIV/OP        -> 105 samples
-#                             intersect with ATAC sample IDs         ->  39 samples
-#                             >= 200 ATAC and >= 50 snmC cells       ->  38 samples, 27,225 cells
-#   (7 FACS populations, Other-cell dropped)                         ->  38 samples, 23,981 cells
-#   03_quality_check.R        N_valid_sites in [5e5, 4e6]            ->  22,488 cells
-#
-# The last step cannot be reproduced here: the CSV has no N_valid_sites column.
-# So prefer the saved post-QC annotation, and fall back to the reproducible
-# subset with a loud warning if it is not reachable.
+# Restrict to the analysed cell set. The CSV is pre-filter (115 samples,
+# 81,907 cells); the Results report 22,488. Filter chain, in src/integration/:
+#   01_prepare_sampleannot.R  COVID/FLU/HIV/OP                -> 105 samples
+#                             intersect with ATAC sample IDs  ->  39 samples
+#                             >= 200 ATAC and >= 50 snmC      ->  38, 27,225 cells
+#   Other-cell dropped (7 FACS populations)                   ->  38, 23,981 cells
+#   03_quality_check.R        N_valid_sites in [5e5, 4e6]     ->      22,488 cells
+# The last step needs N_valid_sites, which the CSV does not carry, so use the
+# saved post-QC annotation where available.
 meth_qc_rds <- "/icbb/projects/igunduz/DARPA_analysis/artemis_031023/rawData/cellAnnot_meth.rds"
 n_cells_expected <- 22488
 
@@ -195,15 +184,13 @@ if (file.exists(meth_qc_rds)) {
   message("Restricted to the post-QC cell set from cellAnnot_meth.rds: ",
           nrow(allc_supp), " of ", n_before, " cells")
   if (nrow(allc_supp) != n_cells_expected) {
-    warning("Expected ", n_cells_expected, " cells to match the Results, got ",
-            nrow(allc_supp), ". Check that cellAnnot_meth.rds is the object the ",
-            "manuscript numbers came from, and that the Results text matches.")
+    warning("Expected ", n_cells_expected, " cells, got ", nrow(allc_supp),
+            "; check cellAnnot_meth.rds against the Results.")
   }
 } else {
-  warning("cellAnnot_meth.rds not reachable at ", meth_qc_rds,
-          ". Falling back to the filters reproducible from the repo, which stop ",
-          "short of the N_valid_sites step, so the cell count will exceed the ",
-          n_cells_expected, " reported in the Results. Do not submit this sheet.")
+  warning("cellAnnot_meth.rds not found at ", meth_qc_rds,
+          "; falling back to the repo filters, which omit the N_valid_sites step. ",
+          "Cell count will exceed the ", n_cells_expected, " in the Results.")
   atac_cc <- file.path(annot, "cellColData.tsv.gz")
   stopifnot(file.exists(atac_cc))
   cc <- read.delim(gzfile(atac_cc), stringsAsFactors = FALSE)
@@ -229,11 +216,8 @@ if (nrow(allc_supp) > 1e5) {
           "but the workbook will be slow to open.")
 }
 
-# (b2) snmC-seq per-sample summary. Reviewer 1 comment 3 asks for the breakdown
-# of methylation cells across donors, timepoints and cell subsets; S2 holds one
-# row per cell, which does not answer that directly. Aggregated from the same
-# object so the two sheets cannot disagree.
-#
+# (b2) snmC-seq per-sample summary: cells per donor, timepoint and cell type.
+# Aggregated from allc_supp so it cannot disagree with the per-cell sheet.
 # Subject / timepoint / exposure level are parsed from the sample identifier:
 #   CoV_S_S11_D1          severity (S / nS), subject, day
 #   Ctrl_10_M_White_39yo  index, sex, ethnicity, age
@@ -243,8 +227,8 @@ if (nrow(allc_supp) > 1e5) {
 ct_levels <- c("B-cell", "Monocyte", "NK-cell",
                "Th-Naive", "Th-Mem", "Th-Eff",
                "Tc-Naive", "Tc-Mem", "Tc-Eff", "Other-cell")
-# Other-cell is absent once the analysed set is used, so intersect rather than
-# require equality
+# Other-cell is absent from the analysed set, so intersect rather than require
+# equality
 ct_levels <- intersect(ct_levels, unique(allc_supp$cell_type))
 stopifnot(length(ct_levels) > 0,
           all(unique(allc_supp$cell_type) %in% ct_levels))
@@ -327,10 +311,8 @@ stopifnot(all(rowSums(allc_sample_supp[, ct_levels]) ==
 message("snmC-seq per-sample summary: ", nrow(allc_sample_supp), " samples, ",
         dplyr::n_distinct(allc_sample_supp$Subject), " subjects")
 
-# Sex must not contradict itself within a subject. In the annotation as committed,
-# four subjects carry two different values across their own timepoints
-# (COVID-19 S11 and S17, OP S4 and S7); age is consistent throughout. Reviewer 1
-# comment 1 is about exactly this metadata, so this is a warning, not a stop.
+# Sex should not vary within a subject. Four do in the committed annotation
+# (COVID-19 S11, S17; OP S4, S7); age is consistent. Warning, not an error.
 sex_clash <- allc_sample_supp %>%
   dplyr::group_by(Cohort, Subject) %>%
   dplyr::filter(dplyr::n_distinct(stats::na.omit(Sex)) > 1) %>%
@@ -344,16 +326,14 @@ if (nrow(sex_clash)) {
                                     "Timepoint", "Sex", "Age")]))
 }
 
-# (c) snmC-seq pseudobulk QC, written by src/meth/01b_meth_pseudobulk_qc.R
+# (c) snmC-seq pseudobulk QC (src/meth/01b_meth_pseudobulk_qc.R)
 pbqc_supp     <- read.csv(pbqc_csv, stringsAsFactors = FALSE, check.names = FALSE)
 pbqc_grp_supp <- read.csv(pbqc_grp_csv, stringsAsFactors = FALSE, check.names = FALSE)
 message("snmC-seq pseudobulk QC: ", nrow(pbqc_supp), " pseudobulks, ",
         nrow(pbqc_grp_supp), " exposure group x cell type combinations")
 
-# (d) Confounder adjustment, for Reviewer 1 comment 2 and Reviewer 3 comment 2.
-# Two questions, kept as separate sheets because they are different claims:
-#   S15A  is there anything to adjust for?   (07_6_covariate_balance.R)
-#   S15B  if we adjust, do the calls change? (07_3_confounder_adjusted_DARs.R)
+# (d) Covariate balance (07_6_covariate_balance.R) and the adjusted-vs-unadjusted
+# DAR comparison (07_3_confounder_adjusted_DARs.R), as separate sheets.
 bal_csv <- file.path(fig_dir, "covariate_balance_summary.csv")
 adj_csv <- file.path(fig_dir, "confounder_adjusted_DAR_summary.csv")
 stopifnot(file.exists(bal_csv), file.exists(adj_csv))
@@ -405,9 +385,8 @@ if (all(names(new_content) %in% names(wb)) &&
     identical(dim(openxlsx::readWorkbook(wb, "Table S3")), dim(comp_supp))) {
   message("Workbook already assembled; nothing to do.")
 } else {
-  # temp prefix first, so an old name cannot collide with a new one mid-pass
-  # (old S3 -> new S4 while an old S4 still exists, and old S10/S11 -> S13/S14
-  # must vacate before the new S11/S12 sheets are inserted)
+  # temp prefix first: old S3 -> new S4 while an old S4 still exists, and
+  # old S10/S11 must vacate before the new S11/S12 sheets are inserted
   renames <- final_layout %>%
     dplyr::filter(!is.na(old), old != new)
 
@@ -445,9 +424,8 @@ if (all(names(new_content) %in% names(wb)) &&
   }
 
   ## ---- 5. Order the sheets to match final_layout ----------------------------
-  # unique() matters: a sub-sheet is reached twice, once by the suffix expansion
-  # of its parent (S11 -> S11B) and once by its own row in final_layout. Without
-  # it, ord_names is longer than the workbook and worksheetOrder<- rejects it.
+  # unique(): sub-sheets appear twice, via the parent's suffix expansion and
+  # via their own final_layout row, which would over-length ord_names.
   want <- unique(unlist(lapply(final_layout$new, function(nm) {
     present <- c(nm, paste0(nm, LETTERS[1:6]))
     present[present %in% names(wb)]

@@ -3,28 +3,22 @@
 #####################################################################
 # 07_7_covariate_balance_response_figure.R
 # created on 2026-08-18 by Irem B. Gunduz
+# Response figure: covariate balance within each differential comparison.
 #
-# Response figure for Reviewer 1 comment 2: are the technical covariates
-# balanced between the groups being compared?
+# in:  figures/covariate_balance_by_comparison.csv (07_6_covariate_balance.R)
+# out: figures/response_figure_2_covariate_balance.pdf
+#      figures/response_figure_2_legend.txt
 #
-# Reads  figures/covariate_balance_by_comparison.csv   (from 07_6_covariate_balance.R)
-# Writes figures/response_figure_2_covariate_balance.pdf
-#
-# WHY A SECOND PLOT, given 07_6 already draws covariate_balance.pdf:
-# that panel puts the observed |SMD| against the permutation null MEDIAN, so by
-# construction about half the points sit above the line and the figure reads as
-# imbalance — the opposite of the result. Here each observation is divided by its
-# own null 95th percentile, so the line is a real significance boundary and
-# "inside the shaded band" means "not distinguishable from chance".
-#
-# Sex and donor carry no standardised mean difference (categorical), so this
-# figure covers the four continuous quality measures. Say so in the legend.
+# Each |SMD| is scaled by its own permutation null 95th percentile, so 1 is a
+# significance boundary rather than a fixed convention. 07_6 plots against the
+# null median instead, where half the points lie above the line by construction.
+# Categorical covariates (sex, donor) have no SMD and are not plotted.
 #####################################################################
 
 suppressPackageStartupMessages({
   library(dplyr)
   library(ggplot2)
-  library(patchwork) # only for the two-panel layout; see the note at the bottom
+  library(patchwork)
 })
 set.seed(3)
 
@@ -60,7 +54,7 @@ message(sprintf("comparisons %d | tests %d | above ceiling %d | smallest adjuste
 cohort_cols <- c("COVID-19" = "#3b6ea5", "HIV" = "#c1741f",
                  "Influenza" = "#4f8a5b", "OP" = "#7a5c9e")
 
-## ---- Panel A: observed difference relative to its own chance ceiling --------
+## ---- Panel A: |SMD| relative to the null 95th percentile -------------------
 pA <- ggplot(bal, aes(x = covariate, y = ratio, colour = cohort)) +
   annotate("rect", xmin = -Inf, xmax = Inf, ymin = 0, ymax = 1,
            fill = "#eaf2ea", colour = NA) +
@@ -94,10 +88,9 @@ pB <- ggplot(bal, aes(x = p_perm)) +
   theme_classic(base_size = 11) +
   theme(plot.title = element_text(face = "bold", hjust = 0, size = 13))
 
-## ---- Compose ----------------------------------------------------------------
-# No plot title or subtitle: that text is the figure legend and belongs in the
-# response letter, not printed on the panel. The legend text is written to
-# response_figure_2_legend.txt so the two cannot drift apart.
+## ---- Compose ---------------------------------------------------------------
+# Caption is written to file rather than drawn on the panel, so the numbers in
+# the legend and the plot come from the same objects.
 fig <- (pA | pB) + patchwork::plot_layout(widths = c(1.75, 1))
 
 ggsave(out_pdf, fig, width = 12.2, height = 5.2, useDingbats = FALSE)
@@ -118,10 +111,7 @@ legend_txt <- sprintf(paste0(
 writeLines(legend_txt, file.path(fig_dir, "response_figure_2_legend.txt"))
 message("Wrote ", file.path(fig_dir, "response_figure_2_legend.txt"))
 
-## ---- If patchwork is not installed -----------------------------------------
-# Drop the library(patchwork) call and the fig <- ... block above, and save the
-# two panels separately instead:
+# Without patchwork, drop the fig block above and save the panels separately:
 #   ggsave(file.path(fig_dir, "response_figure_2A_balance.pdf"), pA, width = 7.6, height = 5.2)
 #   ggsave(file.path(fig_dir, "response_figure_2B_pvalues.pdf"), pB, width = 4.6, height = 5.2)
-# The subtitle text above then goes into the figure legend in the response letter.
 #####################################################################
