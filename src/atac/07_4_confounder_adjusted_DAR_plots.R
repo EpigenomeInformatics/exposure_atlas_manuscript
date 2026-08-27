@@ -441,8 +441,8 @@ if (nrow(dar_regions) > 0) {
       isDiff_unadj ~ "DAR unadjusted only",
       TRUE ~ "DAR adjusted only"
     )) %>%
-    dplyr::select(cell, comparison, id, log2FC_unadj, padj_unadj, isDiff_unadj,
-      log2FC_adj, padj_adj, isDiff_adj, status)
+    dplyr::select(cell, comparison, adj_set, id, log2FC_unadj, padj_unadj,
+      isDiff_unadj, log2FC_adj, padj_adj, isDiff_adj, status)
 }
 write.csv(dar_regions,
   file.path(out_dir, "confounder_adjusted_DAR_regions.csv"), row.names = FALSE)
