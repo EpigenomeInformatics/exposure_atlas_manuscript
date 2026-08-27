@@ -18,7 +18,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
 source(file.path(repo_dir, "utils/helpers.R")) # cutL0.5fc2Padj05
 
 # must match 07_3

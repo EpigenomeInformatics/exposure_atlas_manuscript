@@ -25,7 +25,7 @@ set.seed(12)
 # -------------------------------------------------------------------
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
-save_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/cvar_diffs"
+save_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/cvar_diffs"
 if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
 
 # Define Colors and Valid Cell Types 

@@ -22,7 +22,7 @@ sampleannot <- read.delim("/icbb/projects/igunduz/sampleannot.tsv") %>%
 sampleannot$fragmentFiles <- gsub(x = sampleannot$fragmentFiles, pattern = ".bed", replacement = ".tsv.gz")
 
 # read the batch info
-batch <- data.table::fread("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/ATAC_metadata_covid.csv") %>%
+batch <- data.table::fread("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/ATAC_metadata_covid.csv") %>%
   dplyr::mutate(fragmentFiles = paste0(arrow_name, "_fragments.tsv.gz")) %>%
   dplyr::mutate(processing_date = as.factor(processing_date))
 
@@ -142,7 +142,7 @@ if (!dir.exists(ms_dir)) dir.create(ms_dir, recursive = TRUE)
 run_atac_differential(ds, ms_dir)
 
 # read the resulting DAR table. We search for the diffTab file recursively so we can find it even if the subdir structure changes in future versions of ChrAccR.
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R") # cutL0.5fc2Padj05
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R") # cutL0.5fc2Padj05
 
 diff_files <- list.files(ms_dir, pattern = "diffTab.*\\.tsv$", recursive = TRUE, full.names = TRUE)
 message("diffTab files found under ", ms_dir, ": ", paste(basename(diff_files), collapse = ", "))

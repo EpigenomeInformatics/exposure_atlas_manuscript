@@ -35,7 +35,7 @@ suppressPackageStartupMessages({
 set.seed(12) # set seed
 
 ## ---- Paths / parameters -----------------------------------------------------
-repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
 suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables.xlsx")
 n_pc <- 10 # number of top PCs to test
 embeddings_to_test <- c("IterativeLSI", "Harmony") # pre- and post-batch-correction

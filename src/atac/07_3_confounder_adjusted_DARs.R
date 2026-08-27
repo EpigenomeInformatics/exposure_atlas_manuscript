@@ -35,7 +35,7 @@ suppressPackageStartupMessages({
 })
 set.seed(12)
 
-repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
 source(file.path(repo_dir, "utils/chraccr_plots.R")) # cutL0.5fc2Padj05
 # Scratch space for the adjusted ChrAccR/DESeq2 runs (large, stays off the repo)
 out_dir <- "/icbb/projects/igunduz/finalize_echo_050824/confounder_adjusted/"

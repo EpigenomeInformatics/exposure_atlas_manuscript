@@ -9,10 +9,10 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 set.seed(12)
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/createPseudoBulks.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/createPseudoBulks.R")
 
 # read the sample annotation
-sampleAnnot <- data.table::fread("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/allc_sample_annot_final.csv") %>%
+sampleAnnot <- data.table::fread("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/allc_sample_annot_final.csv") %>%
   dplyr::select(!V1) %>%
   dplyr::filter(!cell_type == "Other-cell")
 

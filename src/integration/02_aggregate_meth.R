@@ -14,7 +14,7 @@ suppressPackageStartupMessages({
   library(muLogR)
   library(GenomicRanges)
 })
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/allc_utils.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/allc_utils.R")
 wdir <- "/icbb/projects/igunduz/DARPA_analysis/artemis_031023/"
 if (!dir.exists(wdir)) {
   dir.create(wdir)

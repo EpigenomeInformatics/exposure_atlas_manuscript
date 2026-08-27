@@ -16,10 +16,10 @@ suppressPackageStartupMessages({
 })
 
 # Load the functions
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/rnbeads_helpers.R")
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/chraccr_plots.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/rnbeads_helpers.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/chraccr_plots.R")
 
-cells <- data.table::fread("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/allc_sample_annot_final.csv") %>%
+cells <- data.table::fread("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/allc_sample_annot_final.csv") %>%
   dplyr::select(!V1) %>%
   dplyr::filter(!cell_type %in% c("Other-cell", "Tc-Eff", "Th-Eff"))
 
@@ -77,7 +77,7 @@ atac <- prepareDARforPlot("Mono_CD14", outputDir, 3, "archrPeaks")
 dmrs <- prepareDMRforPlot(rnb_set, diffMeth, global_peaklist, "archr_peaks", changeMethod = "meandiff")
 
 # Save as a tsv file
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 write.table(dmrs, file = paste0(sannot_dir, "/Mono_CD14_dmr.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
 
 for (i in 1:length(dmrs)) {
@@ -92,7 +92,7 @@ for (i in 1:length(dmrs)) {
 
 
 # Plot the density scatter plot for comparasions
-plot_path <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+plot_path <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 if (!dir.exists(plot_path)) {
   dir.create(plot_path)
 }
@@ -111,7 +111,7 @@ rnbeadsDensityScatter_sub(diffMeth, "archr_peaks", plot_path,color_mapping)
 # For C19 mild vs control
 analysis.dir <- "/icbb/projects/igunduz/DARPA_analysis/RnBeads_0111023/Monocyte/C19_mild_vs_Ctrl/"
 mild_diffMeth <- load.rnb.diffmeth(paste0(analysis.dir, "/reports/differential_methylation_data/differential_rnbDiffMeth/"))
-plot_path <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/C19/"
+plot_path <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/C19/"
 if (!dir.exists(plot_path)) {
   dir.create(plot_path)
 }

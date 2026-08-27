@@ -21,7 +21,7 @@ suppressPackageStartupMessages({
 set.seed(12)
 addArchRThreads(threads = 8)
 
-repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
 fig_dir <- paste0(repo_dir, "/figures/")
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 hiv_rds <- file.path(outputDir, "hiv_tcell_project.rds")

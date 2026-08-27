@@ -22,8 +22,8 @@ suppressPackageStartupMessages({
 set.seed(12) # set seed
 
 # Load the data and set the output directory
-plot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+plot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 archr_dir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 
 # Load the ArchR project
@@ -92,7 +92,7 @@ current_meta$condition <- cut(current_meta$current_severity, breaks = severity_b
 seu@meta.data <- current_meta
 
 # Subset the seu object to the common ids
-sannot <- readr::read_csv("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/ATAC_metadata_covid.csv", show_col_types = FALSE)
+sannot <- readr::read_csv("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/ATAC_metadata_covid.csv", show_col_types = FALSE)
 seu_meta <- seu@meta.data
 common_ids <- seu_meta$record_id[seu_meta$record_id %in% sannot$record_id]
 seu_subset <- subset(x = seu, subset = record_id %in% common_ids)

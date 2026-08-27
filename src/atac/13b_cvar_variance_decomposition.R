@@ -25,7 +25,7 @@ suppressPackageStartupMessages({
 })
 set.seed(12)
 
-save_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/cvar_diffs"
+save_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/cvar_diffs"
 
 # -------------------------------------------------------------------
 # 1. Load the pseudobulk chromVAR object built in 13_cvar_analysis.R

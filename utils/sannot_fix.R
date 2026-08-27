@@ -15,8 +15,8 @@ set.seed(12)
 # Paths
 # -------------------------------------------------------------------------
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
-fig_dir   <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/figures"
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+fig_dir   <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/figures"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 
 # -------------------------------------------------------------------------
 # Load ArchR project

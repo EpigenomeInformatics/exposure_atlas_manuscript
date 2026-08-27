@@ -24,7 +24,7 @@ suppressPackageStartupMessages({
 })
 set.seed(12)
 
-repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
 fig_dir  <- file.path(repo_dir, "figures")
 annot    <- file.path(repo_dir, "sample_annots")
 pb_dir   <- "/icbb/projects/igunduz/DARPA/data/pseudoBulks/perSample"

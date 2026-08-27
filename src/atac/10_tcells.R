@@ -31,10 +31,10 @@ suppressPackageStartupMessages({
   library(RColorBrewer)
 })
 # addPeakAnnotationsNew() lives in the project utils (same as 04_1_markers.R)
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
 
 addArchRThreads(threads = 30)
-fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+fig_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 # Cache the subsetted/clustered/peak-called project as RDS so LSI, clustering,
 # UMAP, peak calling and chromVAR are not redone on every run. The Arrow files

@@ -13,9 +13,9 @@
 
 set.seed(12) # set seed
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
-fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+fig_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 # directory for supplementary table output
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 
 # load libraries
 suppressPackageStartupMessages({
@@ -34,8 +34,8 @@ suppressPackageStartupMessages({
 })
 
 # load the functions
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R")
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
 
 cbPalette <- c(
   "#ae017e", "#f768a1", "#67000d",

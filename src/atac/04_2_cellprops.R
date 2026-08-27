@@ -18,7 +18,7 @@ set.seed(12)
 
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
-fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+fig_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 
 if (!dir.exists(fig_dir)) {
   dir.create(fig_dir, recursive = TRUE)

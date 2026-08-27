@@ -26,7 +26,7 @@ suppressPackageStartupMessages({
 })
 set.seed(3)
 
-repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
 fig_dir  <- file.path(repo_dir, "figures")
 out_dir  <- "/icbb/projects/igunduz/finalize_echo_050824/confounder_adjusted/"
 
@@ -44,13 +44,13 @@ stopifnot(file.exists(bal_csv), file.exists(dar_sum_csv), file.exists(dar_reg_cs
 focus_set  <- "TSS_FRIP"
 focus_cell <- "Mono_CD14"
 n_label    <- 3
-n_tf_label <- 8
+n_tf_label <- 5
 tf_colls   <- c("TF_motif_clusters", "TF_motifs", "codex", "encode_tfbs")
 
 cohort_cols <- c("COVID-19" = "#3b6ea5", "HIV" = "#c1741f",
                  "Influenza" = "#4f8a5b", "OP" = "#7a5c9e")
-status_cols <- c("DAR in both" = "#4A2377", "DAR unadjusted only" = "#3C5488",
-                 "DAR adjusted only" = "#E64B35")
+status_cols <- c("DAR in both" = "#c0392b", "DAR unadjusted only" = "#3b6ea5",
+                 "DAR adjusted only" = "#4f8a5b")
 
 theme_resp <- theme_classic(base_size = 11) +
   theme(panel.grid.major = element_line(colour = "grey85", linewidth = 0.3),
@@ -163,24 +163,31 @@ pC <- ggplot(reg, aes(x = log2FC_unadj, y = log2FC_adj, colour = status)) +
 lola <- read.csv(lola_trm_csv, stringsAsFactors = FALSE) %>%
   dplyr::filter(collection %in% tf_colls,
                 is.finite(log2OR_unadj), is.finite(log2OR_adj)) %>%
-  dplyr::mutate(panel = paste0(cell, ", ", comparison),
-                motif = sub("^MA[0-9.]+_", "", description))
+  dplyr::mutate(panel  = paste0(cell, ", ", comparison),
+                cohort = dplyr::recode(sub("_.*$", "", comparison),
+                                       C19 = "COVID-19", HIV = "HIV"),
+                motif  = sub("^MA[0-9.]+_", "", description))
 
 top_tf <- lola %>%
-  dplyr::group_by(panel, motif) %>%
+  dplyr::group_by(cohort, motif) %>%
   dplyr::slice_max(abs(log2OR_unadj), n = 1, with_ties = FALSE) %>%
-  dplyr::ungroup() %>%
-  dplyr::slice_max(abs(log2OR_unadj) + abs(log2OR_adj), n = n_tf_label)
+  dplyr::group_by(cohort) %>%
+  dplyr::slice_max(abs(log2OR_unadj) + abs(log2OR_adj), n = n_tf_label) %>%
+  dplyr::ungroup()
 
 panel_cols <- stats::setNames(
-  c("#3b6ea5", "#7fa6cd", "#c1741f", "#e0a15c", "#4f8a5b", "#7a5c9e")[
+  c("#3b6ea5", "#7a5c9e", "#c1741f", "#4f8a5b", "#c0392b", "#7fa6cd")[
     seq_along(sort(unique(lola$panel)))],
   sort(unique(lola$panel)))
 
 lola_r <- read.csv(lola_sum_csv, stringsAsFactors = FALSE) %>%
   dplyr::filter(adj_set == focus_set,
                 paste0(cell, ", ", comparison) %in% unique(lola$panel)) %>%
-  dplyr::mutate(txt = sprintf("%s, %s: r = %.2f", cell, comparison, log2OR_pearson))
+  dplyr::mutate(cohort = dplyr::recode(sub("_.*$", "", comparison),
+                                       C19 = "COVID-19", HIV = "HIV"),
+                txt = sprintf("%s, %s: r = %.2f", cell, comparison, log2OR_pearson)) %>%
+  dplyr::group_by(cohort) %>%
+  dplyr::summarise(lab = paste(txt, collapse = "\n"), .groups = "drop")
 
 message(sprintf("panel D: %d TF region sets in %d comparisons",
                 nrow(lola), dplyr::n_distinct(lola$panel)))
@@ -191,12 +198,13 @@ pD <- ggplot(lola, aes(x = log2OR_unadj, y = log2OR_adj, colour = panel)) +
   geom_text_repel(data = top_tf, aes(label = motif), size = 2.7,
                   colour = "grey20", segment.colour = "grey60",
                   segment.size = 0.3, min.segment.length = 0,
-                  box.padding = 0.4, max.overlaps = Inf,
-                  show.legend = FALSE) +
-  annotate("text", x = -Inf, y = Inf, hjust = -0.05, vjust = 1.2, size = 3,
-           colour = "grey20", label = paste(lola_r$txt, collapse = "\n")) +
+                  box.padding = 0.5, force = 4, seed = 3,
+                  max.overlaps = Inf, show.legend = FALSE) +
+  geom_text(data = lola_r, inherit.aes = FALSE, aes(x = -Inf, y = Inf, label = lab),
+            hjust = -0.05, vjust = 1.2, size = 3, colour = "grey20") +
+  facet_wrap(~cohort, scales = "free") +
   scale_colour_manual(values = panel_cols, name = NULL) +
-  scale_x_continuous(expand = expansion(mult = 0.08)) +
+  scale_x_continuous(expand = expansion(mult = 0.12)) +
   guides(colour = guide_legend(ncol = 1, override.aes = list(size = 2.5, alpha = 1))) +
   labs(x = "log2 odds ratio, unadjusted DARs",
        y = "log2 odds ratio, QC-adjusted DARs", title = "D") +
@@ -205,11 +213,10 @@ pD <- ggplot(lola, aes(x = log2OR_unadj, y = log2OR_adj, colour = panel)) +
 
 ## ---- Compose ---------------------------------------------------------------
 row1 <- (pA | pB) + patchwork::plot_layout(widths = c(1.75, 1))
-row2 <- (pC | pD) + patchwork::plot_layout(widths = c(1.5, 1))
-fig  <- row1 / row2
+fig  <- row1 / pC / pD + patchwork::plot_layout(heights = c(1.15, 1, 1))
 
 fig_w <- 13.5
-fig_h <- 10.4
+fig_h <- 14.5
 
 ggsave(out_pdf, fig, width = fig_w, height = fig_h, useDingbats = FALSE)
 ggsave(out_png, fig, width = fig_w, height = fig_h, dpi = 300, bg = "white")

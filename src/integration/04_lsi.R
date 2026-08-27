@@ -17,7 +17,7 @@ suppressPackageStartupMessages({
   library(irlba)
 })
 set.seed(43)
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/lsi_utils.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/lsi_utils.R")
 k <- "sub11kpc30"
 
 lsidir <- "/icbb/projects/igunduz/DARPA_analysis/artemis_031023/itLSI_res"

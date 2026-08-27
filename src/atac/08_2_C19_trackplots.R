@@ -17,7 +17,7 @@ suppressPackageStartupMessages({
   library(muLogR)
 })
 set.seed(12) # set seed
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R")
 
 # Load the data
 addArchRThreads(threads = 30) # set the cores

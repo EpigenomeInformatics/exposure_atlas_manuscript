@@ -19,8 +19,8 @@ suppressPackageStartupMessages({
 set.seed(12) # set seed
 
 # Load the data and set the output directory
-plot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+plot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 bulk.mono.de <- readRDS(paste0(sannot_dir, "gene_expression_protein_coding_diffs.rds"))
 
 
@@ -147,8 +147,8 @@ suppressPackageStartupMessages({
 set.seed(12) # set seed
 
 # Load the data and set the output directory
-plot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+plot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 archr_dir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 
 # Load the ArchR project

@@ -15,7 +15,7 @@ suppressPackageStartupMessages({
 })
 set.seed(12) # set seed
 
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
 
 addArchRThreads(threads = 30) # set the cores
 addArchRGenome("hg38") # set the reference genome

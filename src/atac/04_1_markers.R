@@ -8,8 +8,8 @@
 
 set.seed(12) # set seed
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 
 # load libraries
 suppressPackageStartupMessages({

@@ -22,8 +22,8 @@ suppressPackageStartupMessages({
   library(clue)
 })
 set.seed(12)
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/lola.R")
-source("/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/utils/chraccr_plots.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/lola.R")
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/chraccr_plots.R")
 source("/icbb/projects/igunduz/sc_epigenome_exp/utils/helpers.R")
 
 color_mapping <- c(
@@ -319,7 +319,7 @@ write.csv(summary_r34,
 # Direction convention follows ChrAccR: log2FC > 0 = higher accessibility in the
 # disease group of each comparison.
 ###############################################################################
-fig_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+fig_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 
 # Select the ChrAccR comparisons BY NAME (robust to diffTab ordering) rather
 # than by a hard-coded positional index; moderate-vs-severe comes from the

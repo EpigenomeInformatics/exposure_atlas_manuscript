@@ -26,7 +26,7 @@ suppressPackageStartupMessages({
 })
 set.seed(12)
 
-repo_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
 fig_dir  <- file.path(repo_dir, "figures")
 out_dir  <- "/icbb/projects/igunduz/finalize_echo_050824/confounder_adjusted/"
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)

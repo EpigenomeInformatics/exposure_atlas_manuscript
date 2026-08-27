@@ -39,11 +39,11 @@ suppressPackageStartupMessages({
 })
 
 # Set the paths
-plot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+plot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 # plot_dir <- "/icbb/projects/igunduz/Figure_4_040425"
 if (!dir.exists(plot_dir)) dir.create(plot_dir)
 motifset <- "jaspar2020_distal"
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 
 #####################################################################################
 # Differential analysis for T-cell subsets using full-pseudobulks

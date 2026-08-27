@@ -20,8 +20,8 @@ set.seed(12) # set seed
 
 
 # Load the data and set the output directory
-plot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
-sannot_dir <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+plot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
 datatable_pos <- paste0(sannot_dir, "protein_coding_datatable_pos.csv")
 datatable_pos <- read.csv(datatable_pos, row.names = 1)
 datatable_neg <- paste0(sannot_dir, "protein_coding_datatable_neg.csv")

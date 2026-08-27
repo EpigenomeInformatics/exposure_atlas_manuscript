@@ -29,7 +29,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-fig_dir   <- "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+fig_dir   <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
 hiv_rds   <- file.path(outputDir, "hiv_tcell_project.rds")
 stopifnot(file.exists(hiv_rds))
