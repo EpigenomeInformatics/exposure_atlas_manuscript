@@ -12,6 +12,7 @@
 #      figures/confounder_adjusted_lola_terms.csv    (07_5_confounder_adjusted_lola.R)
 #      <out_dir>/confounder_adjusted_DAR_regions.csv (07_4_confounder_adjusted_DAR_plots.R)
 # out: figures/response_figure_2_covariate_balance.pdf
+#      figures/response_figure_2_covariate_balance.png
 #
 # Each |SMD| is scaled by its own permutation null 95th percentile, so 1 is a
 # significance boundary rather than a fixed convention.
@@ -35,6 +36,7 @@ dar_reg_csv  <- file.path(out_dir, "confounder_adjusted_DAR_regions.csv")
 lola_sum_csv <- file.path(fig_dir, "confounder_adjusted_lola_summary.csv")
 lola_trm_csv <- file.path(fig_dir, "confounder_adjusted_lola_terms.csv")
 out_pdf      <- file.path(fig_dir, "response_figure_2_covariate_balance.pdf")
+out_png      <- file.path(fig_dir, "response_figure_2_covariate_balance.png")
 
 stopifnot(file.exists(bal_csv), file.exists(dar_sum_csv), file.exists(dar_reg_csv),
           file.exists(lola_sum_csv), file.exists(lola_trm_csv))
@@ -206,6 +208,10 @@ row1 <- (pA | pB) + patchwork::plot_layout(widths = c(1.75, 1))
 row2 <- (pC | pD) + patchwork::plot_layout(widths = c(1.5, 1))
 fig  <- row1 / row2
 
-ggsave(out_pdf, fig, width = 13.5, height = 10.4, useDingbats = FALSE)
-message("Wrote ", out_pdf)
+fig_w <- 13.5
+fig_h <- 10.4
+
+ggsave(out_pdf, fig, width = fig_w, height = fig_h, useDingbats = FALSE)
+ggsave(out_png, fig, width = fig_w, height = fig_h, dpi = 300, bg = "white")
+message("Wrote ", out_pdf, "\n       ", out_png)
 #####################################################################
