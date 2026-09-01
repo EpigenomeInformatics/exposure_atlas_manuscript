@@ -69,7 +69,7 @@ cohort <- factor(rep(c("ctl", "exp"), each = 12))      # a DONOR property
 yy     <- rnorm(24)
 res_donor <- assoc_test(yy, cohort, donor)
 ok("assoc_test picks the donor unit for a donor-constant covariate",
-   identical(res_donor$unit, "donor"))
+   identical(res_donor$unit, "per donor"))
 ok("assoc_test reports n = number of donors, not samples",
    res_donor$n == 8 && res_donor$n_group == 8)
 

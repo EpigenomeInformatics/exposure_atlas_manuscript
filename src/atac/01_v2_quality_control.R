@@ -738,7 +738,8 @@ collapse_to_group <- function(y, x, group, cohort = NULL) {
 # group = donor (sample-level) or sample (pseudobulk-level). With `cohort`, the
 # test is partial. Returns raw + adjusted R^2, p, n, and the unit tested.
 assoc_test <- function(y, x, group, cohort = NULL,
-                       collapsed_unit = "donor", obs_unit = "sample") {
+                       collapsed_unit = "per donor",
+                       obs_unit = "per sample, donor-adjusted") {
   keep <- !is.na(y) & !is.na(x) & !is.na(group)
   if (!is.null(cohort)) keep <- keep & !is.na(cohort)
   fail <- list(r2 = NA_real_, adj_r2 = NA_real_, p = NA_real_,
@@ -819,7 +820,7 @@ assoc_test <- function(y, x, group, cohort = NULL,
       r2      = r2,
       adj_r2  = NA_real_,
       p       = unname(fits$an[[p_col[1L]]][2L]),
-      n       = length(y), n_group = nlevels(g), unit = paste0(obs_unit, " (LMM)")
+      n       = length(y), n_group = nlevels(g), unit = obs_unit
     )
   }
 }
@@ -920,11 +921,7 @@ for (emb in embeddings_to_test) {
     Age               = cv$Age_numeric,        # donor-level
     Sex_observed      = cv$Sex,                # donor-level
     Sex_predicted     = cv$Sex_predicted,      # donor-level (chrY/XIST call)
-    # Batch: C19 only. Supplier: aliased with cohort, so adjusted column empty.
-    Batch_C19         = cv$processing_batch,
-    Supplier          = cv$supplier,
-    QC_tss_cutoff     = cv$tss_cutoff,
-    QC_frag_cutoff    = cv$log10frags_cutoff,
+    Sampling_day      = cv$sampling_day,       # varies within donor
     QC_nCells         = cv$n_cells,            # varies within donor
     QC_meanTSS        = cv$mean_TSS,
     QC_meanLog10Frags = cv$mean_log10_nFrags,
@@ -1058,10 +1055,7 @@ for (emb in embeddings_to_test) {
     Age               = cvp$Age_numeric,
     Sex_observed      = cvp$Sex,
     Sex_predicted     = cvp$Sex_predicted,
-    Batch_C19         = cvp$processing_batch,  # within-C19 only
-    Supplier          = cvp$supplier,          # aliased with cohort
-    QC_tss_cutoff     = cvp$tss_cutoff,
-    QC_frag_cutoff    = cvp$log10frags_cutoff,
+    Sampling_day      = cvp$sampling_day,
     QC_nCells         = pb_ncells,             # per pseudobulk
     QC_meanTSS        = qc_pb$pb_TSS,          # per pseudobulk
     QC_meanLog10Frags = qc_pb$pb_log10_nFrags, # per pseudobulk
@@ -1072,7 +1066,8 @@ for (emb in embeddings_to_test) {
     do.call(rbind, lapply(names(covariate_cols), function(cn) {
       # group = sample: sample-constant covariates collapse, others get (1|sample)
       a <- assoc_test(dims[, i], covariate_cols[[cn]], pb_sample,
-                      collapsed_unit = "sample", obs_unit = "pseudobulk")
+                      collapsed_unit = "per sample",
+                      obs_unit = "per pseudobulk, sample-adjusted")
       data.frame(
         embedding = emb, Dim = paste0("Dim", i), dim_index = i,
         var_share_between_pseudobulks = var_share[i], covariate = cn,
@@ -1126,9 +1121,7 @@ neglog10 <- function(p, cap = p_cap) {
 # design covariates first, then donor, then technical
 covariate_order <- c(
   "CellType", "Cohort", "Control_status", "Exposure_group",
-  "Age", "Sex_observed", "Sex_predicted",
-  "Batch_C19", "Supplier",
-  "QC_tss_cutoff", "QC_frag_cutoff",
+  "Age", "Sex_observed", "Sex_predicted", "Sampling_day",
   "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
 )
 
@@ -1167,8 +1160,9 @@ p_assoc <- ggplot(assoc_plot_df, aes(x = Dim, y = row_label, fill = neglog10(p_a
       "Columns are the LSI / Harmony dimensions themselves (per-sample means), not principal components of them.\n",
       "Tile label = variance explained (partial R^2). Shading = BH-adjusted significance, which already\n",
       "accounts for the degrees of freedom each covariate uses. Adjusted R^2 is in Table S1B.\n",
-      "Bracketed unit: covariates constant within a donor are tested at the DONOR level (repeat draws collapsed);\n",
-      "covariates that vary within a donor are tested per sample with a donor random intercept."
+      "Bracketed label = one observation in that test. 'per donor': the covariate is constant within a\n",
+      "donor, so repeat draws are collapsed. 'per sample, donor-adjusted': the covariate varies within a\n",
+      "donor, so samples are kept separate and a donor random intercept absorbs the repeated sampling."
     ),
     x = NULL, y = NULL
   ) +
