@@ -697,7 +697,8 @@ collapse_to_group <- function(y, x, group, cohort = NULL) {
 ## ---- One association test, at the right level -------------------------------
 # group = donor (sample-level) or sample (pseudobulk-level). With `cohort`, the
 # test is partial. Returns raw + adjusted R^2, p, n, and the unit tested.
-assoc_test <- function(y, x, group, cohort = NULL) {
+assoc_test <- function(y, x, group, cohort = NULL,
+                       collapsed_unit = "donor", obs_unit = "sample") {
   keep <- !is.na(y) & !is.na(x) & !is.na(group)
   if (!is.null(cohort)) keep <- keep & !is.na(cohort)
   fail <- list(r2 = NA_real_, adj_r2 = NA_real_, p = NA_real_,
@@ -737,7 +738,7 @@ assoc_test <- function(y, x, group, cohort = NULL) {
       # adjusted: a many-level factor scores a large raw R^2 on ~40 donors
       adj_r2  = 1 - (rss1 / df1) / (rss0 / df0),
       p       = unname(an[["Pr(>F)"]][2L]),
-      n       = cl$n, n_group = cl$n, unit = "donor"
+      n       = cl$n, n_group = cl$n, unit = collapsed_unit
     )
   } else {
     ## ---- observation level, group random intercept --------------------------
@@ -770,7 +771,7 @@ assoc_test <- function(y, x, group, cohort = NULL) {
       r2      = r2,
       adj_r2  = if (dfr > 0) 1 - (1 - r2) * (dfr + k) / dfr else NA_real_,
       p       = unname(fits$an[[p_col[1L]]][2L]),
-      n       = length(y), n_group = nlevels(g), unit = "sample (LMM)"
+      n       = length(y), n_group = nlevels(g), unit = paste0(obs_unit, " (LMM)")
     )
   }
 }
@@ -799,15 +800,41 @@ for (emb in embeddings_to_test) {
   reddim <- getReducedDims(project, reducedDims = emb, corCutOff = 1)
 
   cell_sample <- factor(getCellColData(project, select = "Sample", drop = TRUE))
-  cell_depth  <- log10(getCellColData(project, select = "nFrags", drop = TRUE))
+  cell_qc <- as.data.frame(getCellColData(project,
+    select = c("TSSEnrichment", "nFrags", "FRIP")))
+  cell_qc$log10_nFrags <- log10(cell_qc$nFrags)
+  cell_depth <- cell_qc$log10_nFrags
 
-  dcor <- apply(reddim, 2, function(v) abs(stats::cor(v, cell_depth, use = "complete.obs")))
+  # cell-level: each QC metric varies per cell, so it is correlated per cell
+  abscor <- function(v, w) abs(stats::cor(v, w, use = "complete.obs"))
+  dcor      <- apply(reddim, 2, abscor, w = cell_depth)
+  tsscor    <- apply(reddim, 2, abscor, w = cell_qc$TSSEnrichment)
+  fripcor   <- apply(reddim, 2, abscor, w = cell_qc$FRIP)
+  # the same correlations after removing the sample means, i.e. purely
+  # within-sample, which is where the per-sample QC means cannot look
+  demean <- function(v) v - ave(v, cell_sample)
+  wdepth <- demean(cell_depth); wtss <- demean(cell_qc$TSSEnrichment)
+  wfrip  <- demean(cell_qc$FRIP)
+  dcor_w    <- apply(reddim, 2, function(v) abscor(demean(v), wdepth))
+  tsscor_w  <- apply(reddim, 2, function(v) abscor(demean(v), wtss))
+  fripcor_w <- apply(reddim, 2, function(v) abscor(demean(v), wfrip))
+
   depth_cor_tbl[[emb]] <- data.frame(
     embedding = emb, dim = colnames(reddim), dim_index = seq_along(dcor),
     abs_cor_with_log10_nFrags = round(unname(dcor), 3),
+    abs_cor_with_TSSEnrichment = round(unname(tsscor), 3),
+    abs_cor_with_FRIP = round(unname(fripcor), 3),
+    within_sample_abs_cor_log10_nFrags = round(unname(dcor_w), 3),
+    within_sample_abs_cor_TSSEnrichment = round(unname(tsscor_w), 3),
+    within_sample_abs_cor_FRIP = round(unname(fripcor_w), 3),
     excluded_by_default_cutoff = unname(dcor) > archr_cor_cutoff,
     stringsAsFactors = FALSE
   )
+  message(sprintf(
+    "%s cell-level QC correlation, max over dimensions: nFrags %.2f, TSS %.2f, FRIP %.2f (within-sample: %.2f / %.2f / %.2f)",
+    emb, max(dcor), max(tsscor), max(fripcor),
+    max(dcor_w), max(tsscor_w), max(fripcor_w)
+  ))
   message(sprintf(
     "%s: %d/%d dimensions exceed the default corCutOff of %.2f with log10(nFrags) (%s)",
     emb, sum(dcor > archr_cor_cutoff), length(dcor), archr_cor_cutoff,
@@ -999,7 +1026,8 @@ for (emb in embeddings_to_test) {
   res <- do.call(rbind, lapply(seq_len(kk), function(i) {
     do.call(rbind, lapply(names(covariate_cols), function(cn) {
       # group = sample: sample-constant covariates collapse, others get (1|sample)
-      a <- assoc_test(dims[, i], covariate_cols[[cn]], pb_sample)
+      a <- assoc_test(dims[, i], covariate_cols[[cn]], pb_sample,
+                      collapsed_unit = "sample", obs_unit = "pseudobulk")
       data.frame(
         embedding = emb, Dim = paste0("Dim", i), dim_index = i,
         var_share_between_pseudobulks = var_share[i], covariate = cn,
