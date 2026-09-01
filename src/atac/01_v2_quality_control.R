@@ -921,7 +921,7 @@ for (emb in embeddings_to_test) {
     Age               = cv$Age_numeric,        # donor-level
     Sex_observed      = cv$Sex,                # donor-level
     Sex_predicted     = cv$Sex_predicted,      # donor-level (chrY/XIST call)
-    Sampling_day      = cv$sampling_day,       # varies within donor
+    Days_from_onset   = cv$sampling_day,       # varies within donor
     QC_nCells         = cv$n_cells,            # varies within donor
     QC_meanTSS        = cv$mean_TSS,
     QC_meanLog10Frags = cv$mean_log10_nFrags,
@@ -1055,7 +1055,7 @@ for (emb in embeddings_to_test) {
     Age               = cvp$Age_numeric,
     Sex_observed      = cvp$Sex,
     Sex_predicted     = cvp$Sex_predicted,
-    Sampling_day      = cvp$sampling_day,
+    Days_from_onset   = cvp$sampling_day,
     QC_nCells         = pb_ncells,             # per pseudobulk
     QC_meanTSS        = qc_pb$pb_TSS,          # per pseudobulk
     QC_meanLog10Frags = qc_pb$pb_log10_nFrags, # per pseudobulk
@@ -1121,7 +1121,7 @@ neglog10 <- function(p, cap = p_cap) {
 # design covariates first, then donor, then technical
 covariate_order <- c(
   "CellType", "Cohort", "Control_status", "Exposure_group",
-  "Age", "Sex_observed", "Sex_predicted", "Sampling_day",
+  "Age", "Sex_observed", "Sex_predicted", "Days_from_onset",
   "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
 )
 
