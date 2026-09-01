@@ -379,39 +379,75 @@ xist_gr <- GenomicRanges::GRanges(
   "chrX", IRanges::IRanges(start = 73820651, end = 73852753)
 ) # XIST gene, hg38
 
-arrowFiles      <- ArchR::getArrowFiles(project)
-cell_sample_all <- getCellColData(project, select = "Sample", drop = TRUE)
-all_cellNames   <- project$cellNames
-nfrags_all      <- getCellColData(project, select = "nFrags", drop = TRUE)
-total_by_sample <- tapply(nfrags_all, cell_sample_all, sum)
+# Reading chrX/chrY fragments from every arrow is the slow step, so it is cached.
+# Only the raw counts are cached; the thresholds and the LDA below are recomputed
+# every run, so changing the classifier does not need a re-extraction.
+# Force a re-extraction with REDO_SEX=1.
+sex_counts_csv <- file.path(repo_dir, "figures/sex_fragment_counts.csv")
+count_cols <- c("Sample", "chrY", "chrX", "xist",
+                "chrY_frac", "xist_frac", "chrY_chrX_ratio")
 
-sex_metrics <- do.call(rbind, lapply(arrowFiles, function(af) {
-  samp  <- gsub("\\.arrow$", "", basename(af))
-  cells <- all_cellNames[cell_sample_all == samp]
-  if (length(cells) == 0) {
-    return(NULL)
-  }
-  # chrY may be absent from the arrow; fall back to zero rather than aborting
-  fy <- tryCatch(
-    ArchR::getFragmentsFromArrow(af, chr = "chrY", cellNames = cells, verbose = FALSE),
-    error = function(e) {
-      warning("no chrY fragments retrievable for ", samp, ": ", conditionMessage(e))
-      GenomicRanges::GRanges()
+extract_sex_counts <- function() {
+  arrowFiles      <- ArchR::getArrowFiles(project)
+  cell_sample_all <- getCellColData(project, select = "Sample", drop = TRUE)
+  all_cellNames   <- project$cellNames
+  nfrags_all      <- getCellColData(project, select = "nFrags", drop = TRUE)
+  total_by_sample <- tapply(nfrags_all, cell_sample_all, sum)
+
+  out <- do.call(rbind, lapply(arrowFiles, function(af) {
+    samp  <- gsub("\\.arrow$", "", basename(af))
+    cells <- all_cellNames[cell_sample_all == samp]
+    if (length(cells) == 0) {
+      return(NULL)
     }
-  )
-  fx <- ArchR::getFragmentsFromArrow(af, chr = "chrX", cellNames = cells, verbose = FALSE)
-  n_xist <- sum(IRanges::overlapsAny(fx, xist_gr))
-  total  <- as.numeric(total_by_sample[samp])
-  data.frame(
-    Sample = samp,
-    chrY = length(fy), chrX = length(fx), xist = n_xist,
-    chrY_frac = length(fy) / total,
-    xist_frac = n_xist / total,
-    chrY_chrX_ratio = length(fy) / length(fx),
-    stringsAsFactors = FALSE
-  )
-}))
-rownames(sex_metrics) <- NULL
+    # chrY may be absent from the arrow; fall back to zero rather than aborting
+    fy <- tryCatch(
+      ArchR::getFragmentsFromArrow(af, chr = "chrY", cellNames = cells, verbose = FALSE),
+      error = function(e) {
+        warning("no chrY fragments retrievable for ", samp, ": ", conditionMessage(e))
+        GenomicRanges::GRanges()
+      }
+    )
+    fx <- ArchR::getFragmentsFromArrow(af, chr = "chrX", cellNames = cells, verbose = FALSE)
+    n_xist <- sum(IRanges::overlapsAny(fx, xist_gr))
+    total  <- as.numeric(total_by_sample[samp])
+    data.frame(
+      Sample = samp,
+      chrY = length(fy), chrX = length(fx), xist = n_xist,
+      chrY_frac = length(fy) / total,
+      xist_frac = n_xist / total,
+      chrY_chrX_ratio = length(fy) / length(fx),
+      stringsAsFactors = FALSE
+    )
+  }))
+  rownames(out) <- NULL
+  out
+}
+
+project_samples <- unique(as.character(getCellColData(project, select = "Sample", drop = TRUE)))
+sex_metrics <- NULL
+if (file.exists(sex_counts_csv) && !nzchar(Sys.getenv("REDO_SEX"))) {
+  cached <- read.csv(sex_counts_csv, stringsAsFactors = FALSE)
+  missing_cols    <- setdiff(count_cols, names(cached))
+  missing_samples <- setdiff(project_samples, cached$Sample)
+  if (length(missing_cols)) {
+    message("Sex-count cache is missing column(s): ",
+      paste(missing_cols, collapse = ", "), " -- re-extracting.")
+  } else if (length(missing_samples)) {
+    message("Sex-count cache is missing ", length(missing_samples),
+      " sample(s) present in the project -- re-extracting.")
+  } else {
+    sex_metrics <- cached[cached$Sample %in% project_samples, count_cols, drop = FALSE]
+    rownames(sex_metrics) <- NULL
+    message("Loaded cached chrX/chrY/XIST counts for ", nrow(sex_metrics),
+      " sample(s) from ", sex_counts_csv, " (REDO_SEX=1 to re-extract).")
+  }
+}
+if (is.null(sex_metrics)) {
+  sex_metrics <- extract_sex_counts()
+  write.csv(sex_metrics, sex_counts_csv, row.names = FALSE)
+  message("Extracted and cached chrX/chrY/XIST counts to ", sex_counts_csv)
+}
 
 # attach recorded sex + cohort for calibration and diagnostics
 sex_metrics <- dplyr::left_join(sex_metrics,
@@ -762,21 +798,26 @@ assoc_test <- function(y, x, group, cohort = NULL,
       list(m0 = m0, m1 = m1, an = stats::anova(m0, m1))
     })), silent = TRUE)
     if (inherits(fits, "try-error")) return(fail)
-    rss0 <- sum(stats::resid(fits$m0)^2)
-    rss1 <- sum(stats::resid(fits$m1)^2)
-    if (rss0 <= 0) return(fail)
-    r2 <- (rss0 - rss1) / rss0
-    # from the models, not the anova table (column names vary across lme4)
+    # Nakagawa marginal R^2: fixed-effect variance over total variance. The
+    # conditional-residual version does not track what the LRT tests, because
+    # adding x can move the variance components without moving the residuals.
+    r2_marginal <- function(m) {
+      vf <- stats::var(as.vector(lme4::getME(m, "X") %*% lme4::fixef(m)))
+      vr <- sum(vapply(lme4::VarCorr(m),
+                       function(v) sum(diag(as.matrix(v))), numeric(1)))
+      ve <- stats::sigma(m)^2
+      den <- vf + vr + ve
+      if (!is.finite(den) || den <= 0) NA_real_ else vf / den
+    }
+    r2 <- r2_marginal(fits$m1) - r2_marginal(fits$m0)
     k <- length(lme4::fixef(fits$m1)) - length(lme4::fixef(fits$m0))
     p_col <- grep("^Pr\\(>Chisq\\)$", colnames(fits$an), value = TRUE)
     if (!length(p_col) || k <= 0) return(fail)
     dfr <- length(y) - nlevels(g) - k
-    # a near-saturated random intercept makes both fits unstable and the df
-    # adjustment explosive; refuse the test instead of reporting the artefact
-    if (dfr < 5 || !is.finite(r2) || r2 < -0.5) return(fail)
+    if (dfr < 5 || !is.finite(r2)) return(fail)
     list(
       r2      = r2,
-      adj_r2  = 1 - (1 - r2) * (dfr + k) / dfr,
+      adj_r2  = NA_real_,
       p       = unname(fits$an[[p_col[1L]]][2L]),
       n       = length(y), n_group = nlevels(g), unit = paste0(obs_unit, " (LMM)")
     )
@@ -879,8 +920,6 @@ for (emb in embeddings_to_test) {
     Age               = cv$Age_numeric,        # donor-level
     Sex_observed      = cv$Sex,                # donor-level
     Sex_predicted     = cv$Sex_predicted,      # donor-level (chrY/XIST call)
-    Sampling_day      = cv$sampling_day,       # varies within donor (HIV)
-    Viral_load        = cv$viral_load,         # varies within donor (HIV)
     # Batch: C19 only. Supplier: aliased with cohort, so adjusted column empty.
     Batch_C19         = cv$processing_batch,
     Supplier          = cv$supplier,
@@ -1019,7 +1058,6 @@ for (emb in embeddings_to_test) {
     Age               = cvp$Age_numeric,
     Sex_observed      = cvp$Sex,
     Sex_predicted     = cvp$Sex_predicted,
-    Sampling_day      = cvp$sampling_day,
     Batch_C19         = cvp$processing_batch,  # within-C19 only
     Supplier          = cvp$supplier,          # aliased with cohort
     QC_tss_cutoff     = cvp$tss_cutoff,
@@ -1088,7 +1126,7 @@ neglog10 <- function(p, cap = p_cap) {
 # design covariates first, then donor, then technical
 covariate_order <- c(
   "CellType", "Cohort", "Control_status", "Exposure_group",
-  "Age", "Sex_observed", "Sex_predicted", "Sampling_day", "Viral_load",
+  "Age", "Sex_observed", "Sex_predicted",
   "Batch_C19", "Supplier",
   "QC_tss_cutoff", "QC_frag_cutoff",
   "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
