@@ -201,6 +201,10 @@ covar <- covar %>% dplyr::mutate(
 )
 
 # unresolved donor -> fall back to the sample, not a shared NA group
+# influenza: ATAC_flu<ID>_<timepoint> -> ATAC_flu<ID>, 4 timepoints per subject
+is_flu <- grepl("^ATAC_flu[0-9]+_[0-9]+$", label)
+covar$donor_id[is.na(covar$donor_id) & is_flu] <-
+  sub("^(ATAC_flu[0-9]+)_[0-9]+$", "\\1", label[is.na(covar$donor_id) & is_flu])
 covar$donor_id[is.na(covar$donor_id)] <- covar$arrow_name[is.na(covar$donor_id)]
 
 message("Recorded metadata coverage after recovery (n samples with a value):")
@@ -767,9 +771,12 @@ assoc_test <- function(y, x, group, cohort = NULL,
     p_col <- grep("^Pr\\(>Chisq\\)$", colnames(fits$an), value = TRUE)
     if (!length(p_col) || k <= 0) return(fail)
     dfr <- length(y) - nlevels(g) - k
+    # a near-saturated random intercept makes both fits unstable and the df
+    # adjustment explosive; refuse the test instead of reporting the artefact
+    if (dfr < 5 || !is.finite(r2) || r2 < -0.5) return(fail)
     list(
       r2      = r2,
-      adj_r2  = if (dfr > 0) 1 - (1 - r2) * (dfr + k) / dfr else NA_real_,
+      adj_r2  = 1 - (1 - r2) * (dfr + k) / dfr,
       p       = unname(fits$an[[p_col[1L]]][2L]),
       n       = length(y), n_group = nlevels(g), unit = paste0(obs_unit, " (LMM)")
     )
@@ -1107,7 +1114,7 @@ assoc_plot_df <- add_row_label(assoc_df)
 
 p_assoc <- ggplot(assoc_plot_df, aes(x = Dim, y = row_label, fill = neglog10(p_adj))) +
   geom_tile(color = "grey90") +
-  geom_text(aes(label = ifelse(is.na(adj_r2), "", sprintf("%.2f", adj_r2))), size = 3) +
+  geom_text(aes(label = ifelse(is.na(adj_r2), "", sprintf("%.2f", pmax(adj_r2, 0)))), size = 3) +
   facet_wrap(~embedding, ncol = 1) +
   scale_fill_gradient(
     low = "white", high = "#006400", na.value = "grey95",
@@ -1120,7 +1127,8 @@ p_assoc <- ggplot(assoc_plot_df, aes(x = Dim, y = row_label, fill = neglog10(p_a
                    " dimensions with known covariates"),
     subtitle = paste0(
       "Columns are the LSI / Harmony dimensions themselves (per-sample means), not principal components of them.\n",
-      "Tile label = adjusted R^2; shading = BH-adjusted significance. Each covariate tested separately.\n",
+      "Tile label = adjusted R^2, floored at 0 (a negative value means the covariate explains less than its\n",
+      "degrees of freedom would by chance); exact values in Table S1B. Shading = BH-adjusted significance.\n",
       "Bracketed unit: covariates constant within a donor are tested at the DONOR level (repeat draws collapsed);\n",
       "covariates that vary within a donor are tested per sample with a donor random intercept."
     ),
@@ -1142,7 +1150,7 @@ assoc_ct_plot_df <- add_row_label(assoc_ct_df)
 p_assoc_ct <- ggplot(assoc_ct_plot_df,
   aes(x = Dim, y = row_label, fill = neglog10(p_adj))) +
   geom_tile(color = "grey90") +
-  geom_text(aes(label = ifelse(is.na(adj_r2), "", sprintf("%.2f", adj_r2))), size = 3) +
+  geom_text(aes(label = ifelse(is.na(adj_r2), "", sprintf("%.2f", pmax(adj_r2, 0)))), size = 3) +
   facet_wrap(~embedding, ncol = 1) +
   scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
     name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")) +
@@ -1151,7 +1159,7 @@ p_assoc_ct <- ggplot(assoc_ct_plot_df,
   labs(
     title = "Association of pseudobulk (sample x cell type) dimensions with covariates",
     subtitle = paste0(
-      "Pseudobulks of >= ", min_pb_cells, " cells. Tile label = adjusted R^2; shading = BH-adjusted significance.\n",
+      "Pseudobulks of >= ", min_pb_cells, " cells. Tile label = adjusted R^2, floored at 0; shading = BH-adjusted significance.\n",
       "Cell type and the QC metrics vary within a sample and are tested per pseudobulk with a sample random intercept;\n",
       "cohort, age and sex are constant within a sample and are collapsed back, so they are not counted once per pseudobulk."
     ),
