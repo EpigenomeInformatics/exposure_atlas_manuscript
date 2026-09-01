@@ -1,26 +1,11 @@
 #!/usr/bin/env Rscript
 
 #####################################################################
-# 01_v2_quality_control.R
-# created on 2026-08-07 by Irem Gunduz
-# Association of sample-level PCs with known covariates
-# (Reviewer response: characterise variation w.r.t. potential confounders)
-#
-# Rationale
-#  - We ask whether the low-dimensional structure of the ATAC data is
-#    associated with cohort (exposure_type), Sex and Age.
-#  - Age and Sex are recorded per SAMPLE and only for the OP and HIV
-#    cohorts (see Table S1), so those two tests are run on that subset.
-#  - The covariates are sample-level, therefore the test is performed at
-#    the sample level: the cell-level embedding is aggregated to a
-#    per-sample mean before PCA. Testing cell-level PCs against
-#    sample-level covariates would be pseudoreplication and would
-#    massively inflate significance.
-#  - We run the test on BOTH the pre-Harmony IterativeLSI embedding and
-#    the Harmony-corrected embedding (added in 02_cluster_and_batch.R).
-#    Expectation: cohort is associated before correction (the bias we
-#    account for via Harmony) and is attenuated afterwards, while Age and
-#    Sex are not significantly associated with any PC in either case.
+# 01_v2_quality_control.R -- Irem Gunduz, 2026-08-07 (rev. 2026-08-26)
+# Association of the IterativeLSI / Harmony dimensions with known covariates.
+# Each covariate is tested where it varies: donor level (cohort, age, sex),
+# sample level with (1|donor) (sampling day, viral load, per-sample QC), and
+# within-C19 for processing batch. Variance decomposition lives in 13b.
 #####################################################################
 
 ## Load Libraries
@@ -30,35 +15,92 @@ suppressPackageStartupMessages({
   library(ArchR)
   library(dplyr)
   library(ggplot2)
-  library(MASS) # LDA for molecular sex classification
+  library(MASS)  # LDA for molecular sex classification
+  library(lme4)  # mixed models for the nested / repeated-measures designs
 })
-set.seed(12) # set seed
+set.seed(12)
 
 ## ---- Paths / parameters -----------------------------------------------------
-repo_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
+# EXPOSURE_ATLAS_REPO / EXPOSURE_ATLAS_ARCHR override the paths below.
+repo_candidates <- c(
+  Sys.getenv("EXPOSURE_ATLAS_REPO"),
+  "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript",
+  "/icbb/projects/igunduz/irem_github/exposure_atlas_manuscript"
+)
+repo_candidates <- repo_candidates[nzchar(repo_candidates)]
+repo_dir <- repo_candidates[which(dir.exists(repo_candidates))[1L]]
+if (is.na(repo_dir)) {
+  stop("Could not locate the repository. Set EXPOSURE_ATLAS_REPO to its path.")
+}
+message("repo_dir: ", repo_dir)
 suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables.xlsx")
-n_pc <- 10 # number of top PCs to test
-embeddings_to_test <- c("IterativeLSI", "Harmony") # pre- and post-batch-correction
-outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
+n_dims     <- 10                                     # top dimensions to test
+embeddings_to_test <- c("IterativeLSI", "Harmony")   # pre- and post-correction
+outputDir  <- Sys.getenv("EXPOSURE_ATLAS_ARCHR",
+  "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/")
 
-# Load the ArchR project (already subsetted to non-BA samples)
-project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
+# corCutOff = 1 keeps dimensions ArchR's 0.75 default would drop for depth.
+archr_cor_cutoff <- 0.75   # the default that 02_cluster_and_batch.R relies on
+
+# Load the ArchR project (already subsetted to non-BA samples).
+# loadArchRProject() remaps the stored GroupCoverages paths with a plain gsub of
+# the old output directory and then asserts all of them exist:
+#     zfiles <- gsub(outputDir, outputDirNew, zdata$File)
+#     stopifnot(all(file.exists(zfiles)))
+# That assertion is NOT covered by force = TRUE, so a moved project or deleted
+# coverage files abort the load. Nothing in this script touches coverages, so
+# fall back to a loader that repairs what it can and warns about the rest.
+load_archr_lenient <- function(path) {
+  p <- normalizePath(path, mustWork = TRUE)
+  proj <- ArchR::recoverArchRProject(readRDS(file.path(p, "Save-ArchR-Project.rds")))
+
+  arrows <- file.path(p, "ArrowFiles", basename(proj@sampleColData$ArrowFiles))
+  if (!all(file.exists(arrows))) {
+    stop("Missing arrow file(s) under ", file.path(p, "ArrowFiles"), ": ",
+         paste(basename(arrows[!file.exists(arrows)]), collapse = ", "))
+  }
+  proj@sampleColData$ArrowFiles <- arrows
+
+  gcov <- proj@projectMetadata$GroupCoverages
+  if (length(gcov)) {
+    for (z in seq_along(gcov)) {
+      f   <- gcov[[z]]$coverageMetadata$File
+      new <- file.path(p, "GroupCoverages", basename(dirname(f)), basename(f))
+      hit <- file.exists(new)
+      gcov[[z]]$coverageMetadata$File <- ifelse(hit, new, f)
+      if (!all(hit)) {
+        nm <- if (!is.null(names(gcov))) names(gcov)[z] else as.character(z)
+        message("GroupCoverages '", nm, "': ", sum(!hit), "/", length(hit),
+                " coverage file(s) not found. Not needed here, but 05_pseudobulk.R ",
+                "would have to regenerate them.")
+      }
+    }
+    proj@projectMetadata$GroupCoverages <- gcov
+  }
+  proj@projectMetadata$outputDirectory <- p
+  proj   # nothing on disk is modified
+}
+project <- tryCatch(
+  ArchR::loadArchRProject(outputDir, showLogo = FALSE),
+  error = function(e) {
+    message("loadArchRProject() failed: ", conditionMessage(e))
+    message("Retrying without the GroupCoverages assertion.")
+    load_archr_lenient(outputDir)
+  }
+)
 
 ## ---- Sample-level covariate table (Table S1) --------------------------------
-# NB: project$Sample is the arrow filename (e.g. "ATAC_055_fragments.tsv.gz"),
-# which matches Table S1$arrow_name -- NOT Table S1$sampleId ("C19_mod_055").
-# We therefore join the covariates on arrow_name.
+# Join on arrow_name ("ATAC_055_fragments.tsv.gz"), NOT sampleId ("C19_mod_055").
 covar <- readxl::read_excel(suppTables, sheet = "Table S1") %>%
   dplyr::select(sampleId, arrow_name, exposure_type, exposure_group,
-    exposure_grouping, record_id, Age, Sex) %>%
+    exposure_grouping, record_id, Age, Sex,
+    supplier, processing_institution, tss_cutoff, log10frags_cutoff) %>%
   dplyr::mutate(
     # Cohort: C19 / HIV / Influenza / OP
     exposure_type = factor(exposure_type),
     # within-cohort condition arm, tested separately from cohort
     exposure_group = factor(exposure_group),
-    # "healthy" arms are C19_ctrl / HIV_ctrl / Influenza_ctrl (n = 16). OP has
-    # no unexposed arm (OP_low is low-exposure), so every OP sample is Exposed
-    # and this is partly nested in cohort. Read the cohort-adjusted column.
+    # OP has no unexposed arm, so Control_status is partly nested in cohort.
     control_status = factor(
       ifelse(exposure_grouping == "healthy", "Control", "Exposed"),
       levels = c("Control", "Exposed")
@@ -67,21 +109,9 @@ covar <- readxl::read_excel(suppTables, sheet = "Table S1") %>%
     Age = as.numeric(Age)
   )
 
-#####################################################################
-# RECOVERED DONOR METADATA (age / sex / sampling time relative to onset)
-# Age and sex were originally present only for the OP and HIV cohorts. We
-# recover them for the COVID-19 cohort from the clinical metadata table, and
-# recover sampling time relative to infection onset for all three infection
-# cohorts:
-#   COVID-19  : days after the first positive SARS-CoV-2 test
-#   HIV       : days relative to seroconversion (negative = pre-infection)
-#   Influenza : days after the challenge protocol (already in Table S1)
-#   OP        : chronic environmental exposure, no datable onset event
-# The recorded values fill Table S1; the molecular sex prediction below is kept
-# and used to validate them.
-#####################################################################
+# Age/sex recovered for C19; sampling day is relative to onset per cohort.
 
-# Authoritative ATAC-label -> clinical Donor ID map for the COVID-19 cohort
+# ATAC label -> clinical Donor ID (C19). 555/564/66 are repeat draws.
 atac_to_donor <- c(
   ATAC_055 = "55650-0055", ATAC_057 = "55650-0057", ATAC_132D0 = "55650-0132d0",
   ATAC_52 = "55650-0052", ATAC_555_1 = "28205-0555d0", ATAC_555_2 = "28205-0555d2",
@@ -93,6 +123,8 @@ atac_to_donor <- c(
   ATAC_HIP043 = "HIP043", ATAC_HIP044 = "HIP044", ATAC_HIP045 = "HIP045",
   ATAC_HIP15_frozen = "HIP015"
 )
+
+strip_timepoint <- function(x) sub("d[0-9]+$", "", x)
 
 # COVID-19 clinical metadata (one row per Donor; place the CSV in sample_annots/)
 pm <- read.csv(file.path(repo_dir, "sample_annots/patient_metadata.csv"),
@@ -110,8 +142,7 @@ hiv_meta <- data.frame(
   sex = "Male", stringsAsFactors = FALSE
 )
 
-# bin midpoint for the binned COVID-19 ages, so age can be used as a continuous
-# covariate alongside the exact ages recorded for HIV and OP
+# bin midpoint, so binned C19 ages can be used as a continuous covariate
 bin_to_numeric <- function(x) {
   vapply(x, function(s) {
     if (is.na(s) || s == "" || s == "NA") return(NA_real_)
@@ -121,13 +152,11 @@ bin_to_numeric <- function(x) {
   }, numeric(1), USE.NAMES = FALSE)
 }
 
-label <- sub("_fragments\\.tsv\\.gz$", "", covar$arrow_name)
-donor_id <- unname(atac_to_donor[label])
-pm_i <- match(donor_id, pm$Donor)
-hiv_i <- match(label, hiv_meta$stem)
-# NB: "day 30 after challenge" in the legacy annotation is a MISLABEL -- the
-# actual final timepoint is day 28 (group label Influenza_d28). We map it to 28
-# and also correct the text in Table S1 when writing the workbook below.
+label      <- sub("_fragments\\.tsv\\.gz$", "", covar$arrow_name)
+sample_key <- unname(atac_to_donor[label])   # donor + timepoint
+pm_i       <- match(sample_key, pm$Donor)
+hiv_i      <- match(label, hiv_meta$stem)
+# "day 30 after challenge" is a mislabel: the final timepoint is day 28.
 flu_day <- c(
   "right before challenge" = -1, "day 3 after challenge" = 3,
   "day 6 after challenge" = 6, "day 30 after challenge" = 28,
@@ -135,7 +164,7 @@ flu_day <- c(
 )
 
 covar <- covar %>% dplyr::mutate(
-  donor_id = dplyr::coalesce(donor_id, hiv_meta$donor[hiv_i]),
+  donor_id = strip_timepoint(dplyr::coalesce(sample_key, hiv_meta$donor[hiv_i])),
   # reported age: exact where known, bin label for COVID-19
   Age_reported = dplyr::case_when(
     !is.na(Age) ~ as.character(Age),
@@ -171,19 +200,110 @@ covar <- covar %>% dplyr::mutate(
   viral_load = ifelse(is.na(hiv_i), NA_real_, hiv_meta$viral_load[hiv_i])
 )
 
+# unresolved donor -> fall back to the sample, not a shared NA group
+covar$donor_id[is.na(covar$donor_id)] <- covar$arrow_name[is.na(covar$donor_id)]
+
 message("Recorded metadata coverage after recovery (n samples with a value):")
 print(covar %>%
   dplyr::group_by(exposure_type) %>%
   dplyr::summarise(
-    n = dplyr::n(), sex = sum(!is.na(Sex)), age = sum(!is.na(Age_numeric)),
+    n = dplyr::n(), n_donors = dplyr::n_distinct(donor_id),
+    sex = sum(!is.na(Sex)), age = sum(!is.na(Age_numeric)),
     sampling_day = sum(!is.na(sampling_day)), .groups = "drop"
   ))
 
-## ---- Per-sample QC metrics (technical covariates) ---------------------------
-# The reviewer/PI also wants technical quality tested as a potential driver of
-# global structure. We summarise the key single-cell QC metrics to the sample
-# level (mean over the cells retained in the project) and treat them as
-# continuous covariates in the association test below.
+rep_don <- covar %>% dplyr::count(donor_id) %>% dplyr::filter(n > 1)
+message(sprintf(
+  "Repeated sampling: %d sample(s) from %d donor(s) contribute more than one sample (max %d). The donor-level tests below account for this.",
+  sum(rep_don$n), nrow(rep_don), if (nrow(rep_don)) max(rep_don$n) else 0L
+))
+
+# BATCH. processing_date is C19-only (710/720), so it is a within-C19 covariate.
+# supplier is a relabelling of cohort and processing_institution is constant, so
+# neither adds anything; tss_cutoff / log10frags_cutoff do vary within cohort.
+
+atac_meta_covid_path <- file.path(repo_dir, "sample_annots/ATAC_metadata_covid.csv")
+if (file.exists(atac_meta_covid_path)) {
+  amc <- read.csv(atac_meta_covid_path, stringsAsFactors = FALSE)
+  # Join on arrow_name: the record_id column here is truncated for some samples.
+  stopifnot(!anyDuplicated(amc$arrow_name))
+  bi <- match(label, amc$arrow_name)
+  covar$processing_batch <- factor(ifelse(is.na(bi), NA_character_,
+                                          as.character(amc$processing_date[bi])))
+  message(sprintf(
+    "Processing batch recovered for %d sample(s) (cohorts: %s); levels: %s",
+    sum(!is.na(covar$processing_batch)),
+    paste(sort(unique(as.character(covar$exposure_type[!is.na(covar$processing_batch)]))),
+          collapse = ", "),
+    paste(levels(covar$processing_batch), collapse = ", ")
+  ))
+} else {
+  covar$processing_batch <- factor(NA_character_)
+  warning("ATAC_metadata_covid.csv not found -- processing batch will not be tested.")
+}
+
+covar <- covar %>% dplyr::mutate(
+  supplier = factor(supplier),
+  processing_institution = factor(processing_institution),
+  tss_cutoff = as.numeric(tss_cutoff),
+  log10frags_cutoff = as.numeric(log10frags_cutoff)
+)
+
+## ---- Confound structure among the design and technical variables ------------
+confound_tab <- function(a, b, name_a, name_b) {
+  keep <- !is.na(a) & !is.na(b)
+  if (!any(keep)) return(NULL)
+  tb <- table(droplevels(factor(a[keep])), droplevels(factor(b[keep])))
+  d <- as.data.frame(tb, stringsAsFactors = FALSE)
+  names(d) <- c(name_a, name_b, "n")
+  d[d$n > 0, , drop = FALSE]
+}
+
+message("\n--- Cohort vs supplier (expected to be aliased) ---")
+print(with(covar, table(cohort = exposure_type, supplier = supplier)))
+message("processing_institution levels: ",
+  paste(levels(droplevels(covar$processing_institution)), collapse = ", "),
+  " (constant -> not testable)")
+
+# Is the C19 batch balanced across severity arms? If not, say so.
+c19 <- covar[covar$exposure_type == "C19" & !is.na(covar$processing_batch), ]
+if (nrow(c19) > 0) {
+  bt <- table(group = droplevels(c19$exposure_group),
+              batch = droplevels(c19$processing_batch))
+  message("\n--- COVID-19 processing batch vs severity arm ---")
+  print(bt)
+  ft <- tryCatch(stats::fisher.test(bt, simulate.p.value = TRUE, B = 1e5),
+                 error = function(e) NULL)
+  if (!is.null(ft)) {
+    message(sprintf(
+      "Fisher exact test of batch vs severity arm within C19: p = %.4g%s",
+      ft$p.value,
+      if (ft$p.value < 0.05)
+        "  <-- BATCH IS NOT BALANCED ACROSS THE C19 ARMS; any within-C19 contrast is partly confounded with it"
+      else "  (balanced)"
+    ))
+  }
+  # donor-level version, since repeat draws of one donor share a batch
+  bt_don <- table(
+    group = droplevels(c19$exposure_group[!duplicated(c19$donor_id)]),
+    batch = droplevels(c19$processing_batch[!duplicated(c19$donor_id)])
+  )
+  message("--- same table at the donor level ---")
+  print(bt_don)
+}
+
+confound_rows <- dplyr::bind_rows(
+  confound_tab(covar$exposure_type, covar$supplier, "cohort", "supplier"),
+  confound_tab(covar$exposure_group, covar$processing_batch, "exposure_group", "processing_batch"),
+  confound_tab(covar$exposure_type, covar$tss_cutoff, "cohort", "tss_cutoff"),
+  confound_tab(covar$exposure_type, covar$log10frags_cutoff, "cohort", "log10frags_cutoff")
+)
+write.csv(confound_rows,
+  file = file.path(repo_dir, "figures/covariate_confound_structure.csv"),
+  row.names = FALSE)
+
+
+## ---- Per-sample QC metrics (descriptive; the real test is Part 3) -----------
 qc_by_sample <- getCellColData(project,
   select = c("Sample", "TSSEnrichment", "nFrags", "FRIP")
 ) %>%
@@ -199,9 +319,7 @@ qc_by_sample <- getCellColData(project,
 covar <- dplyr::left_join(covar, qc_by_sample, by = c("arrow_name" = "Sample"))
 
 ## ---- Cells behind each pseudobulk (sample x cell type) ----------------------
-# One column per cell type in Table S1, so the table stays one row per sample.
-# Raw counts: every combination is reported, including those below the >50-cell
-# cutoff 05_pseudobulk.R applies and the Plasma compartment it drops.
+# Raw counts, including combinations below the >50-cell cutoff in 05_pseudobulk.R.
 ct_col <- "ClusterCellTypes" # cell-type annotation used across the atlas
 
 pb_ct <- as.data.frame(getCellColData(project, select = c("Sample", ct_col)))
@@ -218,10 +336,13 @@ pb_wide$arrow_name <- rownames(pb_wide)
 rownames(pb_wide) <- NULL
 pb_count_cols <- setdiff(colnames(pb_wide), "arrow_name")
 
+# a duplicated key would expand covar and break the Table S1 append below
+stopifnot(!anyDuplicated(pb_wide$arrow_name), !anyDuplicated(qc_by_sample$Sample))
+n_covar_before <- nrow(covar)
 covar <- dplyr::left_join(covar, pb_wide, by = "arrow_name")
+stopifnot(nrow(covar) == n_covar_before)
 
 # per-cell-type counts should sum to n_cells, minus unannotated cells
-# covar is a tibble, so coerce before the arithmetic
 pb_mat <- as.matrix(as.data.frame(covar)[, pb_count_cols, drop = FALSE])
 pb_rowsum <- rowSums(pb_mat, na.rm = TRUE)
 n_match <- sum(pb_rowsum == covar$n_cells, na.rm = TRUE)
@@ -247,36 +368,36 @@ message(sprintf(
 
 
 ## ---- Predict donor sex from chrY and XIST accessibility ---------------------
-# Two orthogonal, depth-normalised molecular features:
-#   chrY_frac : chrY fragments / total fragments  (HIGH in XY / male)
-#   xist_frac : XIST-locus accessibility / total  (HIGH in XX / female; XIST is
-#               accessible from the inactive X in XX donors, silent in XY)
-# The two features are INTERNALLY CONSISTENT (high chrY co-occurs with low XIST
-# and vice versa), so we call sex UNSUPERVISED from the molecular signal and do
-# NOT train on recorded sex. Recorded labels contain errors that would corrupt a
-# supervised model (they did: training inverted the chrY->male direction); we
-# therefore use recorded sex ONLY to validate the prediction and to flag samples
-# whose recorded sex disagrees with the data.
+# Supervised: threshold XIST -> Sex_by_xist, train LDA on recorded sex where it
+# agrees, predict all. chrY is held out of the training-set definition, so
+# agreement with Sex_by_chrY is the only non-circular check.
 xist_gr <- GenomicRanges::GRanges(
   "chrX", IRanges::IRanges(start = 73820651, end = 73852753)
 ) # XIST gene, hg38
 
-arrowFiles <- ArchR::getArrowFiles(project)
+arrowFiles      <- ArchR::getArrowFiles(project)
 cell_sample_all <- getCellColData(project, select = "Sample", drop = TRUE)
-all_cellNames <- project$cellNames
-nfrags_all <- getCellColData(project, select = "nFrags", drop = TRUE)
+all_cellNames   <- project$cellNames
+nfrags_all      <- getCellColData(project, select = "nFrags", drop = TRUE)
 total_by_sample <- tapply(nfrags_all, cell_sample_all, sum)
 
 sex_metrics <- do.call(rbind, lapply(arrowFiles, function(af) {
-  samp <- gsub("\\.arrow$", "", basename(af))
+  samp  <- gsub("\\.arrow$", "", basename(af))
   cells <- all_cellNames[cell_sample_all == samp]
   if (length(cells) == 0) {
     return(NULL)
   }
-  fy <- ArchR::getFragmentsFromArrow(af, chr = "chrY", cellNames = cells, verbose = FALSE)
+  # chrY may be absent from the arrow; fall back to zero rather than aborting
+  fy <- tryCatch(
+    ArchR::getFragmentsFromArrow(af, chr = "chrY", cellNames = cells, verbose = FALSE),
+    error = function(e) {
+      warning("no chrY fragments retrievable for ", samp, ": ", conditionMessage(e))
+      GenomicRanges::GRanges()
+    }
+  )
   fx <- ArchR::getFragmentsFromArrow(af, chr = "chrX", cellNames = cells, verbose = FALSE)
   n_xist <- sum(IRanges::overlapsAny(fx, xist_gr))
-  total <- as.numeric(total_by_sample[samp])
+  total  <- as.numeric(total_by_sample[samp])
   data.frame(
     Sample = samp,
     chrY = length(fy), chrX = length(fx), xist = n_xist,
@@ -294,46 +415,32 @@ sex_metrics <- dplyr::left_join(sex_metrics,
   by = c("Sample" = "arrow_name")
 )
 
-# UNSUPERVISED molecular sex call: 2-cluster k-means on the standardised log
-# features (no recorded labels used); the cluster with the higher chrY fraction
-# is Male. Because chrY and XIST agree, the two clusters are well separated.
-# Log-transform with a DATA-DRIVEN pseudocount (half the smallest non-zero
-# value per feature). A fixed 1e-9 would place a sample with zero XIST fragments
-# at -9, several log units below every real value, which distorts both the axis
-# range and the feature scale. Half the minimum observed value places it just
-# below the lowest real measurement instead.
+# data-driven pseudocount (half the smallest non-zero value), used throughout
 half_min_nonzero <- function(x) min(x[x > 0], na.rm = TRUE) / 2
 eps_chrY <- half_min_nonzero(sex_metrics$chrY_frac)
 eps_xist <- half_min_nonzero(sex_metrics$xist_frac)
 sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + eps_chrY)
 sex_metrics$log_xist <- log10(sex_metrics$xist_frac + eps_xist)
 
-# IMPORTANT: do NOT cluster on chrY and XIST jointly. chrY read fraction carries
-# large cohort/processing-specific offsets, so a 2-cluster k-means on both
-# features splits the samples by COHORT rather than by sex. XIST accessibility is
-# on a consistent scale across all cohorts here, so we threshold on XIST and use
-# chrY only as an independent cross-check.
-#
-# Threshold = 1D natural break (largest gap in the sorted log values), searched
-# over the interior quantiles so a single extreme sample cannot define the split.
-gap_threshold <- function(x, lo = 0.10, hi = 0.90) {
-  lx <- sort(log10(x + 1e-9))
-  n <- length(lx)
+# Do NOT cluster on chrY and XIST jointly: chrY carries cohort-specific offsets,
+# so the split follows cohort, not sex. Threshold on XIST, cross-check with chrY.
+gap_threshold <- function(x, eps, lo = 0.10, hi = 0.90) {
+  lx   <- sort(log10(x + eps))
+  n    <- length(lx)
   i_lo <- max(1L, floor(lo * n))
   i_hi <- min(n - 1L, ceiling(hi * n))
-  idx <- i_lo:i_hi
-  i <- idx[which.max(diff(lx)[idx])]
-  10^mean(c(lx[i], lx[i + 1L])) # geometric midpoint of the largest interior gap
+  idx  <- i_lo:i_hi
+  i    <- idx[which.max(diff(lx)[idx])]
+  10^mean(c(lx[i], lx[i + 1L])) - eps  # geometric midpoint of the largest gap
 }
 
-# Marker-based reference calls (used to define trustworthy training labels and
-# as an independent cross-check): high XIST = female, high chrY = male.
-xist_thr <- gap_threshold(sex_metrics$xist_frac)
+# Marker-based reference calls: high XIST = female, high chrY = male.
+xist_thr <- gap_threshold(sex_metrics$xist_frac, eps_xist)
 sex_metrics$Sex_by_xist <- factor(
   ifelse(sex_metrics$xist_frac >= xist_thr, "Female", "Male"),
   levels = c("Female", "Male")
 )
-chrY_thr <- gap_threshold(sex_metrics$chrY_frac)
+chrY_thr <- gap_threshold(sex_metrics$chrY_frac, eps_chrY)
 sex_metrics$Sex_by_chrY <- factor(
   ifelse(sex_metrics$chrY_frac >= chrY_thr, "Male", "Female"),
   levels = c("Female", "Male")
@@ -345,17 +452,11 @@ message(sprintf(
 ))
 
 ## ---- LINEAR CLASSIFIER (LDA) on the two log features ------------------------
-# Training labels: samples whose RECORDED sex agrees with the marker-based call.
-# This deliberately EXCLUDES the mislabelled samples that corrupt a classifier
-# trained on all recorded labels (a model trained on every recorded label
-# inverted the chrY->male direction). LDA gives a linear decision boundary and
-# posterior probabilities, and is numerically stable under near-perfect class
-# separation (logistic-regression coefficients diverge in that regime).
-lab <- !is.na(sex_metrics$Sex)
-train_idx <- lab & sex_metrics$Sex == sex_metrics$Sex_by_xist &
-  sex_metrics$features_agree
+# Training on all recorded labels inverted the chrY -> male direction.
+lab       <- !is.na(sex_metrics$Sex)
+train_idx <- lab & sex_metrics$Sex == sex_metrics$Sex_by_xist
 message(sprintf(
-  "LDA training set: %d high-confidence samples (%d recorded labels excluded as inconsistent)",
+  "LDA training set: %d high-confidence samples (%d recorded labels excluded as inconsistent with XIST)",
   sum(train_idx), sum(lab) - sum(train_idx)
 ))
 stopifnot(sum(train_idx) >= 6, dplyr::n_distinct(sex_metrics$Sex[train_idx]) == 2)
@@ -366,18 +467,22 @@ train_df <- data.frame(
   log_xist = sex_metrics$log_xist[train_idx]
 )
 
-# Equal priors: the training subset happens to be male-skewed (~87% male), and
-# using its empirical class frequencies as priors would bias calls toward Male.
-# We have no prior expectation of the sex ratio, so we set it to 0.5/0.5.
+# equal priors: the training subset is ~87% male and would bias calls otherwise
 equal_prior <- c(Female = 0.5, Male = 0.5)
 
-# leave-one-out cross-validated accuracy on the training set
+# LOO within a concordance-selected set: separability, not generalisation error
 loo <- MASS::lda(Sex ~ log_chrY + log_xist,
   data = train_df, prior = equal_prior, CV = TRUE
 )
+loo_correct  <- sum(loo$class == train_df$Sex)
+loo_n        <- nrow(train_df)
+loo_accuracy <- loo_correct / loo_n
+# Wilson interval, so the reported accuracy carries its uncertainty
+loo_ci <- suppressWarnings(
+  stats::prop.test(loo_correct, loo_n, correct = FALSE)$conf.int)
 message(sprintf(
-  "LDA leave-one-out accuracy on training set: %.1f%% (n = %d)",
-  100 * mean(loo$class == train_df$Sex), nrow(train_df)
+  "LDA leave-one-out accuracy on the (concordance-selected) training set: %.1f%% (%d/%d, 95%% CI %.1f-%.1f%%)",
+  100 * loo_accuracy, loo_correct, loo_n, 100 * loo_ci[1], 100 * loo_ci[2]
 ))
 
 # fit on the full training set and predict all samples
@@ -387,15 +492,16 @@ pred <- stats::predict(lda_fit, newdata = sex_metrics[, c("log_chrY", "log_xist"
 sex_metrics$Sex_predicted <- factor(as.character(pred$class), levels = c("Female", "Male"))
 sex_metrics$p_male <- round(pred$posterior[, "Male"], 4)
 
-# Independent validation: the LDA call should reproduce the marker-threshold
-# calls. chrY and XIST are strongly anti-correlated (near-collinear on the log
-# scale), so the individual LDA coefficients are not individually interpretable
-# -- but agreement with the independent XIST threshold confirms the partition.
-agree_xist <- mean(sex_metrics$Sex_predicted == sex_metrics$Sex_by_xist)
+# chrY was held out of the training-set definition; XIST agreement is circular.
 agree_chrY <- mean(sex_metrics$Sex_predicted == sex_metrics$Sex_by_chrY)
+agree_xist <- mean(sex_metrics$Sex_predicted == sex_metrics$Sex_by_xist)
 message(sprintf(
-  "LDA call agrees with XIST threshold for %.1f%% and with chrY threshold for %.1f%% of all %d samples",
-  100 * agree_xist, 100 * agree_chrY, nrow(sex_metrics)
+  "LDA call vs chrY threshold (HELD OUT): %.1f%% agreement across all %d samples",
+  100 * agree_chrY, nrow(sex_metrics)
+))
+message(sprintf(
+  "LDA call vs XIST threshold (NOT independent -- used to select training set): %.1f%%",
+  100 * agree_xist
 ))
 
 message("Predicted sex by cohort:")
@@ -408,10 +514,10 @@ if (any(low_conf)) {
   ])
 }
 
-# use recorded sex ONLY to validate and to flag likely metadata errors
+# recorded sex used only to flag metadata errors, not as validation
 val <- sex_metrics[lab, ]
 message(sprintf(
-  "Molecular sex vs recorded sex: %.1f%% concordant (%d labelled samples)",
+  "Molecular sex vs recorded sex: %.1f%% concordant (%d labelled samples; not an independent check)",
   100 * mean(val$Sex_predicted == val$Sex), nrow(val)
 ))
 print(table(recorded = val$Sex, predicted = val$Sex_predicted))
@@ -426,10 +532,61 @@ message("Recorded sex disagrees with the molecular call for ", nrow(disc),
 )
 print(disc)
 
+## ---- Classifier performance, saved for the manuscript text ------------------
+sex_lda_metrics <- data.frame(
+  metric = c(
+    "n_samples_total",
+    "n_recorded_sex",
+    "n_training",
+    "n_excluded_from_training",
+    "loo_correct",
+    "loo_accuracy",
+    "loo_accuracy_ci_low",
+    "loo_accuracy_ci_high",
+    "agreement_with_chrY_threshold_heldout",
+    "agreement_with_xist_threshold_circular",
+    "concordance_with_recorded_sex",
+    "n_discordant_with_recorded_sex",
+    "n_low_confidence_calls",
+    "xist_threshold",
+    "chrY_threshold",
+    "prior_female",
+    "prior_male"
+  ),
+  value = c(
+    nrow(sex_metrics),
+    sum(lab),
+    loo_n,
+    sum(lab) - loo_n,
+    loo_correct,
+    round(loo_accuracy, 4),
+    round(loo_ci[1], 4),
+    round(loo_ci[2], 4),
+    round(agree_chrY, 4),
+    round(agree_xist, 4),
+    round(mean(val$Sex_predicted == val$Sex), 4),
+    nrow(disc),
+    sum(low_conf),
+    signif(xist_thr, 4),
+    signif(chrY_thr, 4),
+    equal_prior[["Female"]],
+    equal_prior[["Male"]]
+  ),
+  stringsAsFactors = FALSE
+)
+write.csv(sex_lda_metrics,
+  file = file.path(repo_dir, "figures/sex_lda_classifier_metrics.csv"),
+  row.names = FALSE)
+message("LDA classifier metrics written to figures/sex_lda_classifier_metrics.csv:")
+print(sex_lda_metrics)
+
+# A ready-to-paste sentence, so the methods text and the file cannot drift apart
+message(sprintf(
+  "Methods sentence: LDA classifier trained on the %d samples whose recorded sex agreed with the XIST-based call (equal priors; leave-one-out accuracy %.1f%%, %d/%d); the resulting calls agreed with the held-out chrY threshold for %.1f%% of all %d samples.",
+  loo_n, 100 * loo_accuracy, loo_correct, loo_n, 100 * agree_chrY, nrow(sex_metrics)
+))
+
 ## ---- Diagnostic figure: molecular sex classification ------------------------
-# Scatter of the two markers with the LDA decision boundary. Colour = predicted
-# sex, shape = recorded sex, and samples whose recorded sex disagrees with the
-# molecular call are ringed, so metadata errors are visible at a glance.
 sex_grid <- expand.grid(
   log_chrY = seq(min(sex_metrics$log_chrY), max(sex_metrics$log_chrY), length.out = 200),
   log_xist = seq(min(sex_metrics$log_xist), max(sex_metrics$log_xist), length.out = 200)
@@ -483,9 +640,7 @@ ggsave(file.path(repo_dir, "figures/sex_prediction_by_cohort.pdf"), p_sex_cohort
 )
 message("Wrote sex-prediction figures to ", file.path(repo_dir, "figures/"))
 
-# Supporting per-sample detail for the sex inference. Kept OUT of Table S1 (which
-# carries only the final Sex_predicted call) but retained here as the evidence
-# behind the call and behind the flagged metadata discrepancies.
+# per-sample evidence behind the sex call; kept out of Table S1
 write.csv(
   sex_metrics[, c(
     "Sample", "exposure_type", "Sex", "Sex_predicted", "p_male",
@@ -495,9 +650,9 @@ write.csv(
   file = file.path(repo_dir, "figures/sex_prediction_metrics.csv"), row.names = FALSE
 )
 
-# add inferred sex, confidence, raw signals and the flag to the covariate table
-# carry the raw chrX / chrY / XIST signals, not just the call, so the
-# prediction can be checked from Table S1
+# carry the raw chrX / chrY / XIST signals so the call can be checked
+stopifnot(!anyDuplicated(sex_metrics$Sample))
+n_covar_before <- nrow(covar)
 covar <- dplyr::left_join(covar,
   dplyr::select(
     sex_metrics, Sample, chrY, chrX, xist, chrY_frac, xist_frac,
@@ -506,74 +661,176 @@ covar <- dplyr::left_join(covar,
   ),
   by = c("arrow_name" = "Sample")
 )
+stopifnot(nrow(covar) == n_covar_before)
 
-## ---- Helper: association of one PC with one covariate ------------------------
-# Returns variance explained (R^2), F-test p-value and the usable n.
-# Works for both categorical (Sex, exposure_type) and continuous (Age) x.
-pc_assoc <- function(y, x) {
-  keep <- !is.na(y) & !is.na(x)
-  if (is.factor(x)) x <- droplevels(x[keep]) else x <- x[keep]
-  y <- y[keep]
-  n <- length(y)
-  # need >= 2 groups / non-constant predictor and enough residual df
-  ok <- n >= 3 && (if (is.factor(x)) nlevels(x) >= 2 else stats::sd(x) > 0)
-  if (!ok) {
-    return(c(r2 = NA_real_, p = NA_real_, n = n))
-  }
-  fit <- stats::lm(y ~ x)
-  fs <- summary(fit)$fstatistic
-  p <- if (is.null(fs)) NA_real_ else stats::pf(fs[1L], fs[2L], fs[3L], lower.tail = FALSE)
-  c(r2 = summary(fit)$r.squared, p = unname(p), n = n)
+
+#####################################################################
+# ASSOCIATION TESTING MACHINERY
+#####################################################################
+
+## ---- Is this covariate constant within every group? -------------------------
+is_group_constant <- function(x, group) {
+  ok <- !is.na(x) & !is.na(group)
+  if (!any(ok)) return(TRUE)
+  v <- as.character(x[ok]); g <- as.character(group[ok])
+  all(tapply(v, g, function(z) length(unique(z))) == 1L)
 }
 
-## ---- Helper: cohort-ADJUSTED association of one PC with one covariate --------
-# Tests the covariate (x) while controlling for cohort, i.e. compares
-#   lm(y ~ cohort)  vs  lm(y ~ cohort + x)
-# via a nested F-test, and reports the PARTIAL R^2 (extra variance explained
-# by x beyond cohort). This separates a genuine Age/Sex effect from the
-# cohort confounding, since Age/Sex are only available for OP + HIV.
-pc_assoc_adj <- function(y, x, cohort) {
-  keep <- !is.na(y) & !is.na(x) & !is.na(cohort)
-  y <- y[keep]
-  cohort <- droplevels(cohort[keep])
-  if (is.factor(x)) x <- droplevels(x[keep]) else x <- x[keep]
-  n <- length(y)
-  ok <- n >= 4 && (if (is.factor(x)) nlevels(x) >= 2 else stats::sd(x) > 0)
-  if (!ok) {
-    return(c(r2_partial = NA_real_, p = NA_real_, n = n))
+## ---- Collapse y / x / cohort to one row per group ---------------------------
+collapse_to_group <- function(y, x, group, cohort = NULL) {
+  g  <- droplevels(factor(group))
+  ym <- tapply(y, g, mean)
+  if (is.factor(x)) {
+    xv <- tapply(as.character(x), g, function(z) z[1L])
+    xm <- droplevels(factor(unname(xv), levels = levels(x)))
+  } else {
+    xm <- as.numeric(tapply(as.numeric(x), g, mean))
   }
-  # reduced model: cohort only (fall back to intercept if <2 cohorts present)
-  reduced <- if (nlevels(cohort) >= 2) stats::lm(y ~ cohort) else stats::lm(y ~ 1)
-  full <- stats::update(reduced, . ~ . + x)
-  an <- stats::anova(reduced, full)
-  p <- an[["Pr(>F)"]][2L]
-  rss_r <- sum(stats::resid(reduced)^2)
-  rss_f <- sum(stats::resid(full)^2)
-  r2_partial <- (rss_r - rss_f) / rss_r
-  c(r2_partial = r2_partial, p = unname(p), n = n)
+  cm <- NULL
+  if (!is.null(cohort)) {
+    cv <- tapply(as.character(cohort), g, function(z) z[1L])
+    cm <- droplevels(factor(unname(cv), levels = levels(cohort)))
+  }
+  list(y = as.numeric(ym), x = xm, cohort = cm, n = nlevels(g))
 }
 
-## ---- Run per embedding ------------------------------------------------------
+## ---- One association test, at the right level -------------------------------
+# group = donor (sample-level) or sample (pseudobulk-level). With `cohort`, the
+# test is partial. Returns raw + adjusted R^2, p, n, and the unit tested.
+assoc_test <- function(y, x, group, cohort = NULL) {
+  keep <- !is.na(y) & !is.na(x) & !is.na(group)
+  if (!is.null(cohort)) keep <- keep & !is.na(cohort)
+  fail <- list(r2 = NA_real_, adj_r2 = NA_real_, p = NA_real_,
+               n = sum(keep), n_group = NA_integer_, unit = NA_character_)
+  if (sum(keep) < 4L) return(fail)
+
+  y  <- y[keep]
+  g  <- droplevels(factor(as.character(group[keep])))
+  x  <- if (is.factor(x)) droplevels(x[keep]) else as.numeric(x[keep])
+  ch <- if (is.null(cohort)) NULL else droplevels(cohort[keep])
+
+  usable <- function(v) if (is.factor(v)) nlevels(v) >= 2L else stats::sd(v) > 0
+  if (!usable(x)) return(fail)
+
+  if (is_group_constant(x, g)) {
+    ## ---- group (donor) level ordinary least squares -------------------------
+    cl <- collapse_to_group(y, x, g, ch)
+    if (!usable(cl$x) || cl$n < 4L) return(fail)
+    dd <- data.frame(y = cl$y, x = cl$x)
+    if (!is.null(cl$cohort) && nlevels(cl$cohort) >= 2L) {
+      dd$ch <- cl$cohort
+      f0 <- y ~ ch
+    } else {
+      f0 <- y ~ 1
+    }
+    f1 <- stats::update(f0, . ~ . + x)
+    fit0 <- try(stats::lm(f0, data = dd), silent = TRUE)
+    fit1 <- try(stats::lm(f1, data = dd), silent = TRUE)
+    if (inherits(fit0, "try-error") || inherits(fit1, "try-error")) return(fail)
+    an <- stats::anova(fit0, fit1)
+    if (is.na(an[["Df"]][2L]) || an[["Df"]][2L] <= 0) return(fail)
+    rss0 <- sum(stats::resid(fit0)^2); df0 <- an[["Res.Df"]][1L]
+    rss1 <- sum(stats::resid(fit1)^2); df1 <- an[["Res.Df"]][2L]
+    if (rss0 <= 0 || df1 <= 0) return(fail)
+    list(
+      r2      = (rss0 - rss1) / rss0,
+      # adjusted: a many-level factor scores a large raw R^2 on ~40 donors
+      adj_r2  = 1 - (rss1 / df1) / (rss0 / df0),
+      p       = unname(an[["Pr(>F)"]][2L]),
+      n       = cl$n, n_group = cl$n, unit = "donor"
+    )
+  } else {
+    ## ---- observation level, group random intercept --------------------------
+    if (nlevels(g) < 3L) return(fail)
+    dd <- data.frame(y = y, x = x, g = g)
+    if (!is.null(ch) && nlevels(ch) >= 2L) {
+      dd$ch <- ch
+      f0 <- y ~ ch + (1 | g); f1 <- y ~ ch + x + (1 | g)
+    } else {
+      f0 <- y ~ 1 + (1 | g);  f1 <- y ~ x + (1 | g)
+    }
+    # singular fits expected: most donors have one sample, so it degrades to OLS
+    fits <- try(suppressMessages(suppressWarnings({
+      ctrl <- lme4::lmerControl(check.conv.singular = "ignore")
+      m0 <- lme4::lmer(f0, data = dd, REML = FALSE, control = ctrl)
+      m1 <- lme4::lmer(f1, data = dd, REML = FALSE, control = ctrl)
+      list(m0 = m0, m1 = m1, an = stats::anova(m0, m1))
+    })), silent = TRUE)
+    if (inherits(fits, "try-error")) return(fail)
+    rss0 <- sum(stats::resid(fits$m0)^2)
+    rss1 <- sum(stats::resid(fits$m1)^2)
+    if (rss0 <= 0) return(fail)
+    r2 <- (rss0 - rss1) / rss0
+    # from the models, not the anova table (column names vary across lme4)
+    k <- length(lme4::fixef(fits$m1)) - length(lme4::fixef(fits$m0))
+    p_col <- grep("^Pr\\(>Chisq\\)$", colnames(fits$an), value = TRUE)
+    if (!length(p_col) || k <= 0) return(fail)
+    dfr <- length(y) - nlevels(g) - k
+    list(
+      r2      = r2,
+      adj_r2  = if (dfr > 0) 1 - (1 - r2) * (dfr + k) / dfr else NA_real_,
+      p       = unname(fits$an[[p_col[1L]]][2L]),
+      n       = length(y), n_group = nlevels(g), unit = "sample (LMM)"
+    )
+  }
+}
+
+
+## ---- Small summary helpers that tolerate all-NA groups ----------------------
+first_unit <- function(u) { u <- u[!is.na(u)]; if (length(u)) u[1L] else NA_character_ }
+safe_max   <- function(v) { v <- v[!is.na(v)]; if (length(v)) max(v) else NA_real_ }
+safe_at_max <- function(lab, v) {
+  ok <- !is.na(v); if (!any(ok)) return(NA_character_)
+  as.character(lab[ok][which.max(v[ok])])
+}
+
+
+#####################################################################
+# PART 1 -- DONOR- AND SAMPLE-LEVEL ASSOCIATION WITH THE EMBEDDING DIMS
+#####################################################################
+
+# depth correlation per dimension -- the quantity ArchR's corCutOff acts on
+depth_cor_tbl <- list()
 assoc_results <- list()
 
 for (emb in embeddings_to_test) {
-  # cell x dims embedding
-  reddim <- getReducedDims(project, reducedDims = emb)
 
-  # map each cell to its sample, then take the per-sample mean embedding
+  # corCutOff = 1: retain everything the 0.75 default would have removed
+  reddim <- getReducedDims(project, reducedDims = emb, corCutOff = 1)
+
   cell_sample <- factor(getCellColData(project, select = "Sample", drop = TRUE))
-  sums <- rowsum(reddim, group = cell_sample)
+  cell_depth  <- log10(getCellColData(project, select = "nFrags", drop = TRUE))
+
+  dcor <- apply(reddim, 2, function(v) abs(stats::cor(v, cell_depth, use = "complete.obs")))
+  depth_cor_tbl[[emb]] <- data.frame(
+    embedding = emb, dim = colnames(reddim), dim_index = seq_along(dcor),
+    abs_cor_with_log10_nFrags = round(unname(dcor), 3),
+    excluded_by_default_cutoff = unname(dcor) > archr_cor_cutoff,
+    stringsAsFactors = FALSE
+  )
+  message(sprintf(
+    "%s: %d/%d dimensions exceed the default corCutOff of %.2f with log10(nFrags) (%s)",
+    emb, sum(dcor > archr_cor_cutoff), length(dcor), archr_cor_cutoff,
+    if (any(dcor > archr_cor_cutoff))
+      paste(colnames(reddim)[dcor > archr_cor_cutoff], collapse = ", ") else "none"
+  ))
+
+  # ---- per-sample mean of each dimension (these ARE the LSI/Harmony dims) ----
+  sums         <- rowsum(reddim, group = cell_sample)
   n_per_sample <- as.numeric(table(cell_sample)[rownames(sums)])
-  sample_emb <- sums / n_per_sample # samples x dims (pseudobulk embedding)
+  sample_emb   <- sums / n_per_sample                    # samples x dims
+  k            <- min(n_dims, ncol(sample_emb))
+  dims         <- sample_emb[, seq_len(k), drop = FALSE]
+  colnames(dims) <- paste0("Dim", seq_len(k))
 
-  # sample-level PCA
-  pca <- stats::prcomp(sample_emb, center = TRUE, scale. = TRUE)
-  var_explained <- (pca$sdev^2) / sum(pca$sdev^2)
-  k <- min(n_pc, ncol(pca$x))
-  pcs <- pca$x[, seq_len(k), drop = FALSE]
+  # weight = each dimension's share of between-sample variance
+  var_between <- apply(dims, 2, stats::var)
+  var_share   <- var_between / sum(var_between)
+  var_cells   <- apply(reddim[, seq_len(k), drop = FALSE], 2, stats::var)
+  var_share_cells <- var_cells / sum(apply(reddim, 2, stats::var))
 
-  # align covariates to the PCA sample order (join on arrow_name)
-  cv <- covar[match(rownames(pcs), covar$arrow_name), ]
+  # align covariates to the embedding sample order (join on arrow_name)
+  cv <- covar[match(rownames(dims), covar$arrow_name), ]
   if (anyNA(cv$arrow_name)) {
     warning(sprintf(
       "%s: %d sample(s) in the embedding not found in Table S1",
@@ -581,42 +838,47 @@ for (emb in embeddings_to_test) {
     ))
   }
 
-  # test each PC against each covariate
   covariate_cols <- list(
-    Cohort = cv$exposure_type, # all samples
-    Control_status = cv$control_status, # Control vs Exposed (all samples)
-    Exposure_group = cv$exposure_group, # within-cohort condition arm
-    Age = cv$Age_numeric, # C19 + HIV + OP (bin midpoints for C19)
-    Sex_observed = cv$Sex, # C19 + HIV + OP (recorded/recovered)
-    Sampling_day = cv$sampling_day, # within-cohort sampling time vs onset
-    Sex_predicted = cv$Sex_predicted, # all samples (chrY/chrX inference)
-    QC_nCells = cv$n_cells, # technical QC (all samples)
-    QC_meanTSS = cv$mean_TSS, # technical QC
-    QC_meanLog10Frags = cv$mean_log10_nFrags, # technical QC
-    QC_meanFRIP = cv$mean_FRIP # technical QC
+    Cohort            = cv$exposure_type,      # donor-level
+    Control_status    = cv$control_status,     # donor-level
+    Exposure_group    = cv$exposure_group,     # donor-level
+    Age               = cv$Age_numeric,        # donor-level
+    Sex_observed      = cv$Sex,                # donor-level
+    Sex_predicted     = cv$Sex_predicted,      # donor-level (chrY/XIST call)
+    Sampling_day      = cv$sampling_day,       # varies within donor (HIV)
+    Viral_load        = cv$viral_load,         # varies within donor (HIV)
+    # Batch: C19 only. Supplier: aliased with cohort, so adjusted column empty.
+    Batch_C19         = cv$processing_batch,
+    Supplier          = cv$supplier,
+    QC_tss_cutoff     = cv$tss_cutoff,
+    QC_frag_cutoff    = cv$log10frags_cutoff,
+    QC_nCells         = cv$n_cells,            # varies within donor
+    QC_meanTSS        = cv$mean_TSS,
+    QC_meanLog10Frags = cv$mean_log10_nFrags,
+    QC_meanFRIP       = cv$mean_FRIP
   )
-
 
   res <- do.call(rbind, lapply(seq_len(k), function(i) {
     do.call(rbind, lapply(names(covariate_cols), function(cn) {
-      a <- pc_assoc(pcs[, i], covariate_cols[[cn]])
-      # cohort-adjusted partial test (not meaningful for Cohort itself)
+      a <- assoc_test(dims[, i], covariate_cols[[cn]], cv$donor_id)
       adj <- if (cn == "Cohort") {
-        c(r2_partial = NA_real_, p = NA_real_, n = a[["n"]])
+        list(r2 = NA_real_, adj_r2 = NA_real_, p = NA_real_,
+             n = a$n, n_group = a$n_group, unit = NA_character_)
       } else {
-        pc_assoc_adj(pcs[, i], covariate_cols[[cn]], cv$exposure_type)
+        assoc_test(dims[, i], covariate_cols[[cn]], cv$donor_id, cv$exposure_type)
       }
       data.frame(
         embedding = emb,
-        PC = paste0("PC", i),
-        pc_index = i,
-        var_explained = var_explained[i],
+        Dim = paste0("Dim", i),
+        dim_index = i,
+        var_share_between_samples = var_share[i],
+        var_share_cells = var_share_cells[i],
+        depth_cor = unname(dcor[i]),
         covariate = cn,
-        r2 = a[["r2"]], # marginal variance explained
-        p = a[["p"]], # marginal p
-        r2_partial_adjCohort = adj[["r2_partial"]], # variance beyond cohort
-        p_adjCohort = adj[["p"]], # cohort-adjusted p
-        n = a[["n"]],
+        r2 = a$r2, adj_r2 = a$adj_r2, p = a$p,
+        r2_partial_adjCohort = adj$r2, adj_r2_partial_adjCohort = adj$adj_r2,
+        p_adjCohort = adj$p,
+        n = a$n, n_group = a$n_group, unit = a$unit,
         stringsAsFactors = FALSE
       )
     }))
@@ -624,10 +886,13 @@ for (emb in embeddings_to_test) {
   assoc_results[[emb]] <- res
 }
 
+depth_cor_df <- dplyr::bind_rows(depth_cor_tbl)
+write.csv(depth_cor_df,
+  file = file.path(repo_dir, "figures/dim_depth_correlation.csv"), row.names = FALSE)
+
 assoc_df <- dplyr::bind_rows(assoc_results)
 
-# BH-adjust p-values within each embedding x covariate family
-# (both the marginal test and the cohort-adjusted test)
+# BH-adjust within each embedding x covariate family
 assoc_df <- assoc_df %>%
   dplyr::group_by(embedding, covariate) %>%
   dplyr::mutate(
@@ -637,79 +902,292 @@ assoc_df <- assoc_df %>%
   dplyr::ungroup()
 
 ## ---- Variance-weighted summary ----------------------------------------------
-# Total sample-level variance associated with each covariate =
-#   sum over PCs of (variance explained by covariate in that PC) x (PC's share
-#   of total variance). Gives one interpretable number per covariate/embedding.
+# sum over dimensions of (adjusted R^2) x (share of between-sample variance)
 var_summary <- assoc_df %>%
   dplyr::group_by(embedding, covariate) %>%
   dplyr::summarise(
-    total_var_marginal = sum(r2 * var_explained, na.rm = TRUE),
-    total_var_adjCohort = sum(r2_partial_adjCohort * var_explained, na.rm = TRUE),
-    # largest single-PC R^2, i.e. what the heatmap tiles show
-    max_r2 = max(r2, na.rm = TRUE),
-    max_r2_PC = PC[which.max(r2)],
+    unit = first_unit(unit),
+    total_var_marginal = sum(pmax(adj_r2, 0) * var_share_between_samples, na.rm = TRUE),
+    total_var_adjCohort = sum(pmax(adj_r2_partial_adjCohort, 0) * var_share_between_samples,
+                              na.rm = TRUE),
+    max_adj_r2 = safe_max(adj_r2),
+    max_adj_r2_Dim = safe_at_max(Dim, adj_r2),
     .groups = "drop"
-  )
-message("Total sample-level variance associated with each covariate:")
+  ) %>%
+  dplyr::arrange(embedding, dplyr::desc(total_var_marginal))
+message("Total between-sample variance associated with each covariate:")
 print(as.data.frame(var_summary))
 write.csv(var_summary,
-  file = file.path(repo_dir, "figures/pc_covariate_variance_summary.csv"),
+  file = file.path(repo_dir, "figures/dim_covariate_variance_summary.csv"),
   row.names = FALSE
 )
 
-## ---- Write the association results as a new sheet (Table S1B) ---------------
-# Added as its own sheet alongside the existing metadata (Table S1). We save to
-# a COPY of the workbook so the master file is never overwritten; rename it to
-# All_Supplementary_Tables.xlsx once you are happy, or set
-# out_xlsx <- suppTables to write in place.
+write.csv(assoc_df,
+  file = file.path(repo_dir, "figures/dim_covariate_association.csv"),
+  row.names = FALSE
+)
+
+
+#####################################################################
+# PART 2 -- PSEUDOBULK (SAMPLE x CELL TYPE) ASSOCIATION
+#####################################################################
+# QC is recomputed per pseudobulk and the grouping is the SAMPLE, so
+# cohort/age/sex collapse back instead of repeating across ~10 pseudobulks.
+
+min_pb_cells <- 20
+assoc_ct_results <- list()
+
+for (emb in embeddings_to_test) {
+  reddim <- getReducedDims(project, reducedDims = emb, corCutOff = 1)
+  cd <- as.data.frame(getCellColData(project,
+    select = c("Sample", ct_col, "TSSEnrichment", "nFrags", "FRIP")))
+  names(cd)[names(cd) == ct_col] <- "CellType"
+  cd$log10_nFrags <- log10(cd$nFrags)
+
+  ok  <- !is.na(cd$CellType)
+  grp <- paste(cd$Sample, cd$CellType, sep = "||")
+
+  sums   <- rowsum(reddim[ok, , drop = FALSE], group = grp[ok])
+  n_grp  <- as.numeric(table(grp[ok])[rownames(sums)])
+  pb_emb <- sums / n_grp
+  keep   <- n_grp >= min_pb_cells
+  pb_emb <- pb_emb[keep, , drop = FALSE]
+  pb_ncells <- n_grp[keep]
+
+  # QC summarised at the SAME unit as the embedding rows
+  qc_pb <- cd[ok, ] %>%
+    dplyr::mutate(.grp = grp[ok]) %>%
+    dplyr::group_by(.grp) %>%
+    dplyr::summarise(
+      pb_TSS = mean(TSSEnrichment, na.rm = TRUE),
+      pb_log10_nFrags = mean(log10_nFrags, na.rm = TRUE),
+      pb_FRIP = mean(FRIP, na.rm = TRUE), .groups = "drop"
+    )
+  qc_pb <- qc_pb[match(rownames(pb_emb), qc_pb$.grp), ]
+  stopifnot(identical(qc_pb$.grp, rownames(pb_emb)))
+
+  kk   <- min(n_dims, ncol(pb_emb))
+  dims <- pb_emb[, seq_len(kk), drop = FALSE]
+  colnames(dims) <- paste0("Dim", seq_len(kk))
+  var_between <- apply(dims, 2, stats::var)
+  var_share   <- var_between / sum(var_between)
+
+  key       <- do.call(rbind, strsplit(rownames(dims), "\\|\\|"))
+  pb_sample <- key[, 1]
+  pb_celltype <- key[, 2]
+  cvp       <- covar[match(pb_sample, covar$arrow_name), ]
+
+  covariate_cols <- list(
+    CellType          = factor(pb_celltype),   # varies within sample
+    Cohort            = cvp$exposure_type,     # constant within sample
+    Control_status    = cvp$control_status,
+    Exposure_group    = cvp$exposure_group,
+    Age               = cvp$Age_numeric,
+    Sex_observed      = cvp$Sex,
+    Sex_predicted     = cvp$Sex_predicted,
+    Sampling_day      = cvp$sampling_day,
+    Batch_C19         = cvp$processing_batch,  # within-C19 only
+    Supplier          = cvp$supplier,          # aliased with cohort
+    QC_tss_cutoff     = cvp$tss_cutoff,
+    QC_frag_cutoff    = cvp$log10frags_cutoff,
+    QC_nCells         = pb_ncells,             # per pseudobulk
+    QC_meanTSS        = qc_pb$pb_TSS,          # per pseudobulk
+    QC_meanLog10Frags = qc_pb$pb_log10_nFrags, # per pseudobulk
+    QC_meanFRIP       = qc_pb$pb_FRIP          # per pseudobulk
+  )
+
+  res <- do.call(rbind, lapply(seq_len(kk), function(i) {
+    do.call(rbind, lapply(names(covariate_cols), function(cn) {
+      # group = sample: sample-constant covariates collapse, others get (1|sample)
+      a <- assoc_test(dims[, i], covariate_cols[[cn]], pb_sample)
+      data.frame(
+        embedding = emb, Dim = paste0("Dim", i), dim_index = i,
+        var_share_between_pseudobulks = var_share[i], covariate = cn,
+        r2 = a$r2, adj_r2 = a$adj_r2, p = a$p,
+        n = a$n, n_group = a$n_group, unit = a$unit,
+        stringsAsFactors = FALSE
+      )
+    }))
+  }))
+  assoc_ct_results[[emb]] <- res
+}
+
+assoc_ct_df <- dplyr::bind_rows(assoc_ct_results) %>%
+  dplyr::group_by(embedding, covariate) %>%
+  dplyr::mutate(p_adj = p.adjust(p, method = "BH")) %>%
+  dplyr::ungroup()
+
+write.csv(assoc_ct_df,
+  file = file.path(repo_dir, "figures/dim_covariate_association_by_celltype.csv"),
+  row.names = FALSE
+)
+
+var_summary_ct <- assoc_ct_df %>%
+  dplyr::group_by(embedding, covariate) %>%
+  dplyr::summarise(
+    unit = first_unit(unit),
+    total_var = sum(pmax(adj_r2, 0) * var_share_between_pseudobulks, na.rm = TRUE),
+    max_adj_r2 = safe_max(adj_r2),
+    max_adj_r2_Dim = safe_at_max(Dim, adj_r2),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(embedding, dplyr::desc(total_var))
+message("Total pseudobulk-level variance associated with each covariate:")
+print(as.data.frame(var_summary_ct))
+write.csv(var_summary_ct,
+  file = file.path(repo_dir, "figures/dim_covariate_variance_summary_by_celltype.csv"),
+  row.names = FALSE
+)
+
+
+
+
+#####################################################################
+# FIGURES -- association heatmaps
+#####################################################################
+# p can underflow to 0 and -log10(0) is Inf, which ggplot paints as missing.
+p_cap <- 50
+neglog10 <- function(p, cap = p_cap) {
+  pmin(-log10(pmax(p, .Machine$double.xmin)), cap)
+}
+# design covariates first, then donor, then technical
+covariate_order <- c(
+  "CellType", "Cohort", "Control_status", "Exposure_group",
+  "Age", "Sex_observed", "Sex_predicted", "Sampling_day", "Viral_load",
+  "Batch_C19", "Supplier",
+  "QC_tss_cutoff", "QC_frag_cutoff",
+  "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
+)
+
+# label each row with the unit the test was run on
+add_row_label <- function(d) {
+  u <- d %>%
+    dplyr::group_by(covariate) %>%
+    dplyr::summarise(unit = first_unit(unit), .groups = "drop")
+  d <- dplyr::left_join(d, dplyr::rename(u, unit_lab = unit), by = "covariate")
+  d$row_label <- ifelse(is.na(d$unit_lab), d$covariate,
+                        paste0(d$covariate, "  [", d$unit_lab, "]"))
+  d
+}
+order_rows <- function(d) {
+  lv <- d %>% dplyr::distinct(covariate, row_label)
+  lv <- lv[match(intersect(covariate_order, lv$covariate), lv$covariate), ]
+  rev(lv$row_label)
+}
+
+assoc_plot_df <- add_row_label(assoc_df)
+
+p_assoc <- ggplot(assoc_plot_df, aes(x = Dim, y = row_label, fill = neglog10(p_adj))) +
+  geom_tile(color = "grey90") +
+  geom_text(aes(label = ifelse(is.na(adj_r2), "", sprintf("%.2f", adj_r2))), size = 3) +
+  facet_wrap(~embedding, ncol = 1) +
+  scale_fill_gradient(
+    low = "white", high = "#006400", na.value = "grey95",
+    name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")
+  ) +
+  scale_x_discrete(limits = paste0("Dim", seq_len(n_dims))) +
+  scale_y_discrete(limits = order_rows(assoc_plot_df)) +
+  labs(
+    title = paste0("Association of ", paste(embeddings_to_test, collapse = " / "),
+                   " dimensions with known covariates"),
+    subtitle = paste0(
+      "Columns are the LSI / Harmony dimensions themselves (per-sample means), not principal components of them.\n",
+      "Tile label = adjusted R^2; shading = BH-adjusted significance. Each covariate tested separately.\n",
+      "Bracketed unit: covariates constant within a donor are tested at the DONOR level (repeat draws collapsed);\n",
+      "covariates that vary within a donor are tested per sample with a donor random intercept."
+    ),
+    x = NULL, y = NULL
+  ) +
+  theme_classic() +
+  theme(plot.subtitle = element_text(size = 8),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(p_assoc,
+  filename = file.path(repo_dir, "figures/dim_covariate_association.pdf"),
+  width = 10,
+  height = max(7.5, 0.5 * length(unique(assoc_df$covariate)) + 3),
+  units = "in", dpi = 300, limitsize = FALSE
+)
+
+assoc_ct_plot_df <- add_row_label(assoc_ct_df)
+
+p_assoc_ct <- ggplot(assoc_ct_plot_df,
+  aes(x = Dim, y = row_label, fill = neglog10(p_adj))) +
+  geom_tile(color = "grey90") +
+  geom_text(aes(label = ifelse(is.na(adj_r2), "", sprintf("%.2f", adj_r2))), size = 3) +
+  facet_wrap(~embedding, ncol = 1) +
+  scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
+    name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")) +
+  scale_x_discrete(limits = paste0("Dim", seq_len(n_dims))) +
+  scale_y_discrete(limits = order_rows(assoc_ct_plot_df)) +
+  labs(
+    title = "Association of pseudobulk (sample x cell type) dimensions with covariates",
+    subtitle = paste0(
+      "Pseudobulks of >= ", min_pb_cells, " cells. Tile label = adjusted R^2; shading = BH-adjusted significance.\n",
+      "Cell type and the QC metrics vary within a sample and are tested per pseudobulk with a sample random intercept;\n",
+      "cohort, age and sex are constant within a sample and are collapsed back, so they are not counted once per pseudobulk."
+    ),
+    x = NULL, y = NULL
+  ) +
+  theme_classic() +
+  theme(plot.subtitle = element_text(size = 8),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(p_assoc_ct,
+  filename = file.path(repo_dir, "figures/dim_covariate_association_by_celltype.pdf"),
+  width = 10, height = 8, units = "in", dpi = 300
+)
+
+
+#####################################################################
+# SUPPLEMENTARY TABLE OUTPUT
+#####################################################################
 assoc_supp <- assoc_df %>%
   dplyr::transmute(
     Embedding = embedding,
-    PC = PC,
-    `PC variance (%)` = round(100 * var_explained, 2),
+    Dimension = Dim,
+    `Share of between-sample variance (%)` = round(100 * var_share_between_samples, 2),
+    `|cor| with log10(nFrags), cell level` = round(depth_cor, 3),
     Covariate = covariate,
+    `Unit of observation` = unit,
     `R2 (marginal)` = round(r2, 3),
+    `Adjusted R2 (marginal)` = round(adj_r2, 3),
     `p (marginal, BH)` = signif(p_adj, 3),
     `Partial R2 (cohort-adjusted)` = round(r2_partial_adjCohort, 3),
+    `Adjusted partial R2 (cohort-adjusted)` = round(adj_r2_partial_adjCohort, 3),
     `p (cohort-adjusted, BH)` = signif(p_adjCohort_bh, 3),
-    `n samples` = n
+    `n observations` = n,
+    `n groups` = n_group
   ) %>%
   dplyr::arrange(
-    Embedding,
-    factor(PC, levels = paste0("PC", seq_len(n_pc))),
-    Covariate
+    Embedding, factor(Dimension, levels = paste0("Dim", seq_len(n_dims))), Covariate
   )
 
 wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
 
-# Correct the influenza timepoint mislabel in the existing record_id column:
-# the final challenge timepoint is day 28, not day 30 (group label Influenza_d28).
-s1_now <- openxlsx::readWorkbook(wb, sheet = "Table S1")
+# fix the influenza timepoint mislabel: the final timepoint is day 28, not 30
+s1_now  <- openxlsx::readWorkbook(wb, sheet = "Table S1")
 rec_col <- which(names(s1_now) == "record_id")
 if (length(rec_col) == 1) {
   fixed_rec <- sub("day 30 after challenge", "day 28 after challenge",
     as.character(s1_now$record_id)
   )
   n_fixed <- sum(fixed_rec != as.character(s1_now$record_id), na.rm = TRUE)
-  openxlsx::writeData(wb, "Table S1", x = fixed_rec,
-    startCol = rec_col, startRow = 2
-  )
+  openxlsx::writeData(wb, "Table S1", x = fixed_rec, startCol = rec_col, startRow = 2)
   message("Corrected 'day 30' -> 'day 28' in Table S1 record_id for ", n_fixed, " row(s)")
 }
 
-# Append the new columns to the Table S1 sheet. covar is in the same row order as
-# Table S1 (it was read from that sheet and only left-joined onto), so we can
-# write the new columns directly.
-s1_ncol <- ncol(s1_now)
 new_cols <- data.frame(
-  # Donor_ID matters beyond this table: HIV is longitudinal, 3 samples/donor
+  # Donor_ID: HIV is longitudinal and some C19 donors were sampled twice
   Donor_ID = covar$donor_id,
   Age_reported = covar$Age_reported,
   Sex_reported = as.character(covar$Sex),
   Sampling_day_rel_onset = covar$sampling_day,
+  Onset_reference = covar$onset_reference,
   Viral_load = covar$viral_load,
-  # sex call plus the features behind it. Full detail (marker-threshold calls,
-  # discrepancy flag) stays in figures/sex_prediction_metrics.csv.
+  # processing batch, C19 only (from sample_annots/ATAC_metadata_covid.csv)
+  Processing_batch = as.character(covar$processing_batch),
+  # full sex-call detail stays in figures/sex_prediction_metrics.csv
   Sex_predicted = as.character(covar$Sex_predicted),
   P_male = covar$p_male,
   chrY_fragments = covar$chrY,
@@ -723,199 +1201,65 @@ new_cols <- data.frame(
 )
 # cells behind each sample x cell-type pseudobulk, one column per cell type
 new_cols <- cbind(new_cols, as.data.frame(covar)[, pb_count_cols, drop = FALSE])
-openxlsx::writeData(wb, "Table S1", x = new_cols,
-  startCol = s1_ncol + 1, startRow = 1)
-message("Added ", length(pb_count_cols),
-  " per-cell-type pseudobulk count column(s) to Table S1")
 
-sheet_name <- "Table S1B" # per-PC association results
-if (sheet_name %in% names(wb)) openxlsx::removeWorksheet(wb, sheet_name)
-openxlsx::addWorksheet(wb, sheet_name)
-openxlsx::writeData(wb, sheet_name, assoc_supp,
-  withFilter = TRUE, headerStyle = openxlsx::createStyle(textDecoration = "bold")
-)
-openxlsx::setColWidths(wb, sheet_name, cols = seq_along(assoc_supp), widths = "auto")
+# GUARD: written at a column OFFSET, so covar must stay row-aligned with the sheet
+if (nrow(covar) != nrow(s1_now)) {
+  stop(sprintf(
+    "Table S1 has %d rows but covar has %d: a join above changed the row count. Not writing.",
+    nrow(s1_now), nrow(covar)
+  ))
+}
+if ("arrow_name" %in% names(s1_now) &&
+    !identical(as.character(covar$arrow_name), as.character(s1_now$arrow_name))) {
+  stop("covar is no longer in Table S1 row order; the positional append would misalign. Not writing.")
+}
+# refuse rather than appending a second copy of the same columns
+clash <- intersect(names(new_cols), names(s1_now))
+if (length(clash)) {
+  stop("Table S1 already contains: ", paste(clash, collapse = ", "),
+       ". Start from the pristine All_Supplementary_Tables.xlsx rather than an ",
+       "already-updated copy, or remove those columns first.")
+}
+
+s1_ncol <- ncol(s1_now)
+openxlsx::writeData(wb, "Table S1", x = new_cols, startCol = s1_ncol + 1, startRow = 1)
+message("Added ", ncol(new_cols), " column(s) to Table S1 (",
+  length(pb_count_cols), " of them per-cell-type pseudobulk counts)")
+
+write_sheet <- function(wb, name, df) {
+  if (name %in% names(wb)) openxlsx::removeWorksheet(wb, name)
+  openxlsx::addWorksheet(wb, name)
+  openxlsx::writeData(wb, name, df, withFilter = TRUE,
+    headerStyle = openxlsx::createStyle(textDecoration = "bold"))
+  openxlsx::setColWidths(wb, name, cols = seq_along(df), widths = "auto")
+}
+
+write_sheet(wb, "Table S1B", assoc_supp)          # per-dimension associations
+write_sheet(wb, "Table S1C", as.data.frame(depth_cor_df))  # depth correlations
+if (exists("confound_rows") && !is.null(confound_rows)) {
+  write_sheet(wb, "Table S1D", as.data.frame(confound_rows))               # confound structure
+}
+write_sheet(wb, "Table S1E", sex_lda_metrics)                              # sex-classifier performance
 
 out_xlsx <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables_updated.xlsx")
 openxlsx::saveWorkbook(wb, out_xlsx, overwrite = TRUE)
-message("Wrote association results to sheet '", sheet_name, "' in: ", out_xlsx)
+message("Wrote association results to: ", out_xlsx)
 
-# write the results table
-write.csv(assoc_df,
-  file = file.path(repo_dir, "figures/pc_covariate_association.csv"),
-  row.names = FALSE
-)
 
-## ---- Visualise: -log10(adjusted p) per PC x covariate -----------------------
-# pf() underflows to 0 for a strong association and -log10(0) is Inf, which
-# ggplot paints with na.value -- so the strongest tiles came out the same grey
-# as the missing ones. Floor the p and cap the scale.
-p_cap <- 50
-neglog10 <- function(p, cap = p_cap) {
-  pmin(-log10(pmax(p, .Machine$double.xmin)), cap)
-}
-# design covariates first, then donor, then technical
-covariate_order <- c(
-  "CellType", "Cohort", "Control_status", "Exposure_group",
-  "Age", "Sex_observed", "Sex_predicted", "Sampling_day",
-  "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
-)
-order_rows <- function(d) rev(intersect(covariate_order, unique(d$covariate)))
-
-p_assoc <- ggplot(
-  assoc_df,
-  aes(x = PC, y = covariate, fill = neglog10(p_adj))
-) +
-  geom_tile(color = "grey90") +
-  geom_text(aes(label = ifelse(is.na(p_adj), "", sprintf("%.2f", r2))), size = 3) +
-  facet_wrap(~embedding, ncol = 1) +
-  scale_fill_gradient(
-    low = "white", high = "#006400",
-    na.value = "grey95",
-    name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")
-  ) +
-  scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
-  scale_y_discrete(limits = order_rows(assoc_df)) +
-  labs(
-    title = "Association of sample-level PCs with known covariates",
-    subtitle = paste0(
-      "Every covariate tested separately against each PC. Tile label = variance explained (R^2); shading = significance.\n",
-      "Unit of observation = one sample. Cell type is not testable here (each sample is a single profile averaged over its cells); see the by-cell-type panel.\n",
-      "Age/Sex on samples with recorded metadata; predicted Sex and QC on all samples."
-    ),
-    x = NULL, y = NULL
-  ) +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave(p_assoc,
-  filename = file.path(repo_dir, "figures/pc_covariate_association.pdf"),
-  width = 9.5,
-  height = max(7.5, 0.5 * length(unique(assoc_df$covariate)) + 2.5),
-  units = "in", dpi = 300, limitsize = FALSE
-)
-
-## ---- Per-(sample x cell type) association: adds Cell type and Exposure -------
-# Cell type does not vary in the sample-level PCA above, so it cannot be tested
-# there. This repeats the PCA on sample x cell-type pseudobulks, where every
-# covariate is present and each is tested separately against each PC.
-# (ct_col is defined with the pseudobulk cell counts above.)
-
-assoc_ct_results <- list()
-for (emb in embeddings_to_test) {
-  reddim <- getReducedDims(project, reducedDims = emb)
-  cd     <- as.data.frame(getCellColData(project, select = c("Sample", ct_col)))
-  grp    <- paste(cd$Sample, cd[[ct_col]], sep = "||")
-
-  sums   <- rowsum(reddim, group = grp)
-  n_grp  <- as.numeric(table(grp)[rownames(sums)])
-  pb_emb <- sums / n_grp                       # (sample x cell type) x dims
-  keep   <- n_grp >= 20                        # drop tiny, noisy pseudobulks
-  pb_emb <- pb_emb[keep, , drop = FALSE]
-  # same filter as pb_emb, or the counts misalign with the retained rows
-  pb_ncells <- n_grp[keep]
-
-  pca <- stats::prcomp(pb_emb, center = TRUE, scale. = TRUE)
-  var_explained <- (pca$sdev^2) / sum(pca$sdev^2)
-  k   <- min(n_pc, ncol(pca$x))
-  pcs <- pca$x[, seq_len(k), drop = FALSE]
-
-  key       <- do.call(rbind, strsplit(rownames(pcs), "\\|\\|"))
-  pb_sample <- key[, 1]
-  pb_ct     <- key[, 2]
-  cvp       <- covar[match(pb_sample, covar$arrow_name), ]
-
-  # as the sample-level set plus CellType. QC_nCells is per pseudobulk here.
-  covariate_cols <- list(
-    CellType          = factor(pb_ct),
-    Cohort            = cvp$exposure_type,
-    Control_status    = cvp$control_status,
-    Exposure_group    = cvp$exposure_group,
-    Age               = cvp$Age_numeric,
-    Sex_observed      = cvp$Sex,
-    Sex_predicted     = cvp$Sex_predicted,
-    Sampling_day      = cvp$sampling_day,
-    QC_nCells         = pb_ncells,
-    QC_meanTSS        = cvp$mean_TSS,
-    QC_meanLog10Frags = cvp$mean_log10_nFrags,
-    QC_meanFRIP       = cvp$mean_FRIP
-  )
-
-  res <- do.call(rbind, lapply(seq_len(k), function(i) {
-    do.call(rbind, lapply(names(covariate_cols), function(cn) {
-      a <- pc_assoc(pcs[, i], covariate_cols[[cn]])
-      data.frame(embedding = emb, PC = paste0("PC", i), pc_index = i,
-                 var_explained = var_explained[i], covariate = cn,
-                 r2 = a[["r2"]], p = a[["p"]], n = a[["n"]],
-                 stringsAsFactors = FALSE)
-    }))
-  }))
-  assoc_ct_results[[emb]] <- res
-}
-
-assoc_ct_df <- dplyr::bind_rows(assoc_ct_results) %>%
-  dplyr::group_by(embedding, covariate) %>%
-  dplyr::mutate(p_adj = p.adjust(p, method = "BH")) %>%
-  dplyr::ungroup()
-
-write.csv(assoc_ct_df,
-  file = file.path(repo_dir, "figures/pc_covariate_association_by_celltype.csv"),
-  row.names = FALSE
-)
-
-# Same summary at the pseudobulk level. The Results text quotes these, so they
-# have to exist for the same unit as the panel that is shown.
-var_summary_ct <- assoc_ct_df %>%
-  dplyr::group_by(embedding, covariate) %>%
-  dplyr::summarise(
-    total_var = sum(r2 * var_explained, na.rm = TRUE),
-    max_r2 = max(r2, na.rm = TRUE),
-    max_r2_PC = PC[which.max(r2)],
-    .groups = "drop"
-  ) %>%
-  dplyr::arrange(embedding, dplyr::desc(total_var))
-message("Total pseudobulk-level variance associated with each covariate:")
-print(as.data.frame(var_summary_ct))
-write.csv(var_summary_ct,
-  file = file.path(repo_dir, "figures/pc_covariate_variance_summary_by_celltype.csv"),
-  row.names = FALSE
-)
-
-p_assoc_ct <- ggplot(assoc_ct_df, aes(x = PC, y = covariate, fill = neglog10(p_adj))) +
-  geom_tile(color = "grey90") +
-  geom_text(aes(label = ifelse(is.na(p_adj), "", sprintf("%.2f", r2))), size = 3) +
-  facet_wrap(~embedding, ncol = 1) +
-  scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
-    name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")) +
-  scale_x_discrete(limits = paste0("PC", seq_len(n_pc))) +
-  scale_y_discrete(limits = order_rows(assoc_ct_df)) +
-  labs(
-    title = "Association of pseudobulk (sample x cell type) PCs with covariates",
-    subtitle = paste0(
-      "Every covariate tested separately against each PC. Tile label = variance explained (R^2); shading = significance.\n",
-      "Unit of observation = one sample x cell-type pseudobulk (>= 20 cells); cell type can only be tested at this level, not on sample-level PCs."
-    ),
-    x = NULL, y = NULL
-  ) +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave(p_assoc_ct,
-  filename = file.path(repo_dir, "figures/pc_covariate_association_by_celltype.pdf"),
-  width = 9, height = 7.5, units = "in", dpi = 300
-)
-
-# quick console summary of any significant confounder associations
-message("Significant MARGINAL PC-covariate associations (adj. p < 0.05):")
+#####################################################################
+# CONSOLE SUMMARY
+#####################################################################
+message("Significant MARGINAL dimension-covariate associations (adj. p < 0.05):")
 print(subset(assoc_df, p_adj < 0.05,
-  select = c(embedding, PC, covariate, r2, p_adj, n)
-))
+  select = c(embedding, Dim, covariate, adj_r2, p_adj, n, n_group, unit)))
 
-# Key check for the rebuttal: does any covariate survive once cohort is
-# controlled for (Age, Sex, and the technical QC metrics)?
+# does any covariate survive once cohort is controlled for?
 message("Significant COHORT-ADJUSTED associations (non-cohort covariates, adj. p < 0.05):")
 print(subset(assoc_df, covariate != "Cohort" & p_adjCohort_bh < 0.05,
-  select = c(embedding, PC, covariate, r2_partial_adjCohort, p_adjCohort_bh, n)
-))
+  select = c(embedding, Dim, covariate, adj_r2_partial_adjCohort, p_adjCohort_bh, n, unit)))
+
+message("Cohort association before vs after Harmony (total between-sample variance):")
+print(as.data.frame(subset(var_summary, covariate == "Cohort",
+  select = c(embedding, covariate, total_var_marginal, max_adj_r2, max_adj_r2_Dim))))
 
 #####################################################################

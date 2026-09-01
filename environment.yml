@@ -1,0 +1,104 @@
+# conda env create -f environment.yml && conda activate echo
+# Then install the two GitHub-only packages:
+#   Rscript -e 'remotes::install_github("GreenleafLab/ArchR", ref="master", repos=BiocManager::repositories(), upgrade="never")'
+#   Rscript -e 'ArchR::installExtraPackages()'
+#   Rscript -e 'remotes::install_github("immunogenomics/presto", upgrade="never")'
+
+name: echo
+
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+
+dependencies:
+  - r-base>=4.4
+
+  # 01_v2_quality_control.R
+  - r-readxl
+  - r-openxlsx
+  - r-dplyr
+  - r-ggplot2
+  - r-mass
+  - r-lme4
+  - r-lmertest
+  - r-scales
+
+  # 13b_cvar_variance_decomposition.R
+  - bioconductor-variancepartition
+  - bioconductor-chromvar
+  - bioconductor-summarizedexperiment
+  - bioconductor-biobase
+  - r-tidyr
+  - r-pbkrtest
+  - r-aod
+  - r-corpcor
+  - r-gplots
+  - r-reshape2
+  - r-rdpack
+
+  # ArchR runtime dependencies
+  - r-matrix
+  - r-data.table
+  - r-magrittr
+  - r-plyr
+  - r-stringr
+  - r-gtable
+  - r-gtools
+  - r-gridextra
+  - r-ggrepel
+  - r-rcpp
+  - r-rcpparmadillo
+  - r-uwot
+  - r-nabor
+  - r-cairo
+  - r-hexbin
+  - r-pheatmap
+  - r-nloptr
+  - r-matrixstats
+  - bioconductor-biocgenerics
+  - bioconductor-s4vectors
+  - bioconductor-iranges
+  - bioconductor-genomicranges
+  - bioconductor-genomeinfodb
+  - bioconductor-biostrings
+  - bioconductor-rsamtools
+  - bioconductor-rtracklayer
+  - bioconductor-rhdf5
+  - bioconductor-rhdf5lib
+  - bioconductor-biocparallel
+  - bioconductor-complexheatmap
+  - bioconductor-motifmatchr
+  - bioconductor-tfbstools
+  - bioconductor-limma
+  - bioconductor-edger
+
+  # 02_cluster_and_batch.R
+  - r-harmony
+  - r-seurat
+
+  # hg38 annotation
+  - bioconductor-bsgenome.hsapiens.ucsc.hg38
+  - bioconductor-txdb.hsapiens.ucsc.hg38.knowngene
+  - bioconductor-org.hs.eg.db
+  - bioconductor-jaspar2020
+
+  # GitHub installers
+  - r-remotes
+  - r-biocmanager
+  - r-devtools
+
+  # toolchain for the ArchR source build
+  - c-compiler
+  - cxx-compiler
+  - make
+  - pkg-config
+  - zlib
+  - bzip2
+  - xz
+  - libcurl
+  - openssl
+
+  # optional
+  # - bioconductor-milor  # 12b_milo_hiv.R
+  # - r-shiny             # ArchRBrowser
