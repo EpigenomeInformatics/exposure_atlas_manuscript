@@ -452,8 +452,10 @@ print(as.data.frame(cc_summary))
 
 # Plasma is dropped: too few cells per pseudobulk, and 05_pseudobulk.R excludes
 # it elsewhere in the pipeline
-cc_drop <- c("Plasma")
-cc_med  <- cc_summary %>% dplyr::filter(!Cell_Type %in% cc_drop)
+cc_drop    <- c("Plasma")
+cc_ymax    <- 0.4
+cc_med     <- cc_summary %>% dplyr::filter(!Cell_Type %in% cc_drop)
+vp_cc_plot <- vp_cc %>% dplyr::filter(!Cell_Type %in% cc_drop)
 n_motif <- nrow(vp_cc) / dplyr::n_distinct(paste(vp_cc$Exposure, vp_cc$Cell_Type))
 
 cc_sub <- paste0(
@@ -464,52 +466,35 @@ cc_sub <- paste0(
   "condition fraction, so values compare between cell types but not between cohorts."
 )
 
-# One compact panel: median with the interquartile range, dodged by cohort.
-# A tile or a bar would show only the median, and with medians near zero the
-# spread is what separates a flat null from a low median with a long tail.
-cc_lvls <- sort(unique(as.character(cc_med$Exposure)))
-cc_med$Exposure <- factor(as.character(cc_med$Exposure), levels = cc_lvls)
-cohort_cols <- setNames(
-  rep(c("#E64B35", "#4DBBD5", "#00A087", "#3C5488"), length.out = length(cc_lvls)),
-  cc_lvls
-)
-dodge <- position_dodge(width = 0.65)
+# One panel: four dodged boxes per cell type, coloured by cohort. Medians and
+# lower quartiles sit at exactly 0 for most cells, so a point-and-interval draws
+# every mark growing out of the axis and reads like a bar chart.
+# Cohort palette as used elsewhere in the repo.
+exposure_cols <- c("C19" = "#238B45", "HIV" = "#88419D",
+                   "Influenza" = "#D95F0E", "OP" = "#084594")
+cc_lvls  <- sort(unique(as.character(vp_cc_plot$Exposure)))
+missing_cols <- setdiff(cc_lvls, names(exposure_cols))
+if (length(missing_cols)) {
+  exposure_cols[missing_cols] <- grDevices::grey.colors(length(missing_cols))
+}
+vp_cc_plot$Exposure <- factor(as.character(vp_cc_plot$Exposure), levels = cc_lvls)
 
-p_cc <- ggplot(cc_med, aes(x = Cell_Type, y = median_Condition, colour = Exposure)) +
-  geom_hline(yintercept = 0, colour = "grey85", linewidth = 0.3) +
-  geom_linerange(aes(ymin = q25_Condition, ymax = q75_Condition),
-                 position = dodge, linewidth = 0.6, alpha = 0.9) +
-  geom_point(position = dodge, size = 1.9) +
-  scale_colour_manual(values = cohort_cols, name = NULL) +
+p_cc <- ggplot(vp_cc_plot, aes(x = Cell_Type, y = Condition, fill = Exposure)) +
+  geom_boxplot(outlier.shape = NA, position = position_dodge(width = 0.8),
+               width = 0.7, linewidth = 0.3, colour = "grey25") +
+  scale_fill_manual(values = exposure_cols[cc_lvls], name = NULL) +
+  coord_cartesian(ylim = c(0, cc_ymax)) +
   theme_classic(base_size = 12) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "top",
         plot.subtitle = element_text(size = 8)) +
   labs(
     title = "TF-activity variance attributable to exposure condition, within cell type and cohort",
-    subtitle = cc_sub, x = NULL,
-    y = "Fraction of variance explained\nby condition (median, IQR)"
+    subtitle = paste0(cc_sub, "\nBoxes are quartiles over motifs; whiskers only, ",
+                      "outliers not drawn; axis capped at ", cc_ymax, "."),
+    x = NULL, y = "Fraction of variance\nexplained by condition"
   )
 ggsave(file.path(save_dir, "varpart_within_celltype_by_cohort.pdf"), p_cc,
-  width = 9, height = 3.8)
-
-# distribution version, kept for the response letter rather than the manuscript
-p_cc_box <- ggplot(dplyr::filter(vp_cc, !Cell_Type %in% cc_drop),
-    aes(x = Cell_Type, y = Condition, fill = Cell_Type)) +
-  geom_boxplot(outlier.shape = NA, alpha = 0.9, colour = "grey20") +
-  facet_wrap(~Exposure, ncol = 1) +
-  coord_cartesian(ylim = c(0, 0.45)) +
-  scale_fill_manual(values = cell_type_colors) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 30, hjust = 1),
-        plot.subtitle = element_text(size = 8)) +
-  labs(
-    title = "TF-activity variance attributable to exposure condition, within cell type and cohort",
-    subtitle = paste0(cc_sub, "\nWhiskers only, outliers not drawn; axis capped at 0.45."),
-    x = NULL, y = "Fraction of variance explained by condition"
-  )
-ggsave(file.path(save_dir, "varpart_within_celltype_by_cohort_boxplot.pdf"), p_cc_box,
-  width = 9, height = 10)
+  width = 10, height = 4.2)
 
 message("variancePartition decomposition complete.")
