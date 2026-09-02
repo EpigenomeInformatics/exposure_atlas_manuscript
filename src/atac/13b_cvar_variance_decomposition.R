@@ -387,4 +387,79 @@ ggsave(file.path(save_dir, "varpart_within_celltype_exposureonly.pdf"), p_within
   width = 8, height = 5
 )
 
+# 8. Exposure effect within each cell type, separately per cohort. Within a
+#    cohort, Condition is the stage/severity arm, so this asks how much TF
+#    activity variance that arm explains in each lineage of each cohort.
+cohorts <- levels(droplevels(meta$Exposure))
+vp_cc <- dplyr::bind_rows(lapply(cohorts, function(co) {
+  dplyr::bind_rows(lapply(cell_types, function(ct) {
+    idx <- meta$Exposure == co & meta$Cell_Type == ct
+    m <- droplevels(meta[idx, , drop = FALSE])
+    z <- zmat[, idx, drop = FALSE]
+    if (ncol(z) < 4 || nlevels(m$Condition) < 2) {
+      message("  skip ", co, " / ", ct, " (", ncol(z), " pseudobulks, ",
+        nlevels(m$Condition), " condition level(s))")
+      return(NULL)
+    }
+    zv <- apply(z, 1, var, na.rm = TRUE)
+    z  <- z[is.finite(zv) & zv > 0, , drop = FALSE]
+    if (nrow(z) < 10) return(NULL)
+    # a donor term is estimable only when donors are meaningfully fewer than
+    # pseudobulks; in OP each donor contributes a single sample
+    use_donor <- nlevels(m$Donor) >= 2 && nlevels(m$Donor) <= 0.75 * ncol(z)
+    form <- if (use_donor) ~ (1 | Condition) + (1 | Donor) else ~ (1 | Condition)
+    vp <- tryCatch(as.data.frame(fitExtractVarPartModel(z, form, m)),
+      error = function(e) {
+        message("  ", co, " / ", ct, " failed: ", conditionMessage(e))
+        NULL
+      })
+    if (is.null(vp)) return(NULL)
+    if (is.null(vp$Donor)) vp$Donor <- NA_real_
+    vp$Motif          <- rownames(vp)
+    vp$Exposure       <- co
+    vp$Cell_Type      <- ct
+    vp$n_pseudobulk   <- ncol(z)
+    vp$n_donor        <- nlevels(m$Donor)
+    vp$n_condition    <- nlevels(m$Condition)
+    vp$donor_modelled <- use_donor
+    vp
+  }))
+}))
+
+write.csv(vp_cc, file.path(save_dir, "varpart_within_celltype_by_cohort.csv"),
+  row.names = FALSE)
+
+cc_summary <- vp_cc %>%
+  group_by(Exposure, Cell_Type) %>%
+  summarise(
+    n_pseudobulk     = dplyr::first(n_pseudobulk),
+    n_donor          = dplyr::first(n_donor),
+    n_condition      = dplyr::first(n_condition),
+    donor_modelled   = dplyr::first(donor_modelled),
+    median_Condition = median(Condition),
+    median_Donor     = suppressWarnings(median(Donor, na.rm = TRUE)),
+    median_Residuals = median(Residuals),
+    .groups = "drop"
+  ) %>%
+  arrange(Exposure, desc(median_Condition))
+write.csv(cc_summary,
+  file.path(save_dir, "varpart_within_celltype_by_cohort_summary.csv"),
+  row.names = FALSE)
+message("Exposure-attributable variance within each cell type, per cohort:")
+print(as.data.frame(cc_summary))
+
+p_cc <- ggplot(vp_cc, aes(x = Cell_Type, y = Condition, fill = Cell_Type)) +
+  geom_boxplot(outlier.size = 0.3, alpha = 0.9, colour = "grey20") +
+  facet_wrap(~Exposure, ncol = 1, scales = "free_x") +
+  scale_fill_manual(values = cell_type_colors) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 30, hjust = 1)) +
+  labs(
+    title = "TF-activity variance attributable to exposure condition, within cell type and cohort",
+    x = NULL, y = "Fraction of variance explained by condition"
+  )
+ggsave(file.path(save_dir, "varpart_within_celltype_by_cohort.pdf"), p_cc,
+  width = 9, height = 10)
+
 message("variancePartition decomposition complete.")

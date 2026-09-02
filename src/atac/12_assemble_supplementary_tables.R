@@ -86,71 +86,91 @@ final_layout <- tibble::tribble(
   ~new,          ~old,          ~description,
   "Table S1",    "Table S1",    "Sample metadata of the scATAC-seq dataset",
   "Table S2",    "Table S1B",   paste(
-    "Association of sample-level principal components with known covariates,",
-    "before (IterativeLSI) and after (Harmony) batch correction"),
-  "Table S3",    "Table S2",    paste(
+    "Association of the IterativeLSI and Harmony dimensions with known covariates",
+    "at the sample level, before and after batch correction"),
+  "Table S3",    NA,            paste(
+    "Association of the IterativeLSI and Harmony dimensions with known covariates",
+    "at the sample x cell-type pseudobulk level, the only level at which cell type",
+    "varies, before and after batch correction"),
+  "Table S4",    "Table S1C",   paste(
+    "Correlation of each IterativeLSI and Harmony dimension with per-cell TSS",
+    "enrichment, fragment number and FRIP, across all cells and after subtracting",
+    "each sample's mean from its cells"),
+  "Table S5",    "Table S1D",   paste(
+    "Confound structure among the design and technical variables: cross-tabulation",
+    "of cohort against supplier and per-sample filtering thresholds, and of the",
+    "COVID-19 severity arms against processing batch"),
+  "Table S6",    "Table S1E",   paste(
+    "Performance of the molecular sex classifier: training-set size, leave-one-out",
+    "accuracy with its confidence interval, agreement with the held-out chrY",
+    "threshold, and the marker thresholds used"),
+  "Table S7",    "Table S2",    paste(
     "Cluster-to-cell-type annotation mapping: Jaccard similarity between each",
     "graph-based scATAC cluster and predicted scRNA-seq labels, with final",
     "assigned cell type and cluster size"),
-  "Table S4",    NA,            paste(
+  "Table S8",    NA,            paste(
     "Cell-type composition statistics: per-sample cell-type proportions compared",
     "between each exposure group and its matched within-cohort control",
     "(two-sided Wilcoxon rank-sum test, Bonferroni-adjusted)"),
-  "Table S5",    "Table S3A",   paste(
+  "Table S9",    "Table S3A",   paste(
     "Variance partition of TF motif activity into cell-type, exposure and donor",
     "components (exposure model: ~ Cell_Type + Exposure + Donor, all cohorts)"),
-  "Table S6",    "Table S3B",   paste(
+  "Table S10",   "Table S3B",   paste(
     "Variance partition of TF motif activity into cell-type, stage/severity and",
     "donor components (condition model: ~ Cell_Type + Condition + Donor,",
     "all cohorts)"),
-  "Table S7",    "Table S4",    paste(
+  "Table S11",   NA,            paste(
+    "Variance in TF motif activity attributable to the exposure condition within",
+    "each cell type, computed separately for each cohort",
+    "(~ Condition + Donor, donor fitted where the design supports it)"),
+  "Table S12",   "Table S4",    paste(
     "Pairwise differential TF motif activity (Wilcoxon test of chromVAR deviation",
     "scores) across different cell types"),
-  "Table S8",    "Table S5",    "Differentially accessible genes in different clusters within CD8+ T cells",
-  "Table S9",    "Table S6",    "Differentially accessible cCREs in different clusters within CD8+ T cells",
-  "Table S10",   "Table S7",    paste(
+  "Table S13",   "Table S5",    "Differentially accessible genes in different clusters within CD8+ T cells",
+  "Table S14",   "Table S6",    "Differentially accessible cCREs in different clusters within CD8+ T cells",
+  "Table S15",   "Table S7",    paste(
     "Differential gene activity and gene expression of protein-coding genes",
     "for COVID-19 severe vs control in CD14+ monocytes"),
-  "Table S11",   "Table S8",    "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
-  "Table S12",   NA,            paste(
+  "Table S16",   "Table S8",    "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
+  "Table S17",   NA,            paste(
     "Balance of the per-sample quality-control metrics between the groups compared",
     "in each within-cohort differential analysis: median and maximum standardised",
     "mean difference, the median expected under the null at these group sizes, and",
     "the number of comparisons in which the metric is imbalanced by permutation"),
-  "Table S13",   NA,            paste(
+  "Table S18",   NA,            paste(
     "Differentially accessible regions re-called with the per-sample quality-control",
     "metrics included in the differential model, compared with the unadjusted calls,",
     "per cell type, comparison and adjustment set: region counts, overlap, direction",
     "concordance and the correlation of fold changes"),
-  "Table S14",   "Table S9",    paste(
+  "Table S19",   "Table S9",    paste(
     "Bulk RNA-seq differential expression results for CD14+ monocytes",
     "(filtered: adj p < 0.05 and |log2FC| > 0.5)"),
-  "Table S15",   "Table S3C",   paste(
+  "Table S20",   "Table S3C",   paste(
     "Variance partition of TF motif activity into cell-type, severity and donor",
     "components within the COVID-19 cohort only",
     "(severity model: ~ Cell_Type + Condition + Donor)"),
-  "Table S16",   NA,            paste(
+  "Table S21",   NA,            paste(
     "Per-cell annotation of the snmC-seq dataset: cell identifier, assigned cell",
     "type, donor sex and age, condition, mapping and coverage statistics, and",
     "global mCG / mCH / CCC methylation rates"),
-  "Table S17",   NA,            paste(
+  "Table S22",   NA,            paste(
     "Per-sample summary of the snmC-seq dataset: cohort, subject, timepoint,",
     "exposure level, donor sex and age, sequencing libraries, and the number of",
     "profiled nuclei in each FACS-sorted cell population, with per-sample means of",
     "the mapping, coverage and methylation-rate metrics"),
-  "Table S18",   NA,            paste(
+  "Table S23",   NA,            paste(
     "Quality-control statistics for each snmC-seq pseudobulk (one per cell type",
     "x sample): donor, exposure group, cells pooled, per-cell sequencing depth",
     "and mapping metrics, CpGs called, CpG coverage and its distribution, global",
     "mCG level, and the CCC rate as the bisulfite non-conversion estimate"),
-  "Table S19",   NA,            paste(
+  "Table S24",   NA,            paste(
     "snmC-seq pseudobulk quality control summarised per exposure group and cell",
     "type: number of pseudobulks and donors, cells pooled, CpGs called and global",
     "mCG level"),
-  "Table S20",   "Table S10",   paste(
+  "Table S25",   "Table S10",   paste(
     "Pairwise Wilcoxon test between one vs other cell type manner for methylTFR",
     "and chromVAR z-scores"),
-  "Table S21",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes"
+  "Table S26",   "Table S11",   "Differentially methylated cCREs in CD14+ monocytes"
 )
 
 ## ---- 2. New table content ---------------------------------------------------
@@ -382,21 +402,37 @@ message("Covariate balance: ", nrow(bal_supp), " metrics, ",
         sum(bal_supp$`Comparisons imbalanced (permutation)`), " imbalanced comparisons in total")
 message("Confounder-adjusted DARs: ", nrow(adj_supp), " cell x comparison x design rows")
 
+ct_assoc_csv <- file.path(fig_dir, "dim_covariate_association_by_celltype.csv")
+cc_varpart_csv <- file.path(repo_dir, "sample_annots/cvar_diffs",
+  "varpart_within_celltype_by_cohort.csv")
+read_optional <- function(path, label) {
+  if (!file.exists(path)) {
+    warning(label, " not found at ", path, "; that sheet will be skipped.")
+    return(NULL)
+  }
+  read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+}
+ct_assoc_supp   <- read_optional(ct_assoc_csv, "Cell-type association table")
+cc_varpart_supp <- read_optional(cc_varpart_csv, "Per-cohort variance partition")
+
 new_content <- list(
-  "Table S4"   = comp_supp,
-  "Table S16"  = allc_supp,
-  "Table S17"  = allc_sample_supp,
-  "Table S18"  = pbqc_supp,
-  "Table S19"  = pbqc_grp_supp,
-  "Table S12"  = bal_supp,
-  "Table S13"  = adj_supp
+  "Table S3"   = ct_assoc_supp,
+  "Table S8"   = comp_supp,
+  "Table S11"  = cc_varpart_supp,
+  "Table S17"  = bal_supp,
+  "Table S18"  = adj_supp,
+  "Table S21"  = allc_supp,
+  "Table S22"  = allc_sample_supp,
+  "Table S23"  = pbqc_supp,
+  "Table S24"  = pbqc_grp_supp
 )
+new_content <- new_content[!vapply(new_content, is.null, logical(1))]
 
 ## ---- 3. Rename existing sheets ---------------------------------------------
 wb <- openxlsx::loadWorkbook(supp_in)
 
 if (all(names(new_content) %in% names(wb)) &&
-    identical(dim(openxlsx::readWorkbook(wb, "Table S4")), dim(comp_supp))) {
+    identical(dim(openxlsx::readWorkbook(wb, "Table S8")), dim(comp_supp))) {
   message("Workbook already assembled; nothing to do.")
 } else {
   # temp prefix first: the old and new names overlap (old S4 -> S7 while an
