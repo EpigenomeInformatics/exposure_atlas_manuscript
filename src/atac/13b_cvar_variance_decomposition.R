@@ -437,6 +437,8 @@ cc_summary <- vp_cc %>%
     n_condition      = dplyr::first(n_condition),
     donor_modelled   = dplyr::first(donor_modelled),
     median_Condition = median(Condition),
+    q25_Condition    = as.numeric(quantile(Condition, 0.25)),
+    q75_Condition    = as.numeric(quantile(Condition, 0.75)),
     median_Donor     = suppressWarnings(median(Donor, na.rm = TRUE)),
     median_Residuals = median(Residuals),
     .groups = "drop"
@@ -448,18 +450,66 @@ write.csv(cc_summary,
 message("Exposure-attributable variance within each cell type, per cohort:")
 print(as.data.frame(cc_summary))
 
-p_cc <- ggplot(vp_cc, aes(x = Cell_Type, y = Condition, fill = Cell_Type)) +
-  geom_boxplot(outlier.size = 0.3, alpha = 0.9, colour = "grey20") +
-  facet_wrap(~Exposure, ncol = 1, scales = "free_x") +
+# Plasma is dropped: too few cells per pseudobulk, and 05_pseudobulk.R excludes
+# it elsewhere in the pipeline
+cc_drop <- c("Plasma")
+cc_med  <- cc_summary %>% dplyr::filter(!Cell_Type %in% cc_drop)
+n_motif <- nrow(vp_cc) / dplyr::n_distinct(paste(vp_cc$Exposure, vp_cc$Cell_Type))
+
+cc_sub <- paste0(
+  "Median over ", round(n_motif), " TF motifs per cell type and cohort. ",
+  "Plasma excluded (too few cells per pseudobulk).\n",
+  "Donor is fitted only where the design supports it (donor_modelled in the ",
+  "accompanying table): cohorts without it carry\nbetween-donor variation in the ",
+  "condition fraction, so values compare between cell types but not between cohorts."
+)
+
+# One compact panel: median with the interquartile range, dodged by cohort.
+# A tile or a bar would show only the median, and with medians near zero the
+# spread is what separates a flat null from a low median with a long tail.
+cc_lvls <- sort(unique(as.character(cc_med$Exposure)))
+cc_med$Exposure <- factor(as.character(cc_med$Exposure), levels = cc_lvls)
+cohort_cols <- setNames(
+  rep(c("#E64B35", "#4DBBD5", "#00A087", "#3C5488"), length.out = length(cc_lvls)),
+  cc_lvls
+)
+dodge <- position_dodge(width = 0.65)
+
+p_cc <- ggplot(cc_med, aes(x = Cell_Type, y = median_Condition, colour = Exposure)) +
+  geom_hline(yintercept = 0, colour = "grey85", linewidth = 0.3) +
+  geom_linerange(aes(ymin = q25_Condition, ymax = q75_Condition),
+                 position = dodge, linewidth = 0.6, alpha = 0.9) +
+  geom_point(position = dodge, size = 1.9) +
+  scale_colour_manual(values = cohort_cols, name = NULL) +
+  theme_classic(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "top",
+        plot.subtitle = element_text(size = 8)) +
+  labs(
+    title = "TF-activity variance attributable to exposure condition, within cell type and cohort",
+    subtitle = cc_sub, x = NULL,
+    y = "Fraction of variance explained\nby condition (median, IQR)"
+  )
+ggsave(file.path(save_dir, "varpart_within_celltype_by_cohort.pdf"), p_cc,
+  width = 9, height = 3.8)
+
+# distribution version, kept for the response letter rather than the manuscript
+p_cc_box <- ggplot(dplyr::filter(vp_cc, !Cell_Type %in% cc_drop),
+    aes(x = Cell_Type, y = Condition, fill = Cell_Type)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.9, colour = "grey20") +
+  facet_wrap(~Exposure, ncol = 1) +
+  coord_cartesian(ylim = c(0, 0.45)) +
   scale_fill_manual(values = cell_type_colors) +
   theme_classic(base_size = 12) +
   theme(legend.position = "none",
-        axis.text.x = element_text(angle = 30, hjust = 1)) +
+        axis.text.x = element_text(angle = 30, hjust = 1),
+        plot.subtitle = element_text(size = 8)) +
   labs(
     title = "TF-activity variance attributable to exposure condition, within cell type and cohort",
+    subtitle = paste0(cc_sub, "\nWhiskers only, outliers not drawn; axis capped at 0.45."),
     x = NULL, y = "Fraction of variance explained by condition"
   )
-ggsave(file.path(save_dir, "varpart_within_celltype_by_cohort.pdf"), p_cc,
+ggsave(file.path(save_dir, "varpart_within_celltype_by_cohort_boxplot.pdf"), p_cc_box,
   width = 9, height = 10)
 
 message("variancePartition decomposition complete.")
