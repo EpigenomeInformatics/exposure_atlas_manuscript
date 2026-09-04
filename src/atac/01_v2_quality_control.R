@@ -1517,12 +1517,13 @@ message("Wrote association results to: ", out_xlsx)
 #####################################################################
 message("Significant MARGINAL dimension-covariate associations (adj. p < 0.05):")
 print(subset(assoc_df, p_adj < 0.05,
-  select = c(embedding, Dim, covariate, adj_r2, p_adj, n, n_group, unit)))
+  select = c(embedding, Dim, covariate, r2, adj_r2, p_adj, n, n_group, unit)))
 
 # does any covariate survive once cohort is controlled for?
 message("Significant COHORT-ADJUSTED associations (non-cohort covariates, adj. p < 0.05):")
 print(subset(assoc_df, covariate != "Cohort" & p_adjCohort_bh < 0.05,
-  select = c(embedding, Dim, covariate, adj_r2_partial_adjCohort, p_adjCohort_bh, n, unit)))
+  select = c(embedding, Dim, covariate, r2_partial_adjCohort,
+    adj_r2_partial_adjCohort, p_adjCohort_bh, n, unit)))
 
 message("Cohort association before vs after Harmony (total between-sample variance):")
 print(as.data.frame(subset(var_summary, covariate == "Cohort",
