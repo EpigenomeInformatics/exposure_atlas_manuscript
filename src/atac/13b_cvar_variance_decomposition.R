@@ -240,6 +240,39 @@ if (sum(covid_mask) > 10) {
   plot_vp_box(vpC_df, "COVID-19: lineage vs severity vs donor",
               "varpart_boxplot_COVID_severity.pdf")
 
+  ## ---- Model C3: severity without donor ----
+  # Donor is nested in Condition: each COVID donor sits in exactly one severity
+  # arm, so in model C the 22-level donor term absorbs what the 4-level
+  # condition term could explain. C therefore gives a LOWER bound on severity
+  # and C3, which omits donor, gives an UPPER bound. The design cannot separate
+  # them further.
+  formC3  <- ~ (1 | Cell_Type) + (1 | Condition)
+  vpC3    <- fitExtractVarPartModel(zmat_c, formC3, meta_c)
+  vpC3_df <- as.data.frame(vpC3); vpC3_df$Motif <- rownames(vpC3_df)
+  write.csv(vpC3_df,
+    file.path(save_dir, "varpart_per_motif_COVID_severity_nodonor.csv"),
+    row.names = FALSE)
+  plot_vp_box(vpC3_df, "COVID-19: lineage vs severity (donor omitted)",
+              "varpart_boxplot_COVID_severity_nodonor.pdf")
+
+  sh3 <- intersect(vpC_df$Motif, vpC3_df$Motif)
+  j1  <- match(sh3, vpC_df$Motif); j3 <- match(sh3, vpC3_df$Motif)
+  bounds <- data.frame(
+    Quantity = c("Condition (lower bound, donor fitted)",
+                 "Condition (upper bound, donor omitted)",
+                 "Donor", "Cell_Type (donor fitted)", "Residuals (donor fitted)"),
+    Median = c(median(vpC_df$Condition[j1]), median(vpC3_df$Condition[j3]),
+               median(vpC_df$Donor[j1]), median(vpC_df$Cell_Type[j1]),
+               median(vpC_df$Residuals[j1]))
+  )
+  write.csv(bounds, file.path(save_dir, "varpart_COVID_severity_bounds.csv"),
+    row.names = FALSE)
+  message("COVID-19 severity, bracketed by the two models (", length(sh3), " motifs):")
+  print(bounds)
+  message(sprintf(
+    "Severity explains between %.1f%% and %.1f%% of TF-activity variance; donor %.1f%%.",
+    100 * bounds$Median[1], 100 * bounds$Median[2], 100 * bounds$Median[3]))
+
   ## ---- Model C2: processing batch in place of donor ----
   # Batch cannot be ADDED to C: every sample of a donor shares a batch, so
   # (1|Donor) would absorb it. Swapping donor out identifies batch instead.

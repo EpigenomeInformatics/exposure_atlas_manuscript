@@ -999,6 +999,130 @@ write.csv(assoc_df,
 
 
 #####################################################################
+# PART 1B -- THE SAME TESTS RUN AT THE CELL LEVEL, FOR COMPARISON
+#####################################################################
+# Repeats every donor-level test with the sample value copied onto each of its
+# cells, which is the alternative that gets proposed for cell-level embeddings.
+# The point is the comparison: the effect size barely moves while the p-value
+# collapses, because the extra rows are copies rather than observations.
+# Set SKIP_CELL_LEVEL_DEMO=1 to skip it.
+do_cell_demo <- !nzchar(Sys.getenv("SKIP_CELL_LEVEL_DEMO"))
+
+if (do_cell_demo) {
+  demo_rows <- list()
+  for (emb in embeddings_to_test) {
+    reddim      <- getReducedDims(project, reducedDims = emb, corCutOff = 1)
+    cell_sample <- as.character(getCellColData(project, select = "Sample", drop = TRUE))
+    ci          <- match(cell_sample, covar$arrow_name)
+    kk          <- min(n_dims, ncol(reddim))
+
+    demo_covs <- list(
+      Cohort          = covar$exposure_type[ci],
+      Control_status  = covar$control_status[ci],
+      Exposure_group  = covar$exposure_group[ci],
+      Age             = covar$Age_numeric[ci],
+      Sex_observed    = covar$Sex[ci],
+      Sex_predicted   = covar$Sex_predicted[ci],
+      Days_from_onset = covar$sampling_day[ci]
+    )
+
+    for (i in seq_len(kk)) {
+      y <- reddim[, i]
+      for (cn in names(demo_covs)) {
+        x  <- demo_covs[[cn]]
+        ok <- !is.na(y) & !is.na(x)
+        if (sum(ok) < 10) next
+        xx <- if (is.factor(x)) droplevels(x[ok]) else as.numeric(x[ok])
+        if (is.factor(xx) && nlevels(xx) < 2) next
+        if (!is.factor(xx) && stats::sd(xx) == 0) next
+        fit <- stats::lm(y[ok] ~ xx)
+        fs  <- summary(fit)$fstatistic
+        demo_rows[[length(demo_rows) + 1L]] <- data.frame(
+          embedding = emb, Dim = paste0("Dim", i), covariate = cn,
+          r2_cell = summary(fit)$r.squared,
+          p_cell  = if (is.null(fs)) NA_real_ else
+            stats::pf(fs[1L], fs[2L], fs[3L], lower.tail = FALSE),
+          n_cells = sum(ok), stringsAsFactors = FALSE
+        )
+      }
+    }
+    message(sprintf("%s: cell-level comparison fitted on %d cells", emb, length(y)))
+  }
+
+  demo_df <- dplyr::bind_rows(demo_rows) %>%
+    dplyr::group_by(embedding, covariate) %>%
+    dplyr::mutate(p_cell_adj = p.adjust(p_cell, method = "BH")) %>%
+    dplyr::ungroup()
+
+  cmp <- assoc_df %>%
+    dplyr::select(embedding, Dim, covariate, r2, p_adj, n, n_group, unit) %>%
+    dplyr::inner_join(demo_df, by = c("embedding", "Dim", "covariate")) %>%
+    dplyr::rename(r2_grouped = r2, p_grouped = p_adj,
+                  n_grouped = n, n_groups = n_group, unit_grouped = unit)
+
+  write.csv(cmp,
+    file = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.csv"),
+    row.names = FALSE)
+
+  message("Cell-level vs grouped testing, median over dimensions and covariates:")
+  print(cmp %>%
+    dplyr::group_by(embedding) %>%
+    dplyr::summarise(
+      median_r2_grouped   = round(median(r2_grouped, na.rm = TRUE), 3),
+      median_r2_cell      = round(median(r2_cell, na.rm = TRUE), 3),
+      median_p_grouped    = signif(median(p_grouped, na.rm = TRUE), 3),
+      median_p_cell       = signif(median(p_cell_adj, na.rm = TRUE), 3),
+      sig_grouped         = sum(p_grouped < 0.05, na.rm = TRUE),
+      sig_cell            = sum(p_cell_adj < 0.05, na.rm = TRUE),
+      n_tests             = dplyr::n(), .groups = "drop") %>%
+    as.data.frame())
+
+  # Paired plot: one segment per covariate x dimension joining the two schemes.
+  # Segments are near-vertical (the effect size hardly moves) and very long
+  # (the p-value does), which is the whole argument in one picture.
+  demo_cap <- 300
+  nl10 <- function(p) pmin(-log10(pmax(p, .Machine$double.xmin)), demo_cap)
+  pair_id <- paste(cmp$embedding, cmp$Dim, cmp$covariate, sep = "|")
+  cmp_long <- rbind(
+    data.frame(pair = pair_id, embedding = cmp$embedding, covariate = cmp$covariate,
+      scheme = "grouped (donor / sample)", r2 = cmp$r2_grouped,
+      negp = nl10(cmp$p_grouped), stringsAsFactors = FALSE),
+    data.frame(pair = pair_id, embedding = cmp$embedding, covariate = cmp$covariate,
+      scheme = "cell level (sample value repeated per cell)", r2 = cmp$r2_cell,
+      negp = nl10(cmp$p_cell_adj), stringsAsFactors = FALSE)
+  )
+  cmp_long$scheme <- factor(cmp_long$scheme,
+    levels = c("grouped (donor / sample)", "cell level (sample value repeated per cell)"))
+
+  p_demo <- ggplot(cmp_long, aes(x = r2, y = negp)) +
+    geom_line(aes(group = pair), colour = "grey80", linewidth = 0.3) +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed",
+               colour = "grey40", linewidth = 0.4) +
+    geom_point(aes(colour = scheme), size = 1.7, alpha = 0.85) +
+    scale_colour_manual(values = c("grouped (donor / sample)" = "#3C5488",
+      "cell level (sample value repeated per cell)" = "#E64B35"), name = NULL) +
+    facet_wrap(~embedding) +
+    theme_classic(base_size = 12) +
+    theme(legend.position = "top", plot.subtitle = element_text(size = 8)) +
+    labs(
+      title = "Testing the same covariates at the cell level inflates significance without changing effect size",
+      subtitle = paste0(
+        "One grey segment per covariate and dimension, joining the two ways of testing it. ",
+        "Dashed line, adjusted p = 0.05.\n",
+        "Segments are near-vertical: repeating a sample's value across its cells leaves the variance ",
+        "explained almost unchanged\nwhile moving the p-value by tens of orders of magnitude, ",
+        "because the added rows are copies rather than independent observations."
+      ),
+      x = "Variance explained (R\u00b2)",
+      y = expression(-log[10] ~ "(BH-adjusted p)")
+    )
+  ggsave(p_demo,
+    filename = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.pdf"),
+    width = 10, height = 5.5, units = "in", dpi = 300)
+}
+
+
+#####################################################################
 # PART 2 -- PSEUDOBULK (SAMPLE x CELL TYPE) ASSOCIATION
 #####################################################################
 # QC is recomputed per pseudobulk and the grouping is the SAMPLE, so
