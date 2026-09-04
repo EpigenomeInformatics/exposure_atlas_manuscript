@@ -1073,8 +1073,6 @@ write.csv(assoc_df,
 #####################################################################
 # PART 2 -- PSEUDOBULK (SAMPLE x CELL TYPE) ASSOCIATION
 #####################################################################
-# QC is recomputed per pseudobulk and the grouping is the SAMPLE, so
-# cohort/age/sex collapse back instead of repeating across ~10 pseudobulks.
 
 min_pb_cells <- 20
 assoc_ct_results <- list()
@@ -1096,7 +1094,6 @@ for (emb in embeddings_to_test) {
   pb_emb <- pb_emb[keep, , drop = FALSE]
   pb_ncells <- n_grp[keep]
 
-  # QC summarised at the SAME unit as the embedding rows
   qc_pb <- cd[ok, ] %>%
     dplyr::mutate(.grp = grp[ok]) %>%
     dplyr::group_by(.grp) %>%
@@ -1120,23 +1117,22 @@ for (emb in embeddings_to_test) {
   cvp       <- covar[match(pb_sample, covar$arrow_name), ]
 
   covariate_cols <- list(
-    CellType          = factor(pb_celltype),   # varies within sample
-    Cohort            = cvp$exposure_type,     # constant within sample
+    CellType          = factor(pb_celltype),
+    Cohort            = cvp$exposure_type,
     Control_status    = cvp$control_status,
     Exposure_group    = cvp$exposure_group,
     Age               = cvp$Age_numeric,
     Sex_observed      = cvp$Sex,
     Sex_predicted     = cvp$Sex_predicted,
     Days_from_onset   = cvp$sampling_day,
-    QC_nCells         = pb_ncells,             # per pseudobulk
-    QC_meanTSS        = qc_pb$pb_TSS,          # per pseudobulk
-    QC_meanLog10Frags = qc_pb$pb_log10_nFrags, # per pseudobulk
-    QC_meanFRIP       = qc_pb$pb_FRIP          # per pseudobulk
+    QC_nCells         = pb_ncells,
+    QC_meanTSS        = qc_pb$pb_TSS,
+    QC_meanLog10Frags = qc_pb$pb_log10_nFrags,
+    QC_meanFRIP       = qc_pb$pb_FRIP
   )
 
   res <- do.call(rbind, lapply(seq_len(kk), function(i) {
     do.call(rbind, lapply(names(covariate_cols), function(cn) {
-      # group = sample: sample-constant covariates collapse, others get (1|sample)
       a <- assoc_test(dims[, i], covariate_cols[[cn]], pb_sample,
                       collapsed_unit = "per sample",
                       obs_unit = "per pseudobulk, sample-adjusted")
@@ -1172,23 +1168,17 @@ var_summary_ct <- assoc_ct_df %>%
     .groups = "drop"
   ) %>%
   dplyr::arrange(embedding, dplyr::desc(total_var))
-message("Total pseudobulk-level variance associated with each covariate:")
+
 print(as.data.frame(var_summary_ct))
 write.csv(var_summary_ct,
   file = file.path(repo_dir, "figures/dim_covariate_variance_summary_by_celltype.csv"),
   row.names = FALSE
 )
 
-
 #####################################################################
 # PART 3 -- THE SAME COVARIATES TESTED AT THE CELL LEVEL
 #####################################################################
-# Same rows as the pseudobulk panel, tested with one observation per CELL.
-# Covariates that genuinely vary between cells (cell type, and each cell's own
-# TSS enrichment, fragment count and FRIP) are used at their real per-cell
-# values. Covariates recorded once per sample are copied onto that sample's
-# cells, which is the alternative this figure is here to evaluate.
-# Set SKIP_CELL_LEVEL_DEMO=1 to skip.
+
 do_cell_demo <- !nzchar(Sys.getenv("SKIP_CELL_LEVEL_DEMO"))
 
 if (do_cell_demo) {
@@ -1215,8 +1205,7 @@ if (do_cell_demo) {
       QC_meanLog10Frags = log10(cd$nFrags),
       QC_meanFRIP       = cd$FRIP
     )
-    # TRUE where the cell-level version uses each cell's own value rather than
-    # a sample value copied onto its cells
+    
     per_cell <- c(CellType = TRUE, Cohort = FALSE, Control_status = FALSE,
       Exposure_group = FALSE, Age = FALSE, Sex_observed = FALSE,
       Sex_predicted = FALSE, Days_from_onset = FALSE, QC_nCells = FALSE,
@@ -1243,7 +1232,6 @@ if (do_cell_demo) {
         )
       }
     }
-    message(sprintf("%s: cell-level comparison over %d cells", emb, nrow(cd)))
   }
 
   demo_df <- dplyr::bind_rows(demo_rows) %>%
@@ -1251,8 +1239,6 @@ if (do_cell_demo) {
     dplyr::mutate(p_cell_adj = p.adjust(p_cell, method = "BH")) %>%
     dplyr::ungroup()
 
-  # grouped column comes from the pseudobulk panel, so the left half of this
-  # figure matches the published covariate panel exactly
   cmp <- assoc_ct_df %>%
     dplyr::select(embedding, Dim, covariate, r2, p_adj, n, n_group, unit) %>%
     dplyr::inner_join(demo_df, by = c("embedding", "Dim", "covariate")) %>%
@@ -1293,20 +1279,12 @@ if (do_cell_demo) {
           plot.subtitle = element_text(size = 8)) +
     labs(
       title = "The same covariates tested per pseudobulk and per cell",
-      subtitle = paste0(
-        "Tile label = variance explained (R\u00b2); shading = BH-adjusted significance.\n",
-        "Cell type and the three quality metrics use each cell's own value. The remaining covariates are ",
-        "recorded once per\nsample and are copied onto that sample's cells; those rows turn significant ",
-        "while the variance they explain falls,\nbecause the added rows are copies rather than independent ",
-        "observations."
-      ),
       x = NULL, y = NULL
     )
   ggsave(p_demo,
     filename = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.pdf"),
     width = 12, height = 7, units = "in", dpi = 300)
 
-  message("Significant tests under each scheme:")
   print(cmp_grid %>%
     dplyr::group_by(embedding, scheme, per_cell_value) %>%
     dplyr::summarise(n_tests = dplyr::n(),
@@ -1315,15 +1293,10 @@ if (do_cell_demo) {
     as.data.frame())
 }
 
-
-
-
 #####################################################################
 # FIGURES -- association heatmaps
 #####################################################################
-# p can underflow to 0 and -log10(0) is Inf, which ggplot paints as missing.
 
-# label each row with the unit the test was run on
 add_row_label <- function(d) {
   u <- d %>%
     dplyr::group_by(covariate) %>%
@@ -1354,14 +1327,6 @@ p_assoc <- ggplot(assoc_plot_df, aes(x = Dim, y = row_label, fill = neglog10(p_a
   labs(
     title = paste0("Association of ", paste(embeddings_to_test, collapse = " / "),
                    " dimensions with known covariates"),
-    subtitle = paste0(
-      "Columns are the LSI / Harmony dimensions themselves (per-sample means), not principal components of them.\n",
-      "Tile label = variance explained (partial R^2). Shading = BH-adjusted significance, which already\n",
-      "accounts for the degrees of freedom each covariate uses. Adjusted R^2 is in Table S1B.\n",
-      "Bracketed label = one observation in that test. 'per donor': the covariate is constant within a\n",
-      "donor, so repeat draws are collapsed. 'per sample, donor-adjusted': the covariate varies within a\n",
-      "donor, so samples are kept separate and a donor random intercept absorbs the repeated sampling."
-    ),
     x = NULL, y = NULL
   ) +
   theme_classic() +
@@ -1388,11 +1353,6 @@ p_assoc_ct <- ggplot(assoc_ct_plot_df,
   scale_y_discrete(limits = order_rows(assoc_ct_plot_df)) +
   labs(
     title = "Association of pseudobulk (sample x cell type) dimensions with covariates",
-    subtitle = paste0(
-      "Pseudobulks of >= ", min_pb_cells, " cells. Tile label = variance explained (partial R^2); shading = BH-adjusted significance.\n",
-      "Cell type and the QC metrics vary within a sample and are tested per pseudobulk with a sample random intercept;\n",
-      "cohort, age and sex are constant within a sample and are collapsed back, so they are not counted once per pseudobulk."
-    ),
     x = NULL, y = NULL
   ) +
   theme_classic() +
@@ -1404,129 +1364,15 @@ ggsave(p_assoc_ct,
   width = 10, height = 8, units = "in", dpi = 300
 )
 
-
-#####################################################################
-# SUPPLEMENTARY TABLE OUTPUT
-#####################################################################
-assoc_supp <- assoc_df %>%
-  dplyr::transmute(
-    Embedding = embedding,
-    Dimension = Dim,
-    `Share of between-sample variance (%)` = round(100 * var_share_between_samples, 2),
-    `|cor| with log10(nFrags), cell level` = round(depth_cor, 3),
-    Covariate = covariate,
-    `Unit of observation` = unit,
-    `R2 (marginal)` = round(r2, 3),
-    `Adjusted R2 (marginal)` = round(adj_r2, 3),
-    `p (marginal, BH)` = signif(p_adj, 3),
-    `Partial R2 (cohort-adjusted)` = round(r2_partial_adjCohort, 3),
-    `Adjusted partial R2 (cohort-adjusted)` = round(adj_r2_partial_adjCohort, 3),
-    `p (cohort-adjusted, BH)` = signif(p_adjCohort_bh, 3),
-    `n observations` = n,
-    `n groups` = n_group
-  ) %>%
-  dplyr::arrange(
-    Embedding, factor(Dimension, levels = paste0("Dim", seq_len(n_dims))), Covariate
-  )
-
-wb <- openxlsx::loadWorkbook(suppTables) # keeps all existing sheets intact
-
-# fix the influenza timepoint mislabel: the final timepoint is day 28, not 30
-s1_now  <- openxlsx::readWorkbook(wb, sheet = "Table S1")
-rec_col <- which(names(s1_now) == "record_id")
-if (length(rec_col) == 1) {
-  fixed_rec <- sub("day 30 after challenge", "day 28 after challenge",
-    as.character(s1_now$record_id)
-  )
-  n_fixed <- sum(fixed_rec != as.character(s1_now$record_id), na.rm = TRUE)
-  openxlsx::writeData(wb, "Table S1", x = fixed_rec, startCol = rec_col, startRow = 2)
-  message("Corrected 'day 30' -> 'day 28' in Table S1 record_id for ", n_fixed, " row(s)")
-}
-
-new_cols <- data.frame(
-  # Donor_ID: HIV is longitudinal and some C19 donors were sampled twice
-  Donor_ID = covar$donor_id,
-  Age_reported = covar$Age_reported,
-  Sex_reported = as.character(covar$Sex),
-  Sampling_day_rel_onset = covar$sampling_day,
-  Onset_reference = covar$onset_reference,
-  Viral_load = covar$viral_load,
-  # processing batch, C19 only (from sample_annots/ATAC_metadata_covid.csv)
-  Processing_batch = as.character(covar$processing_batch),
-  # full sex-call detail stays in figures/sex_prediction_metrics.csv
-  Sex_predicted = as.character(covar$Sex_predicted),
-  P_male = covar$p_male,
-  chrY_fragments = covar$chrY,
-  chrX_fragments = covar$chrX,
-  XIST_fragments = covar$xist,
-  chrY_fraction = signif(covar$chrY_frac, 4),
-  XIST_fraction = signif(covar$xist_frac, 4),
-  chrY_chrX_ratio = signif(covar$chrY_chrX_ratio, 4),
-  Sex_metadata_flag = covar$sex_flag,
-  stringsAsFactors = FALSE
-)
-# cells behind each sample x cell-type pseudobulk, one column per cell type
-new_cols <- cbind(new_cols, as.data.frame(covar)[, pb_count_cols, drop = FALSE])
-
-# GUARD: written at a column OFFSET, so covar must stay row-aligned with the sheet
-if (nrow(covar) != nrow(s1_now)) {
-  stop(sprintf(
-    "Table S1 has %d rows but covar has %d: a join above changed the row count. Not writing.",
-    nrow(s1_now), nrow(covar)
-  ))
-}
-if ("arrow_name" %in% names(s1_now) &&
-    !identical(as.character(covar$arrow_name), as.character(s1_now$arrow_name))) {
-  stop("covar is no longer in Table S1 row order; the positional append would misalign. Not writing.")
-}
-# refuse rather than appending a second copy of the same columns
-clash <- intersect(names(new_cols), names(s1_now))
-if (length(clash)) {
-  stop("Table S1 already contains: ", paste(clash, collapse = ", "),
-       ". Start from the pristine All_Supplementary_Tables.xlsx rather than an ",
-       "already-updated copy, or remove those columns first.")
-}
-
-s1_ncol <- ncol(s1_now)
-openxlsx::writeData(wb, "Table S1", x = new_cols, startCol = s1_ncol + 1, startRow = 1)
-message("Added ", ncol(new_cols), " column(s) to Table S1 (",
-  length(pb_count_cols), " of them per-cell-type pseudobulk counts)")
-
-write_sheet <- function(wb, name, df) {
-  if (name %in% names(wb)) openxlsx::removeWorksheet(wb, name)
-  openxlsx::addWorksheet(wb, name)
-  openxlsx::writeData(wb, name, df, withFilter = TRUE,
-    headerStyle = openxlsx::createStyle(textDecoration = "bold"))
-  openxlsx::setColWidths(wb, name, cols = seq_along(df), widths = "auto")
-}
-
-write_sheet(wb, "Table S1B", assoc_supp)          # per-dimension associations
-write_sheet(wb, "Table S1C", as.data.frame(depth_cor_df))  # depth correlations
-if (exists("confound_rows") && !is.null(confound_rows)) {
-  write_sheet(wb, "Table S1D", as.data.frame(confound_rows))               # confound structure
-}
-write_sheet(wb, "Table S1E", sex_lda_metrics)                              # sex-classifier performance
-
-out_xlsx <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables_updated.xlsx")
-openxlsx::saveWorkbook(wb, out_xlsx, overwrite = TRUE)
-message("Wrote association results to: ", out_xlsx)
-
-
 #####################################################################
 # CONSOLE SUMMARY
 #####################################################################
-message("Significant MARGINAL dimension-covariate associations (adj. p < 0.05):")
 print(subset(assoc_df, p_adj < 0.05,
   select = c(embedding, Dim, covariate, r2, adj_r2, p_adj, n, n_group, unit)))
 
-# does any covariate survive once cohort is controlled for?
-message("Significant COHORT-ADJUSTED associations (non-cohort covariates, adj. p < 0.05):")
 print(subset(assoc_df, covariate != "Cohort" & p_adjCohort_bh < 0.05,
   select = c(embedding, Dim, covariate, r2_partial_adjCohort,
     adj_r2_partial_adjCohort, p_adjCohort_bh, n, unit)))
 
-message("Cohort association before vs after Harmony (total between-sample variance):")
 print(as.data.frame(subset(var_summary, covariate == "Cohort",
   select = c(embedding, covariate, total_var_marginal, max_r2, max_r2_Dim))))
-
-#####################################################################
