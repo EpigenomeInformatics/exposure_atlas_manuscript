@@ -835,6 +835,18 @@ safe_at_max <- function(lab, v) {
 }
 
 
+p_cap <- 50
+neglog10 <- function(p, cap = p_cap) {
+  pmin(-log10(pmax(p, .Machine$double.xmin)), cap)
+}
+# design covariates first, then donor, then technical
+covariate_order <- c(
+  "CellType", "Cohort", "Control_status", "Exposure_group",
+  "Age", "Sex_observed", "Sex_predicted", "Days_from_onset",
+  "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
+)
+
+
 #####################################################################
 # PART 1 -- DONOR- AND SAMPLE-LEVEL ASSOCIATION WITH THE EMBEDDING DIMS
 #####################################################################
@@ -1077,48 +1089,47 @@ if (do_cell_demo) {
       n_tests             = dplyr::n(), .groups = "drop") %>%
     as.data.frame())
 
-  # Paired plot: one segment per covariate x dimension joining the two schemes.
-  # Segments are near-vertical (the effect size hardly moves) and very long
-  # (the p-value does), which is the whole argument in one picture.
-  demo_cap <- 300
-  nl10 <- function(p) pmin(-log10(pmax(p, .Machine$double.xmin)), demo_cap)
-  pair_id <- paste(cmp$embedding, cmp$Dim, cmp$covariate, sep = "|")
-  cmp_long <- rbind(
-    data.frame(pair = pair_id, embedding = cmp$embedding, covariate = cmp$covariate,
-      scheme = "grouped (donor / sample)", r2 = cmp$r2_grouped,
-      negp = nl10(cmp$p_grouped), stringsAsFactors = FALSE),
-    data.frame(pair = pair_id, embedding = cmp$embedding, covariate = cmp$covariate,
-      scheme = "cell level (sample value repeated per cell)", r2 = cmp$r2_cell,
-      negp = nl10(cmp$p_cell_adj), stringsAsFactors = FALSE)
+  # Same grid as the main association panel, tested both ways. Reading across
+  # the two columns: the tiles saturate while the numbers shrink, i.e. every
+  # covariate becomes tiny and hyper-significant at once.
+  cmp_grid <- rbind(
+    data.frame(embedding = cmp$embedding, Dim = cmp$Dim, covariate = cmp$covariate,
+      scheme = "grouped (donor / sample)",
+      r2 = cmp$r2_grouped, p = cmp$p_grouped, stringsAsFactors = FALSE),
+    data.frame(embedding = cmp$embedding, Dim = cmp$Dim, covariate = cmp$covariate,
+      scheme = "cell level (sample value repeated per cell)",
+      r2 = cmp$r2_cell, p = cmp$p_cell_adj, stringsAsFactors = FALSE)
   )
-  cmp_long$scheme <- factor(cmp_long$scheme,
-    levels = c("grouped (donor / sample)", "cell level (sample value repeated per cell)"))
+  cmp_grid$scheme <- factor(cmp_grid$scheme,
+    levels = c("grouped (donor / sample)",
+               "cell level (sample value repeated per cell)"))
+  cmp_grid$covariate <- factor(cmp_grid$covariate,
+    levels = rev(intersect(covariate_order, unique(cmp_grid$covariate))))
 
-  p_demo <- ggplot(cmp_long, aes(x = r2, y = negp)) +
-    geom_line(aes(group = pair), colour = "grey80", linewidth = 0.3) +
-    geom_hline(yintercept = -log10(0.05), linetype = "dashed",
-               colour = "grey40", linewidth = 0.4) +
-    geom_point(aes(colour = scheme), size = 1.7, alpha = 0.85) +
-    scale_colour_manual(values = c("grouped (donor / sample)" = "#3C5488",
-      "cell level (sample value repeated per cell)" = "#E64B35"), name = NULL) +
-    facet_wrap(~embedding) +
-    theme_classic(base_size = 12) +
-    theme(legend.position = "top", plot.subtitle = element_text(size = 8)) +
+  p_demo <- ggplot(cmp_grid, aes(x = Dim, y = covariate, fill = neglog10(p))) +
+    geom_tile(colour = "grey90") +
+    geom_text(aes(label = ifelse(is.na(r2), "", sprintf("%.2f", pmax(r2, 0)))),
+              size = 2.7) +
+    facet_grid(embedding ~ scheme) +
+    scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
+      name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")) +
+    scale_x_discrete(limits = paste0("Dim", seq_len(n_dims))) +
+    theme_classic(base_size = 11) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.subtitle = element_text(size = 8)) +
     labs(
-      title = "Testing the same covariates at the cell level inflates significance without changing effect size",
+      title = "The same covariates tested two ways",
       subtitle = paste0(
-        "One grey segment per covariate and dimension, joining the two ways of testing it. ",
-        "Dashed line, adjusted p = 0.05.\n",
-        "Segments are near-vertical: repeating a sample's value across its cells leaves the variance ",
-        "explained almost unchanged\nwhile moving the p-value by tens of orders of magnitude, ",
-        "because the added rows are copies rather than independent observations."
+        "Left, one observation per donor or sample. Right, the sample value copied onto each of its cells.\n",
+        "Tile label = variance explained (R\u00b2); shading = BH-adjusted significance.\n",
+        "Copying a sample's value across its cells makes every covariate significant while shrinking the\n",
+        "variance it explains, because the added rows are copies rather than independent observations."
       ),
-      x = "Variance explained (R\u00b2)",
-      y = expression(-log[10] ~ "(BH-adjusted p)")
+      x = NULL, y = NULL
     )
   ggsave(p_demo,
     filename = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.pdf"),
-    width = 10, height = 5.5, units = "in", dpi = 300)
+    width = 12, height = 6, units = "in", dpi = 300)
 }
 
 
@@ -1238,16 +1249,6 @@ write.csv(var_summary_ct,
 # FIGURES -- association heatmaps
 #####################################################################
 # p can underflow to 0 and -log10(0) is Inf, which ggplot paints as missing.
-p_cap <- 50
-neglog10 <- function(p, cap = p_cap) {
-  pmin(-log10(pmax(p, .Machine$double.xmin)), cap)
-}
-# design covariates first, then donor, then technical
-covariate_order <- c(
-  "CellType", "Cohort", "Control_status", "Exposure_group",
-  "Age", "Sex_observed", "Sex_predicted", "Days_from_onset",
-  "QC_nCells", "QC_meanTSS", "QC_meanLog10Frags", "QC_meanFRIP"
-)
 
 # label each row with the unit the test was run on
 add_row_label <- function(d) {
