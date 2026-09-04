@@ -972,6 +972,66 @@ depth_cor_df <- dplyr::bind_rows(depth_cor_tbl)
 write.csv(depth_cor_df,
   file = file.path(repo_dir, "figures/dim_depth_correlation.csv"), row.names = FALSE)
 
+# The QC metrics vary from cell to cell, so they are correlated at the cell
+# level rather than summarised per sample. "within sample" repeats the
+# correlation after subtracting each sample's mean from its cells, which is the
+# part a per-sample mean cannot see.
+qc_lab <- c(
+  abs_cor_with_TSSEnrichment          = "TSS enrichment",
+  abs_cor_with_log10_nFrags           = "log10 fragments",
+  abs_cor_with_FRIP                   = "FRIP",
+  within_sample_abs_cor_TSSEnrichment = "TSS enrichment",
+  within_sample_abs_cor_log10_nFrags  = "log10 fragments",
+  within_sample_abs_cor_FRIP          = "FRIP"
+)
+qc_scope <- c(rep("all cells", 3), rep("within sample", 3))
+names(qc_scope) <- names(qc_lab)
+
+qc_long <- do.call(rbind, lapply(names(qc_lab), function(cl) {
+  if (!cl %in% names(depth_cor_df)) return(NULL)
+  data.frame(
+    embedding = depth_cor_df$embedding,
+    Dim       = paste0("Dim", depth_cor_df$dim_index),
+    metric    = unname(qc_lab[cl]),
+    scope     = unname(qc_scope[cl]),
+    r         = depth_cor_df[[cl]],
+    stringsAsFactors = FALSE
+  )
+}))
+qc_long <- qc_long[qc_long$Dim %in% paste0("Dim", seq_len(n_dims)), , drop = FALSE]
+qc_long$metric <- factor(qc_long$metric,
+  levels = rev(c("TSS enrichment", "log10 fragments", "FRIP")))
+qc_long$scope  <- factor(qc_long$scope, levels = c("all cells", "within sample"))
+
+p_qc <- ggplot(qc_long, aes(x = Dim, y = metric, fill = r)) +
+  geom_tile(colour = "grey90") +
+  geom_text(aes(label = sprintf("%.2f", r)), size = 3) +
+  facet_grid(embedding ~ scope) +
+  scale_fill_gradient(low = "white", high = "#006400", limits = c(0, 1),
+    name = "|correlation|") +
+  scale_x_discrete(limits = paste0("Dim", seq_len(n_dims))) +
+  theme_classic(base_size = 11) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.subtitle = element_text(size = 8)) +
+  labs(
+    title = "Each dimension correlated with per-cell quality metrics",
+    subtitle = paste0(
+      "One observation per cell, using that cell's own TSS enrichment, fragment count and FRIP.\n",
+      "Left, across all cells. Right, after subtracting each sample's mean from its cells, which isolates\n",
+      "variation between cells of the same sample -- the part a per-sample quality mean cannot resolve."
+    ),
+    x = NULL, y = NULL
+  )
+ggsave(p_qc,
+  filename = file.path(repo_dir, "figures/dim_qc_correlation_percell.pdf"),
+  width = 11, height = 5, units = "in", dpi = 300)
+
+message("Per-cell QC correlation, max over dimensions:")
+print(qc_long %>%
+  dplyr::group_by(embedding, scope, metric) %>%
+  dplyr::summarise(max_abs_cor = round(max(r, na.rm = TRUE), 3), .groups = "drop") %>%
+  as.data.frame())
+
 assoc_df <- dplyr::bind_rows(assoc_results)
 
 # BH-adjust within each embedding x covariate family
@@ -1008,129 +1068,6 @@ write.csv(assoc_df,
   file = file.path(repo_dir, "figures/dim_covariate_association.csv"),
   row.names = FALSE
 )
-
-
-#####################################################################
-# PART 1B -- THE SAME TESTS RUN AT THE CELL LEVEL, FOR COMPARISON
-#####################################################################
-# Repeats every donor-level test with the sample value copied onto each of its
-# cells, which is the alternative that gets proposed for cell-level embeddings.
-# The point is the comparison: the effect size barely moves while the p-value
-# collapses, because the extra rows are copies rather than observations.
-# Set SKIP_CELL_LEVEL_DEMO=1 to skip it.
-do_cell_demo <- !nzchar(Sys.getenv("SKIP_CELL_LEVEL_DEMO"))
-
-if (do_cell_demo) {
-  demo_rows <- list()
-  for (emb in embeddings_to_test) {
-    reddim      <- getReducedDims(project, reducedDims = emb, corCutOff = 1)
-    cell_sample <- as.character(getCellColData(project, select = "Sample", drop = TRUE))
-    ci          <- match(cell_sample, covar$arrow_name)
-    kk          <- min(n_dims, ncol(reddim))
-
-    demo_covs <- list(
-      Cohort          = covar$exposure_type[ci],
-      Control_status  = covar$control_status[ci],
-      Exposure_group  = covar$exposure_group[ci],
-      Age             = covar$Age_numeric[ci],
-      Sex_observed    = covar$Sex[ci],
-      Sex_predicted   = covar$Sex_predicted[ci],
-      Days_from_onset = covar$sampling_day[ci]
-    )
-
-    for (i in seq_len(kk)) {
-      y <- reddim[, i]
-      for (cn in names(demo_covs)) {
-        x  <- demo_covs[[cn]]
-        ok <- !is.na(y) & !is.na(x)
-        if (sum(ok) < 10) next
-        xx <- if (is.factor(x)) droplevels(x[ok]) else as.numeric(x[ok])
-        if (is.factor(xx) && nlevels(xx) < 2) next
-        if (!is.factor(xx) && stats::sd(xx) == 0) next
-        fit <- stats::lm(y[ok] ~ xx)
-        fs  <- summary(fit)$fstatistic
-        demo_rows[[length(demo_rows) + 1L]] <- data.frame(
-          embedding = emb, Dim = paste0("Dim", i), covariate = cn,
-          r2_cell = summary(fit)$r.squared,
-          p_cell  = if (is.null(fs)) NA_real_ else
-            stats::pf(fs[1L], fs[2L], fs[3L], lower.tail = FALSE),
-          n_cells = sum(ok), stringsAsFactors = FALSE
-        )
-      }
-    }
-    message(sprintf("%s: cell-level comparison fitted on %d cells", emb, length(y)))
-  }
-
-  demo_df <- dplyr::bind_rows(demo_rows) %>%
-    dplyr::group_by(embedding, covariate) %>%
-    dplyr::mutate(p_cell_adj = p.adjust(p_cell, method = "BH")) %>%
-    dplyr::ungroup()
-
-  cmp <- assoc_df %>%
-    dplyr::select(embedding, Dim, covariate, r2, p_adj, n, n_group, unit) %>%
-    dplyr::inner_join(demo_df, by = c("embedding", "Dim", "covariate")) %>%
-    dplyr::rename(r2_grouped = r2, p_grouped = p_adj,
-                  n_grouped = n, n_groups = n_group, unit_grouped = unit)
-
-  write.csv(cmp,
-    file = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.csv"),
-    row.names = FALSE)
-
-  message("Cell-level vs grouped testing, median over dimensions and covariates:")
-  print(cmp %>%
-    dplyr::group_by(embedding) %>%
-    dplyr::summarise(
-      median_r2_grouped   = round(median(r2_grouped, na.rm = TRUE), 3),
-      median_r2_cell      = round(median(r2_cell, na.rm = TRUE), 3),
-      median_p_grouped    = signif(median(p_grouped, na.rm = TRUE), 3),
-      median_p_cell       = signif(median(p_cell_adj, na.rm = TRUE), 3),
-      sig_grouped         = sum(p_grouped < 0.05, na.rm = TRUE),
-      sig_cell            = sum(p_cell_adj < 0.05, na.rm = TRUE),
-      n_tests             = dplyr::n(), .groups = "drop") %>%
-    as.data.frame())
-
-  # Same grid as the main association panel, tested both ways. Reading across
-  # the two columns: the tiles saturate while the numbers shrink, i.e. every
-  # covariate becomes tiny and hyper-significant at once.
-  cmp_grid <- rbind(
-    data.frame(embedding = cmp$embedding, Dim = cmp$Dim, covariate = cmp$covariate,
-      scheme = "grouped (donor / sample)",
-      r2 = cmp$r2_grouped, p = cmp$p_grouped, stringsAsFactors = FALSE),
-    data.frame(embedding = cmp$embedding, Dim = cmp$Dim, covariate = cmp$covariate,
-      scheme = "cell level (sample value repeated per cell)",
-      r2 = cmp$r2_cell, p = cmp$p_cell_adj, stringsAsFactors = FALSE)
-  )
-  cmp_grid$scheme <- factor(cmp_grid$scheme,
-    levels = c("grouped (donor / sample)",
-               "cell level (sample value repeated per cell)"))
-  cmp_grid$covariate <- factor(cmp_grid$covariate,
-    levels = rev(intersect(covariate_order, unique(cmp_grid$covariate))))
-
-  p_demo <- ggplot(cmp_grid, aes(x = Dim, y = covariate, fill = neglog10(p))) +
-    geom_tile(colour = "grey90") +
-    geom_text(aes(label = ifelse(is.na(r2), "", sprintf("%.2f", pmax(r2, 0)))),
-              size = 2.7) +
-    facet_grid(embedding ~ scheme) +
-    scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
-      name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")) +
-    scale_x_discrete(limits = paste0("Dim", seq_len(n_dims))) +
-    theme_classic(base_size = 11) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          plot.subtitle = element_text(size = 8)) +
-    labs(
-      title = "The same covariates tested two ways",
-      subtitle = paste0(
-        "Left, one observation per donor or sample. Right, the sample value copied onto each of its cells.\n",
-        "Tile label = variance explained (R\u00b2); shading = BH-adjusted significance.\n",
-        "Copying a sample's value across its cells makes every covariate significant while shrinking the\n",
-        "variance it explains, because the added rows are copies rather than independent observations."
-      ),
-      x = NULL, y = NULL
-    )
-  ggsave(p_demo,
-    filename = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.pdf"),
-    width = 12, height = 6, units = "in", dpi = 300)
-}
 
 
 #####################################################################
@@ -1241,6 +1178,142 @@ write.csv(var_summary_ct,
   file = file.path(repo_dir, "figures/dim_covariate_variance_summary_by_celltype.csv"),
   row.names = FALSE
 )
+
+
+#####################################################################
+# PART 3 -- THE SAME COVARIATES TESTED AT THE CELL LEVEL
+#####################################################################
+# Same rows as the pseudobulk panel, tested with one observation per CELL.
+# Covariates that genuinely vary between cells (cell type, and each cell's own
+# TSS enrichment, fragment count and FRIP) are used at their real per-cell
+# values. Covariates recorded once per sample are copied onto that sample's
+# cells, which is the alternative this figure is here to evaluate.
+# Set SKIP_CELL_LEVEL_DEMO=1 to skip.
+do_cell_demo <- !nzchar(Sys.getenv("SKIP_CELL_LEVEL_DEMO"))
+
+if (do_cell_demo) {
+  demo_rows <- list()
+  for (emb in embeddings_to_test) {
+    reddim <- getReducedDims(project, reducedDims = emb, corCutOff = 1)
+    cd <- as.data.frame(getCellColData(project,
+      select = c("Sample", ct_col, "TSSEnrichment", "nFrags", "FRIP")))
+    names(cd)[names(cd) == ct_col] <- "CellType"
+    ci <- match(as.character(cd$Sample), covar$arrow_name)
+    kk <- min(n_dims, ncol(reddim))
+
+    demo_covs <- list(
+      CellType          = factor(cd$CellType),
+      Cohort            = covar$exposure_type[ci],
+      Control_status    = covar$control_status[ci],
+      Exposure_group    = covar$exposure_group[ci],
+      Age               = covar$Age_numeric[ci],
+      Sex_observed      = covar$Sex[ci],
+      Sex_predicted     = covar$Sex_predicted[ci],
+      Days_from_onset   = covar$sampling_day[ci],
+      QC_nCells         = covar$n_cells[ci],
+      QC_meanTSS        = cd$TSSEnrichment,
+      QC_meanLog10Frags = log10(cd$nFrags),
+      QC_meanFRIP       = cd$FRIP
+    )
+    # TRUE where the cell-level version uses each cell's own value rather than
+    # a sample value copied onto its cells
+    per_cell <- c(CellType = TRUE, Cohort = FALSE, Control_status = FALSE,
+      Exposure_group = FALSE, Age = FALSE, Sex_observed = FALSE,
+      Sex_predicted = FALSE, Days_from_onset = FALSE, QC_nCells = FALSE,
+      QC_meanTSS = TRUE, QC_meanLog10Frags = TRUE, QC_meanFRIP = TRUE)
+
+    for (i in seq_len(kk)) {
+      y <- reddim[, i]
+      for (cn in names(demo_covs)) {
+        x  <- demo_covs[[cn]]
+        ok <- !is.na(y) & !is.na(x)
+        if (sum(ok) < 10) next
+        xx <- if (is.factor(x)) droplevels(x[ok]) else as.numeric(x[ok])
+        if (is.factor(xx) && nlevels(xx) < 2) next
+        if (!is.factor(xx) && stats::sd(xx) == 0) next
+        fit <- stats::lm(y[ok] ~ xx)
+        fs  <- summary(fit)$fstatistic
+        demo_rows[[length(demo_rows) + 1L]] <- data.frame(
+          embedding = emb, Dim = paste0("Dim", i), covariate = cn,
+          r2_cell = summary(fit)$r.squared,
+          p_cell  = if (is.null(fs)) NA_real_ else
+            stats::pf(fs[1L], fs[2L], fs[3L], lower.tail = FALSE),
+          n_cells = sum(ok), per_cell_value = unname(per_cell[cn]),
+          stringsAsFactors = FALSE
+        )
+      }
+    }
+    message(sprintf("%s: cell-level comparison over %d cells", emb, nrow(cd)))
+  }
+
+  demo_df <- dplyr::bind_rows(demo_rows) %>%
+    dplyr::group_by(embedding, covariate) %>%
+    dplyr::mutate(p_cell_adj = p.adjust(p_cell, method = "BH")) %>%
+    dplyr::ungroup()
+
+  # grouped column comes from the pseudobulk panel, so the left half of this
+  # figure matches the published covariate panel exactly
+  cmp <- assoc_ct_df %>%
+    dplyr::select(embedding, Dim, covariate, r2, p_adj, n, n_group, unit) %>%
+    dplyr::inner_join(demo_df, by = c("embedding", "Dim", "covariate")) %>%
+    dplyr::rename(r2_grouped = r2, p_grouped = p_adj,
+                  n_grouped = n, n_groups = n_group, unit_grouped = unit)
+
+  write.csv(cmp,
+    file = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.csv"),
+    row.names = FALSE)
+
+  cmp_grid <- rbind(
+    data.frame(embedding = cmp$embedding, Dim = cmp$Dim, covariate = cmp$covariate,
+      per_cell_value = cmp$per_cell_value, scheme = "pseudobulk (as published)",
+      r2 = cmp$r2_grouped, p = cmp$p_grouped, stringsAsFactors = FALSE),
+    data.frame(embedding = cmp$embedding, Dim = cmp$Dim, covariate = cmp$covariate,
+      per_cell_value = cmp$per_cell_value, scheme = "one observation per cell",
+      r2 = cmp$r2_cell, p = cmp$p_cell_adj, stringsAsFactors = FALSE)
+  )
+  cmp_grid$scheme <- factor(cmp_grid$scheme,
+    levels = c("pseudobulk (as published)", "one observation per cell"))
+  cmp_grid$row_label <- ifelse(cmp_grid$per_cell_value,
+    paste0(cmp_grid$covariate, "  (varies per cell)"),
+    paste0(cmp_grid$covariate, "  (copied onto cells)"))
+  lv <- unique(cmp_grid[, c("covariate", "row_label")])
+  lv <- lv[match(intersect(covariate_order, lv$covariate), lv$covariate), ]
+  cmp_grid$row_label <- factor(cmp_grid$row_label, levels = rev(lv$row_label))
+
+  p_demo <- ggplot(cmp_grid, aes(x = Dim, y = row_label, fill = neglog10(p))) +
+    geom_tile(colour = "grey90") +
+    geom_text(aes(label = ifelse(is.na(r2), "", sprintf("%.2f", pmax(r2, 0)))),
+              size = 2.7) +
+    facet_grid(embedding ~ scheme) +
+    scale_fill_gradient(low = "white", high = "#006400", na.value = "grey95",
+      name = paste0("-log10(adj. p)\n(capped at ", p_cap, ")")) +
+    scale_x_discrete(limits = paste0("Dim", seq_len(n_dims))) +
+    theme_classic(base_size = 11) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.subtitle = element_text(size = 8)) +
+    labs(
+      title = "The same covariates tested per pseudobulk and per cell",
+      subtitle = paste0(
+        "Tile label = variance explained (R\u00b2); shading = BH-adjusted significance.\n",
+        "Cell type and the three quality metrics use each cell's own value. The remaining covariates are ",
+        "recorded once per\nsample and are copied onto that sample's cells; those rows turn significant ",
+        "while the variance they explain falls,\nbecause the added rows are copies rather than independent ",
+        "observations."
+      ),
+      x = NULL, y = NULL
+    )
+  ggsave(p_demo,
+    filename = file.path(repo_dir, "figures/celllevel_vs_grouped_comparison.pdf"),
+    width = 12, height = 7, units = "in", dpi = 300)
+
+  message("Significant tests under each scheme:")
+  print(cmp_grid %>%
+    dplyr::group_by(embedding, scheme, per_cell_value) %>%
+    dplyr::summarise(n_tests = dplyr::n(),
+      n_sig = sum(p < 0.05, na.rm = TRUE),
+      median_r2 = round(median(r2, na.rm = TRUE), 3), .groups = "drop") %>%
+    as.data.frame())
+}
 
 
 
