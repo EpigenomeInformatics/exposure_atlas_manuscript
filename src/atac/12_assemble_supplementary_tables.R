@@ -24,33 +24,33 @@
 # combined-modality tables.
 #
 #   S1    Sample metadata of the scATAC-seq dataset
-#   S2    Per-PC covariate association, sample x cell-type pseudobulk level
-#   S3    Confound structure among design and technical variables
-#   S4    Molecular sex classifier performance
-#   S5    Cluster-to-cell-type annotation mapping
-#   S6    Cell-type composition statistics
-#   S7    Variance partition of TF motif activity, exposure model
-#   S8    Variance partition of TF motif activity, condition model
-#   S9    Variance within cell type, per cohort
-#   S10   Pairwise differential TF motif activity across cell types
-#   S11   Differentially accessible genes in CD8+ T-cell clusters
-#   S12   Differentially accessible cCREs in CD8+ T-cell clusters
-#   S13   Differential gene activity & expression, COVID-19 severe vs control
-#   S14   Differentially accessible cCREs, COVID-19 severe vs control
-#   S15   Covariate balance between compared groups
-#   S16   Confounder-adjusted DARs vs unadjusted, sensitivity
-#   S17   Bulk RNA-seq differential expression, CD14+ monocytes
-#   S18   snmC-seq per-cell annotation
-#   S19   snmC-seq per-sample summary (donor x timepoint x cell type)
-#   S20   snmC-seq pseudobulk QC, per pseudobulk
-#   S21   snmC-seq pseudobulk QC, per exposure group x cell type
-#   S22   Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types
-#   S23   Differentially methylated cCREs, COVID-19 CD14+ monocytes
+#   S2    Molecular sex classifier performance
+#   S3    Cluster-to-cell-type annotation mapping (Jaccard)
+#   S4    Per-PC covariate association, sample x cell-type pseudobulk level
+#   S5    Cell-type composition statistics
+#   S6    Variance partition of TF motif activity, exposure model
+#   S7    Variance partition of TF motif activity, condition model
+#   S8    Variance within cell type, per cohort
+#   S9    Pairwise differential TF motif activity across cell types
+#   S10   Differentially accessible genes in CD8+ T-cell clusters
+#   S11   Differentially accessible cCREs in CD8+ T-cell clusters
+#   S12   Differential gene activity & expression, COVID-19 severe vs control
+#   S13   Differentially accessible cCREs, COVID-19 severe vs control
+#   S14   Covariate balance between compared groups
+#   S15   Confounder-adjusted DARs vs unadjusted, sensitivity
+#   S16   Bulk RNA-seq differential expression, CD14+ monocytes
+#   S17   snmC-seq per-cell annotation
+#   S18   snmC-seq per-sample summary (donor x timepoint x cell type)
+#   S19   snmC-seq pseudobulk QC, per pseudobulk
+#   S20   snmC-seq pseudobulk QC, per exposure group x cell type
+#   S21   Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types
+#   S22   Differentially methylated cCREs, COVID-19 CD14+ monocytes
 #
 # Retired in this revision (see `drop_sheets`): the sample-level per-PC
-# covariate association, superseded by the pseudobulk-level table now at S2;
-# the dimension-vs-per-cell-QC correlation table; and the COVID-19-only
-# severity variance partition.
+# covariate association, superseded by the pseudobulk-level table now at S4;
+# the dimension-vs-per-cell-QC correlation table; the confound-structure
+# cross-tabulation of design against technical variables; and the
+# COVID-19-only severity variance partition.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -85,80 +85,77 @@ final_layout <- tibble::tribble(
   ~new,          ~description,
   "Table S1",    "Sample metadata of the scATAC-seq dataset",
   "Table S2",    paste(
-    "Association of the IterativeLSI and Harmony dimensions with known covariates",
-    "at the sample x cell-type pseudobulk level, the only level at which cell type",
-    "varies, before and after batch correction"),
-  "Table S3",    paste(
-    "Confound structure among the design and technical variables: cross-tabulation",
-    "of cohort against supplier and per-sample filtering thresholds, and of the",
-    "COVID-19 severity arms against processing batch"),
-  "Table S4",    paste(
     "Performance of the molecular sex classifier: training-set size, leave-one-out",
     "accuracy with its confidence interval, agreement with the held-out chrY",
     "threshold, and the marker thresholds used"),
+  "Table S3",    paste(
+    "Cluster-to-cell-type annotation mapping: each of the 22 graph-based scATAC",
+    "clusters was assigned to a cell type using the Jaccard similarity between its",
+    "cells and the mapped scRNA-seq labels; reported with the final assigned cell",
+    "type and cluster size"),
+  "Table S4",    paste(
+    "Association of the IterativeLSI and Harmony dimensions with known covariates",
+    "at the sample x cell-type pseudobulk level, the only level at which cell type",
+    "varies, before and after batch correction"),
   "Table S5",    paste(
-    "Cluster-to-cell-type annotation mapping: Jaccard similarity between each",
-    "graph-based scATAC cluster and predicted scRNA-seq labels, with final",
-    "assigned cell type and cluster size"),
-  "Table S6",    paste(
     "Cell-type composition statistics: per-sample cell-type proportions compared",
     "between each exposure group and its matched within-cohort control",
     "(two-sided Wilcoxon rank-sum test, Bonferroni-adjusted)"),
-  "Table S7",    paste(
+  "Table S6",    paste(
     "Variance partition of TF motif activity into cell-type, exposure and donor",
     "components (exposure model: ~ Cell_Type + Exposure + Donor, all cohorts)"),
-  "Table S8",    paste(
+  "Table S7",    paste(
     "Variance partition of TF motif activity into cell-type, stage/severity and",
     "donor components (condition model: ~ Cell_Type + Condition + Donor,",
     "all cohorts)"),
-  "Table S9",    paste(
+  "Table S8",    paste(
     "Variance in TF motif activity attributable to the exposure condition within",
     "each cell type, computed separately for each cohort",
     "(~ Condition + Donor, donor fitted where the design supports it)"),
-  "Table S10",   paste(
+  "Table S9",    paste(
     "Pairwise differential TF motif activity (Wilcoxon test of chromVAR deviation",
     "scores) across different cell types"),
-  "Table S11",   "Differentially accessible genes in different clusters within CD8+ T cells",
-  "Table S12",   "Differentially accessible cCREs in different clusters within CD8+ T cells",
-  "Table S13",   paste(
+  "Table S10",   "Differentially accessible genes in different clusters within CD8+ T cells",
+  "Table S11",   "Differentially accessible cCREs in different clusters within CD8+ T cells",
+  "Table S12",   paste(
     "Differential gene activity and gene expression of protein-coding genes",
     "for COVID-19 severe vs control in CD14+ monocytes"),
-  "Table S14",   "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
-  "Table S15",   paste(
+  "Table S13",   "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
+  "Table S14",   paste(
     "Balance of the per-sample quality-control metrics between the groups compared",
     "in each within-cohort differential analysis: median and maximum standardised",
     "mean difference, the median expected under the null at these group sizes, and",
     "the number of comparisons in which the metric is imbalanced by permutation"),
-  "Table S16",   paste(
+  "Table S15",   paste(
     "Differentially accessible regions re-called with the per-sample quality-control",
     "metrics included in the differential model, compared with the unadjusted calls,",
     "per cell type, comparison and adjustment set: region counts, overlap, direction",
     "concordance and the correlation of fold changes"),
-  "Table S17",   paste(
+  "Table S16",   paste(
     "Bulk RNA-seq differential expression results for CD14+ monocytes",
     "(filtered: adj p < 0.05 and |log2FC| > 0.5)"),
-  "Table S18",   paste(
+  "Table S17",   paste(
     "Per-cell annotation of the snmC-seq dataset: cell identifier, assigned cell",
     "type, donor sex and age, condition, mapping and coverage statistics, and",
     "global mCG / mCH / CCC methylation rates"),
-  "Table S19",   paste(
+  "Table S18",   paste(
     "Per-sample summary of the snmC-seq dataset: cohort, subject, timepoint,",
     "exposure level, donor sex and age, sequencing libraries, and the number of",
     "profiled nuclei in each FACS-sorted cell population, with per-sample means of",
     "the mapping, coverage and methylation-rate metrics"),
-  "Table S20",   paste(
+  "Table S19",   paste(
     "Quality-control statistics for each snmC-seq pseudobulk (one per cell type",
     "x sample): donor, exposure group, cells pooled, per-cell sequencing depth",
     "and mapping metrics, CpGs called, CpG coverage and its distribution, global",
     "mCG level, and the CCC rate as the bisulfite non-conversion estimate"),
-  "Table S21",   paste(
+  "Table S20",   paste(
     "snmC-seq pseudobulk quality control summarised per exposure group and cell",
     "type: number of pseudobulks and donors, cells pooled, CpGs called and global",
     "mCG level"),
-  "Table S22",   paste(
+  "Table S21",   paste(
     "Pairwise Wilcoxon test between one vs other cell type manner for methylTFR",
     "and chromVAR z-scores"),
-  "Table S23",   "Differentially methylated cCREs in CD14+ monocytes"
+  "Table S22",   "Differentially methylated cCREs in CD14+ monocytes"
 )
 
 # Mechanical lookup for the sheets carried over from the incoming workbook:
@@ -166,24 +163,23 @@ final_layout <- tibble::tribble(
 # here are written fresh from the CSVs in section 2.
 source_sheet <- c(
   "Table S1"  = "Table S1",
-  "Table S3"  = "Table S1D",
-  "Table S4"  = "Table S1E",
-  "Table S5"  = "Table S2",
-  "Table S7"  = "Table S3A",
-  "Table S8"  = "Table S3B",
-  "Table S10" = "Table S4",
-  "Table S11" = "Table S5",
-  "Table S12" = "Table S6",
-  "Table S13" = "Table S7",
-  "Table S14" = "Table S8",
-  "Table S17" = "Table S9",
-  "Table S22" = "Table S10",
-  "Table S23" = "Table S11"
+  "Table S2"  = "Table S1E",
+  "Table S3"  = "Table S2",
+  "Table S6"  = "Table S3A",
+  "Table S7"  = "Table S3B",
+  "Table S9"  = "Table S4",
+  "Table S10" = "Table S5",
+  "Table S11" = "Table S6",
+  "Table S12" = "Table S7",
+  "Table S13" = "Table S8",
+  "Table S16" = "Table S9",
+  "Table S21" = "Table S10",
+  "Table S22" = "Table S11"
 )
 
 # Retired sheets, removed before any renaming so they cannot be picked up as a
 # rename source or survive into the final ordering.
-drop_sheets <- c("Table S1B", "Table S1C", "Table S3C")
+drop_sheets <- c("Table S1B", "Table S1C", "Table S1D", "Table S3C")
 
 ## ---- 2. New table content ---------------------------------------------------
 # (a) cell-type composition statistics
@@ -200,7 +196,7 @@ comp_supp <- read.csv(comp_csv, stringsAsFactors = FALSE) %>%
     `p (Bonferroni-adjusted)`     = signif(p_adj, 3)
   )
 
-# (b) snmC-seq per-cell annotation (Table S18). Drops the row-number column and
+# (b) snmC-seq per-cell annotation (Table S17). Drops the row-number column and
 # the absolute allC_FilePathfull; the relative allC_FilePath is kept.
 allc_raw <- read.csv(allc_csv, stringsAsFactors = FALSE, check.names = FALSE)
 drop_cols <- c("", "X", "allC_FilePathfull")
@@ -255,15 +251,15 @@ if (file.exists(meth_qc_rds)) {
           length(unique(allc_supp$Common_Minimal_Informative_ID)), " samples")
 }
 
-message("snmC-seq annotation for S18: ", nrow(allc_supp), " cells, ",
+message("snmC-seq annotation for S17: ", nrow(allc_supp), " cells, ",
         length(unique(allc_supp$Common_Minimal_Informative_ID)), " samples")
 if (nrow(allc_supp) > 1e5) {
   message("NB this sheet is large; Excel's row limit is 1,048,576 so it fits, ",
           "but the workbook will be slow to open.")
 }
 
-# (b2) snmC-seq per-sample summary (Table S19): cells per donor, timepoint and
-# cell type. Aggregated from allc_supp so it cannot disagree with S18.
+# (b2) snmC-seq per-sample summary (Table S18): cells per donor, timepoint and
+# cell type. Aggregated from allc_supp so it cannot disagree with S17.
 # Subject / timepoint / exposure level are parsed from the sample identifier:
 #   CoV_S_S11_D1          severity (S / nS), subject, day
 #   Ctrl_10_M_White_39yo  index, sex, ethnicity, age
@@ -428,15 +424,15 @@ ct_assoc_supp   <- read_optional(ct_assoc_csv, "Cell-type association table")
 cc_varpart_supp <- read_optional(cc_varpart_csv, "Per-cohort variance partition")
 
 new_content <- list(
-  "Table S2"   = ct_assoc_supp,
-  "Table S6"   = comp_supp,
-  "Table S9"   = cc_varpart_supp,
-  "Table S15"  = bal_supp,
-  "Table S16"  = adj_supp,
-  "Table S18"  = allc_supp,
-  "Table S19"  = allc_sample_supp,
-  "Table S20"  = pbqc_supp,
-  "Table S21"  = pbqc_grp_supp
+  "Table S4"   = ct_assoc_supp,
+  "Table S5"   = comp_supp,
+  "Table S8"   = cc_varpart_supp,
+  "Table S14"  = bal_supp,
+  "Table S15"  = adj_supp,
+  "Table S17"  = allc_supp,
+  "Table S18"  = allc_sample_supp,
+  "Table S19"  = pbqc_supp,
+  "Table S20"  = pbqc_grp_supp
 )
 new_content <- new_content[!vapply(new_content, is.null, logical(1))]
 
@@ -444,7 +440,7 @@ new_content <- new_content[!vapply(new_content, is.null, logical(1))]
 wb <- openxlsx::loadWorkbook(supp_in)
 
 if (all(names(new_content) %in% names(wb)) &&
-    identical(dim(openxlsx::readWorkbook(wb, "Table S6")), dim(comp_supp))) {
+    identical(dim(openxlsx::readWorkbook(wb, "Table S5")), dim(comp_supp))) {
   message("Workbook already assembled; nothing to do.")
 } else {
   for (nm in intersect(drop_sheets, names(wb))) {
@@ -452,8 +448,8 @@ if (all(names(new_content) %in% names(wb)) &&
     message("Removed retired sheet: ", nm)
   }
 
-  # temp prefix first: the incoming and final names overlap (old S4 -> S10 while
-  # an old S10 still exists, old S2 -> S5 while an old S5 still exists), so
+  # temp prefix first: the incoming and final names overlap (old S4 -> S9 while
+  # an old S9 still exists, old S2 -> S3 while an old S3A/B still exists), so
   # nothing may be renamed straight onto a name still in use
   renames <- data.frame(
     old = unname(source_sheet),
