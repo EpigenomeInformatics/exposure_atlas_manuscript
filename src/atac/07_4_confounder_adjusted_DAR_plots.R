@@ -3,13 +3,7 @@
 #####################################################################
 # 07_4_confounder_adjusted_DAR_plots.R
 # created on 2026-08-12 by Irem B. Gunduz
-# Figures for 07_3, read off disk
-#
-# 07_3 only draws its figure when the summary table comes back non-empty, so a
-# comparison that errors after the adjusted fit has already written its diffTab
-# leaves results on disk with no plot. This reads those tables instead.
-#
-# Nothing is refitted: no ArchR project, no ChrAccR object, no DESeq2.
+# Figures for 07_3, read off disk (nothing is refitted)
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -25,8 +19,7 @@ source(file.path(repo_dir, "utils/helpers.R")) # cutL0.5fc2Padj05
 out_dir <- "/icbb/projects/igunduz/finalize_echo_050824/confounder_adjusted/"
 qc_adj_cols <- c("mean_TSS", "mean_FRIP")
 
-# Figures and the small summary tables belong in the repo figures/ directory with
-# every other panel; only the bulky per-region table stays in the scratch dir.
+# figures and summary tables go in the repo figures/ directory; the per-region table stays in scratch
 fig_dir <- file.path(repo_dir, "figures")
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
@@ -46,9 +39,7 @@ source_dir_for <- function(grp1) if (grepl("^C19", grp1)) covid_dir else other_d
 stopifnot(dir.exists(out_dir))
 
 ## ---- 1. Discover the adjusted runs 07_3 has already written -----------------
-# 07_3 names them paste0(cell, "__", tag, "__adjusted") where tag is the
-# comparison with every non-alphanumeric character replaced by "_", e.g.
-# "Mono_CD14__C19_sev_vs_C19_ctrl__adjusted".
+# 07_3 names them "<cell>__<tag>__adjusted", tag = comparison with non-alphanumerics as "_"
 adj_dirs <- list.dirs(out_dir, recursive = FALSE, full.names = TRUE)
 adj_dirs <- adj_dirs[grepl("__adjusted$|__adj-", basename(adj_dirs))]
 if (length(adj_dirs) == 0) {
@@ -84,8 +75,7 @@ list_diff_tabs <- function(dir) {
   sort(f)
 }
 
-# one dir holds every comparison, so pick by name, falling back to the
-# comparisonTable row index
+# one dir holds every comparison, so pick by name, else by comparisonTable row index
 pick_unadjusted <- function(anaDir, cell, grp1, grp2) {
   ddir <- file.path(anaDir, cell, "reports", "differential_data")
   if (!dir.exists(ddir)) {
@@ -138,8 +128,7 @@ read_diff <- function(f) {
 }
 
 ## ---- 3. Summarise each comparison -------------------------------------------
-# Pass 1 summarises every comparison and drops each merged table; holding them
-# all would be tens of millions of rows. Pass 2 re-reads what the scatter needs.
+# pass 1 summarises every comparison and drops each merged table; pass 2 re-reads for the scatter
 build_merged <- function(j) {
   adj_files <- list_diff_tabs(j$dir)
   if (length(adj_files) == 0) {
@@ -172,8 +161,7 @@ build_merged <- function(j) {
 # keep DAR rows from pass 1 so the region table covers every comparison
 dar_list <- list()
 
-# Per-comparison counts broken down by overlap category and direction, used for
-# the stacked bars. Computed in pass 1 so nothing has to be re-read for them.
+# per-comparison counts by overlap category and direction, for the stacked bars
 cat_list <- list()
 
 summarise_one <- function(j) {
@@ -284,9 +272,7 @@ write.csv(res_all, file.path(fig_dir, "confounder_adjusted_DAR_summary.csv"),
   row.names = FALSE)
 
 ## ---- 4. Figure 1: overlap and direction of the DAR calls --------------------
-# Two similar-height bars can still be two different region sets, so show the
-# partition: every DAR is shared / unadjusted-only / adjusted-only, split by
-# direction. Robust = a fat Shared block with thin slivers either side.
+# partition every DAR into shared / unadjusted-only / adjusted-only, split by direction
 cat_all <- dplyr::bind_rows(cat_list) %>%
   dplyr::mutate(
     label = paste0(cell, " | ", comparison),
@@ -358,9 +344,7 @@ ggsave(file.path(fig_dir, "confounder_adjusted_DARs_proportion.pdf"), p_stack_pc
   width = 11, height = max(5, 0.30 * nrow(res) + 2.2), limitsize = FALSE)
 
 ## ---- 5. Figure 2: per-region effect sizes, adjusted vs unadjusted -----------
-# Counts do not show that the SAME regions move the same way; this does.
-# Limited to the max_scatter_panels comparisons with the most unadjusted DARs;
-# the summary table covers all of them.
+# limited to the max_scatter_panels comparisons with the most unadjusted DARs
 res_scatter <- res[order(-res$DARs_unadjusted), , drop = FALSE]
 res_scatter <- utils::head(res_scatter, max_scatter_panels)
 message("Drawing scatter panels for ", nrow(res_scatter), " of ", nrow(res),
@@ -387,8 +371,7 @@ merged_df$status <- factor(merged_df$status,
   levels = c("not significant", "DAR unadjusted only", "DAR adjusted only", "DAR in both"))
 merged_df <- merged_df[order(merged_df$status), ] # significant points drawn on top
 
-# thin the grey background for file size; all significant regions kept, so no
-# reported number changes
+# thin the grey background for file size; all significant regions kept
 set.seed(12)
 max_bg <- 30000
 sig_pts <- merged_df[merged_df$status != "not significant", , drop = FALSE]
@@ -430,9 +413,7 @@ n_row <- ceiling(nrow(res_scatter) / n_col)
 ggsave(file.path(fig_dir, "confounder_adjusted_DAR_l2fc_scatter.pdf"), p_scatter,
   width = 2.6 * n_col + 1.5, height = 2.6 * n_row + 1.5, limitsize = FALSE)
 
-# every region called a DAR by either model, so the figures can be traced back.
-# Not-significant-in-either is dropped; the full merge is far too big. Stays in
-# the scratch dir.
+# every region called a DAR by either model (stays in the scratch dir)
 dar_regions <- dplyr::bind_rows(dar_list)
 if (nrow(dar_regions) > 0) {
   dar_regions <- dar_regions %>%
@@ -449,8 +430,7 @@ write.csv(dar_regions,
 message("Wrote ", nrow(dar_regions), " region rows (DAR in either model)")
 
 ## ---- 6. Figure 3: does the choice of adjustment covariates matter? ----------
-# DAR count per design against the unadjusted count. Flat across designs is the
-# claim the reviewer wants supported.
+# DAR count per design against the unadjusted count
 multi <- res_all %>%
   dplyr::group_by(cell, comparison) %>%
   dplyr::filter(dplyr::n_distinct(adj_set) > 1) %>%

@@ -4,11 +4,6 @@
 # 03_annotate.R
 # created on 2023-08-24 by Irem Gunduz
 # Annotate the cells based on the scRNAseq data
-#
-# REVISION (reviewer R2.3/R2.4): added export of a per-cluster
-# annotation mapping table (cluster -> final label, top predicted
-# scRNA label, Jaccard similarity, ambiguity flag) as a TSV for the
-# supplementary tables.
 #####################################################################
 
 set.seed(12) # set seed
@@ -199,13 +194,7 @@ pdf(paste0(fig_dir, "jaccard_heatmap.pdf"), width = 6, height = 6)
 draw(hm)
 dev.off()
 #####################################################################
-# REVISION (R2.3/R2.4): export the FULL cluster x cell-type Jaccard matrix
-#
-# R2 asked for the Jaccard similarities of each cluster to the predicted
-# scRNA labels. We therefore export the complete Jaccard matrix (the values
-# underlying jaccard_heatmap.pdf), one row per graph-based cluster and one
-# column per predicted scRNA cell type, plus the final assigned label and
-# cell count per cluster. 
+# Export the full cluster x cell-type Jaccard matrix
 #####################################################################
 
 # Confusion matrix: rows = clusters (Clusters_0.8), cols = predicted scRNA groups

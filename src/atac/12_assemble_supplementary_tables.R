@@ -8,21 +8,13 @@
 #   - 01_v2_quality_control.R  -> All_Supplementary_Tables_updated.xlsx
 #   - 04_2_cellprops.R         -> figures/cell_prop_wilcox_bonferroni.csv
 #   - 13b_cvar_variance_decomposition.R -> cvar_diffs/varpart_within_celltype.csv
-#   - sample_annots/allc_sample_annot_final.csv
-#         (snmC-seq per-cell annotation, pre-filter; subset below via
-#          cellAnnot_meth.rds)
+#   - sample_annots/allc_sample_annot_final.csv (snmC-seq per-cell annotation, pre-filter)
 #   - src/atac/07_3_confounder_adjusted_DARs.R -> figures/confounder_adjusted_DAR_summary.csv
 #     src/atac/07_6_covariate_balance.R        -> figures/covariate_balance_summary.csv
 #   - src/meth/01b_meth_pseudobulk_qc.R -> figures/meth_pseudobulk_qc.csv
 #         and figures/meth_pseudobulk_qc_by_group.csv
 #
-# Numbering is declared once in `final_layout`; the Index sheet and the sheet
-# order both derive from it. Reads the pre-shift workbook and writes a fresh
-# file, so re-running is safe.
-#
-# Numbering is flat: no lettered sub-tables, every sheet carries its own number
-# and an explicit label on the Index sheet. ATAC first, then snmC-seq, then the
-# combined-modality tables.
+# Numbering is declared once in `final_layout`; the Index and sheet order derive from it.
 #
 #   S1    Sample metadata of the scATAC-seq dataset
 #   S2    Molecular sex classifier performance
@@ -45,19 +37,6 @@
 #   S19   Pairwise Wilcoxon (methylTFR vs chromVAR) across cell types
 #   S20   snmC-seq pseudobulk QC, per exposure group x cell type
 #   S21   Differentially methylated cCREs, COVID-19 CD14+ monocytes
-#
-# S7 and S8 are the two variance partitions the manuscript figure plots: the
-# three-way decomposition across all pseudobulk profiles, and the exposure
-# fraction fitted separately within each lineage. The decompositions that no
-# panel reports are not tabulated -- the condition-model reparameterisation
-# (~ Cell_Type + Condition + Donor), the per-cohort within-cell-type fit, and
-# the COVID-19-only severity model.
-#
-# Retired in this revision (see `drop_sheets`): the sample-level per-PC
-# covariate association, superseded by the pseudobulk-level table now at S4;
-# the dimension-vs-per-cell-QC correlation table; the confound-structure
-# cross-tabulation of design against technical variables; and the two
-# non-figure variance partitions noted above.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -164,9 +143,7 @@ final_layout <- tibble::tribble(
   "Table S21",   "Differentially methylated cCREs in CD14+ monocytes"
 )
 
-# Mechanical lookup for the sheets carried over from the incoming workbook:
-# final sheet name -> sheet name as it appears in `supp_in`. Sheets not listed
-# here are written fresh from the CSVs in section 2.
+# lookup: final sheet name -> sheet name in supp_in (unlisted sheets written fresh)
 source_sheet <- c(
   "Table S1"  = "Table S1",
   "Table S2"  = "Table S1E",
@@ -182,9 +159,7 @@ source_sheet <- c(
   "Table S21" = "Table S11"
 )
 
-# Retired sheets, removed before any renaming so they cannot be picked up as a
-# rename source or survive into the final ordering. Table S3B and S3C are the
-# variance decompositions no figure panel reports.
+# retired sheets, removed before any renaming
 drop_sheets <- c("Table S1B", "Table S1C", "Table S1D",
                  "Table S3B", "Table S3C")
 
@@ -203,8 +178,7 @@ comp_supp <- read.csv(comp_csv, stringsAsFactors = FALSE) %>%
     `p (Bonferroni-adjusted)`     = signif(p_adj, 3)
   )
 
-# (b) snmC-seq per-cell annotation (Table S16). Drops the row-number column and
-# the absolute allC_FilePathfull; the relative allC_FilePath is kept.
+# (b) snmC-seq per-cell annotation (Table S16); drops the row-number and absolute-path columns
 allc_raw <- read.csv(allc_csv, stringsAsFactors = FALSE, check.names = FALSE)
 drop_cols <- c("", "X", "allC_FilePathfull")
 allc_supp <- allc_raw[, !colnames(allc_raw) %in% drop_cols, drop = FALSE]
@@ -276,8 +250,7 @@ if (nrow(allc_supp) > 1e5) {
 ct_levels <- c("B-cell", "Monocyte", "NK-cell",
                "Th-Naive", "Th-Mem", "Th-Eff",
                "Tc-Naive", "Tc-Mem", "Tc-Eff", "Other-cell")
-# Other-cell is absent from the analysed set, so intersect rather than require
-# equality
+# Other-cell is absent from the analysed set, so intersect rather than require equality
 ct_levels <- intersect(ct_levels, unique(allc_supp$cell_type))
 stopifnot(length(ct_levels) > 0,
           all(unique(allc_supp$cell_type) %in% ct_levels))
@@ -360,8 +333,7 @@ stopifnot(all(rowSums(allc_sample_supp[, ct_levels]) ==
 message("snmC-seq per-sample summary: ", nrow(allc_sample_supp), " samples, ",
         dplyr::n_distinct(allc_sample_supp$Subject), " subjects")
 
-# Sex should not vary within a subject. Four do in the committed annotation
-# (COVID-19 S11, S17; OP S4, S7); age is consistent. Warning, not an error.
+# Sex should not vary within a subject; four do (warning, not an error)
 sex_clash <- allc_sample_supp %>%
   dplyr::group_by(Cohort, Subject) %>%
   dplyr::filter(dplyr::n_distinct(stats::na.omit(Sex)) > 1) %>%
@@ -381,8 +353,7 @@ pbqc_grp_supp <- read.csv(pbqc_grp_csv, stringsAsFactors = FALSE, check.names = 
 message("snmC-seq pseudobulk QC: ", nrow(pbqc_supp), " pseudobulks, ",
         nrow(pbqc_grp_supp), " exposure group x cell type combinations")
 
-# (d) Covariate balance (07_6_covariate_balance.R) and the adjusted-vs-unadjusted
-# DAR comparison (07_3_confounder_adjusted_DARs.R), as separate sheets.
+# (d) covariate balance (07_6) and adjusted-vs-unadjusted DARs (07_3), as separate sheets
 bal_csv <- file.path(fig_dir, "covariate_balance_summary.csv")
 adj_csv <- file.path(fig_dir, "confounder_adjusted_DAR_summary.csv")
 stopifnot(file.exists(bal_csv), file.exists(adj_csv))
@@ -417,8 +388,7 @@ message("Covariate balance: ", nrow(bal_supp), " metrics, ",
         sum(bal_supp$`Comparisons imbalanced (permutation)`), " imbalanced comparisons in total")
 message("Confounder-adjusted DARs: ", nrow(adj_supp), " cell x comparison x design rows")
 
-# (e) per-PC covariate association at the pseudobulk level (S4), and the
-# within-cell-type exposure variance plotted alongside the global partition (S8)
+# (e) per-PC covariate association at pseudobulk level (S4) and within-cell-type exposure variance (S8)
 ct_assoc_csv  <- file.path(fig_dir, "dim_covariate_association_by_celltype.csv")
 within_ct_csv <- file.path(repo_dir, "sample_annots/cvar_diffs",
   "varpart_within_celltype.csv")
@@ -458,9 +428,7 @@ if (all(names(new_content) %in% names(wb)) &&
     message("Removed retired sheet: ", nm)
   }
 
-  # temp prefix first: the incoming and final names overlap (old S4 -> S5 while
-  # an old S5 still exists, old S5 -> S9 while an old S9 still exists), so
-  # nothing may be renamed straight onto a name still in use
+  # temp prefix first: incoming and final names overlap, so rename via a temp name
   renames <- data.frame(
     old = unname(source_sheet),
     new = names(source_sheet),

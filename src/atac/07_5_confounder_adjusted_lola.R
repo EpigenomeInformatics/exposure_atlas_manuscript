@@ -4,17 +4,6 @@
 # 07_5_confounder_adjusted_lola.R
 # created on 2026-08-12 by Irem B. Gunduz
 # LOLA enrichment on the covariate-adjusted DARs vs the unadjusted ones
-#
-# DAR counts surviving adjustment is not the claim; the enrichment is. Targets:
-#   COVID-19  Mono_CD14  C19_sev vs C19_ctrl, C19_mod vs C19_ctrl
-#   HIV       T_mem_CD8  HIV_ctrl vs HIV_acu, HIV_ctrl vs HIV_chr
-#
-# LOLA is recomputed here rather than read from ChrAccR: the adjusted runs in
-# 07_3 had no lolaDbPaths set, and both sides need the same region cutoff and
-# the same universe or a change in enrichment is confounded with a change in
-# how the sets were built.
-#
-# Nothing is refitted; this reads the diffTabs 07_3 wrote.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -127,9 +116,7 @@ split_dars <- function(gr) {
 }
 
 ## ---- LOLA for one region set ------------------------------------------------
-# Universe = regions tested in that comparison, not the genome. Both models then
-# ask the same question: among the regions we could have called, are the ones we
-# did call enriched?
+# universe = regions tested in that comparison, not the genome
 run_lola_set <- function(userSets, universe, label) {
   userSets <- userSets[vapply(userSets, length, integer(1)) > 0]
   if (length(userSets) == 0) {
@@ -177,9 +164,7 @@ process_target <- function(tg) {
   adj_gr <- read_regions(adj_files[1])
   unadj_gr <- read_regions(unadj_file)
 
-  # Universe = regions tested by both models, matched on exact coordinates.
-  # GenomicRanges::intersect() merges overlapping ranges and would return
-  # boundaries that match no tested peak.
+  # universe = regions tested by both models, matched on exact coordinates
   region_id <- function(gr) paste0(
     as.character(GenomicRanges::seqnames(gr)), ":",
     GenomicRanges::start(gr), "-", GenomicRanges::end(gr))
@@ -257,8 +242,7 @@ process_target <- function(tg) {
       terms_sig_adjusted_only = n_ad,
       terms_recovered_pct = ifelse((n_both + n_un) > 0,
         round(100 * n_both / (n_both + n_un), 1), NA_real_),
-      # ORs are not comparable across sets of very different size: a bigger DAR
-      # set includes weaker regions and dilutes the enrichment
+      # ORs are not comparable across sets of very different size
       DAR_size_ratio = round(sum(vapply(adj_sets_gr, length, integer(1))) /
         pmax(1, sum(vapply(unadj_sets_gr, length, integer(1)))), 2),
       log2OR_pearson = round(r, 3),

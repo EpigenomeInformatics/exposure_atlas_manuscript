@@ -4,13 +4,6 @@
 # 10_3_tex_leave_one_donor_out.R
 # created on 2026-08-15 by Irem B. Gunduz
 # Leave-one-donor-out check on the Tex vs other CD8 signature
-#
-# The Tex contrast in 10_tcells.R is run on cells, so with 4 donors the
-# signature could be carried by one person. Recompute it 4 times, dropping one
-# donor each time, and compare log2FCs, DAR recovery and motif enrichment.
-#
-# Peaks are not re-called per fold: subsetting cells keeps the project peak set,
-# so all folds are scored on the same features and the log2FCs line up.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -181,9 +174,7 @@ folds <- dplyr::bind_rows(fold_markers) %>%
   ) %>%
   dplyr::mutate(isDAR_fold = FDR <= fdr_cut & abs(Log2FC) >= l2fc_cut)
 
-# Computed per fold in a loop rather than group_by + summarise: the summarise
-# version subsets inside the call (Log2FC[isDAR_full]) which dplyr 1.1 treats as
-# a multi-row return, and the columns silently go missing.
+# computed per fold in a loop rather than group_by + summarise (dplyr 1.1 quirk)
 fold_stats <- function(d) {
   x <- folds[folds$held_out == d, , drop = FALSE]
   dar <- x$isDAR_full
@@ -265,8 +256,7 @@ ggsave(p_a, file = paste0(fig_dir, "tex_leave_one_donor_out_l2fc.pdf"),
   width = 10, height = 3.2)
 
 ## ---- 7. Panel B: motif enrichment across folds -----------------------------
-# Figure 2G is a motif claim, so this is the panel that has to hold. Track the
-# top motifs from the full analysis through each fold.
+# track the top motifs from the full analysis through each fold
 if (length(fold_motifs) > 0) {
   top_up <- motifs_full %>%
     dplyr::filter(direction == "up") %>%
@@ -331,15 +321,7 @@ if (length(fold_motifs) > 0) {
 }
 
 ## ---- 8. Supplementary panel -------------------------------------------------
-# Grouped horizontal bars, same orientation and footprint as the donor
-# composition plot. Motifs named in Figure 2G on the y axis, enrichment of the
-# Tex hyper-accessible regions on the x, one bar per analysis: the full cohort
-# and each leave-one-donor-out fold. All five bars clearing the significance
-# line means no single donor carries the enrichment.
-#
-# A scatter of fold vs full log2FC was tried first and was unreadable: 4 folds x
-# 4097 DARs overplot into two blobs and the last colour drawn hides the rest.
-# Those numbers are in the legend instead.
+# grouped horizontal bars: Figure 2G motifs, one bar per analysis (full cohort and each fold)
 panel_motifs <- c("FOXP1", "FOXP2", "FOXP3", "FOXP4", "RUNX1", "ETV2")
 
 if (length(fold_motifs) > 0) {

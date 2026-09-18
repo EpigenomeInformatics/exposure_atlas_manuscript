@@ -3,27 +3,7 @@
 #####################################################################
 # 07_3_confounder_adjusted_DARs.R
 # created on 2026-08-08 by Irem B. Gunduz
-#
-# Reviewer response (R1.2 / R2 technical covariates; supervisor request):
-# re-call differentially accessible regions with per-sample technical
-# covariates included in the differential model, and show that the reported
-# results are qualitatively unchanged.
-#
-# Approach
-#  - Load the EXISTING processed ChrAccR DsATAC objects (no re-import, no
-#    re-normalisation) so the adjusted and unadjusted calls differ ONLY in the
-#    design matrix.
-#  - Attach per-sample QC metrics (mean TSS enrichment, mean log10 fragments,
-#    mean FRIP, cell number) computed from the ArchR project.
-#  - Re-run ChrAccR's differential module with those metrics as adjustment
-#    columns, then compare adjusted vs unadjusted DARs: counts, overlap,
-#    direction concordance and effect-size correlation.
-#
-# NOTE ON POWER: these comparisons have few samples per group (e.g. n = 6
-# severe vs 7 control). Every added covariate costs a degree of freedom, so we
-# adjust for a SMALL set of metrics (TSS and FRIP by default) rather than all
-# of them. The point of the analysis is to show the conclusions are robust,
-# not to maximise the number of DARs.
+# Re-call DARs with per-sample technical covariates and compare to the unadjusted results
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -41,16 +21,12 @@ source(file.path(repo_dir, "utils/chraccr_plots.R")) # cutL0.5fc2Padj05
 out_dir <- "/icbb/projects/igunduz/finalize_echo_050824/confounder_adjusted/"
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
-# Manuscript-facing outputs (figures and the summary tables) go into the repo
-# figures/ directory alongside every other panel, not into the scratch dir.
+# figures and summary tables go into the repo figures/ directory
 fig_dir <- file.path(repo_dir, "figures")
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
 ## ---- Adjustment-set grid ----------------------------------------------------
-# Refit each comparison under several designs, so we see whether the calls
-# depend on WHICH covariates are adjusted for, not just on whether we adjusted.
-# 4-7 samples per group, so the larger sets will be underpowered and some get
-# rejected by the feasibility check below.
+# refit each comparison under several designs to test covariate choice
 adj_sets <- list(
   TSS               = "mean_TSS",
   FRIP              = "mean_FRIP",
@@ -67,8 +43,7 @@ adj_sets <- list(
 # applied to every comparison
 default_set <- "TSS_FRIP"
 
-# which comparisons get the full grid. "all" is the complete sweep and is long.
-# matched on "<cell> | <grp1> vs <grp2>".
+# which comparisons get the full grid (matched on "<cell> | <grp1> vs <grp2>")
 combo_scope <- c(
   "Mono_CD14 | C19_sev vs C19_ctrl",
   "Mono_CD14 | C19_mod vs C19_ctrl",
@@ -82,16 +57,10 @@ min_resid_df <- 2L
 # the grouping column the comparisons are defined on
 grp_col <- "sample_exposure_group"
 
-# Reuse an adjusted fit that is already on disk instead of refitting it. The
-# sweep below covers every cell type and every saved comparison, so this makes an
-# interrupted run resumable. Set to FALSE to force everything to be refitted.
+# reuse an adjusted fit already on disk; FALSE forces refitting
 resume <- TRUE
 
-# Normalise a sample identifier for joining ChrAccR sample ids to the ArchR QC
-# table: drop any directory, the .tsv.gz extension, and a trailing "_fragments",
-# so "hiv6_fragments.tsv.gz", "hiv6_fragments" and "hiv6" all collapse to "hiv6".
-# (The old code stripped only ".tsv.gz", leaving "hiv6_fragments" != "hiv6",
-# which is why every sample failed to match.)
+# normalise a sample id for joining ChrAccR ids to the ArchR QC table
 norm_key <- function(x) {
   x <- basename(as.character(x))
   x <- sub("\\.tsv\\.gz.*$", "", x)   # drop .tsv.gz and anything after it
@@ -100,9 +69,7 @@ norm_key <- function(x) {
 }
 
 ## ---- 0. Donor and predicted sex from Table S1 -------------------------------
-# Written by 01_v2_quality_control.R. HIV is longitudinal (3 samples/donor) so
-# donor is a real factor there; in COVID-19 it is ~1:1 with sample and the
-# feasibility check will reject it.
+# from Table S1 (written by 01_v2_quality_control.R)
 suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables_updated.xlsx")
 if (!file.exists(suppTables)) {
   suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables.xlsx")
@@ -137,10 +104,7 @@ qc_by_sample <- getCellColData(project,
   ) %>%
   dplyr::mutate(sample_key = norm_key(Sample))
 
-# The ChrAccR sample ids ("Influenza_ctrl_flu01_1") and the ArchR Sample ids
-# ("ATAC_055") are different schemes, so a direct key match fails. Build a lookup
-# from EVERY ArchR per-sample descriptor value to the ArchR Sample, so a ChrAccR
-# id that matches any descriptor column can be bridged to the QC metrics.
+# build a lookup bridging ChrAccR sample ids to ArchR Sample via every descriptor column
 archr_sample_meta <- as.data.frame(getCellColData(project))
 archr_sample_meta <- archr_sample_meta[!duplicated(archr_sample_meta$Sample), , drop = FALSE]
 message("ArchR per-sample descriptor columns: ",
@@ -155,13 +119,7 @@ rm(project)
 gc()
 
 ## ---- 1b. Can this design be fitted at all? ----------------------------------
-# Three ways a covariate fails, each otherwise an opaque DESeq2 error or a
-# meaningless fit:
-#   constant   no variation in the compared samples (Sex in HIV: all male)
-#   collinear  as many levels as samples, i.e. the sample itself
-#   nested     every level inside one group, so it absorbs the tested effect
-#              (donor in COVID-19)
-# Plus a residual df floor.
+# reject covariates that are constant, collinear with sample, or nested within groups, plus a residual df floor
 feasible_adj <- function(sa, cols, comp) {
   grps <- strsplit(sub(" \\[.*", "", comp), " vs ", fixed = TRUE)[[1]]
   keep <- as.character(sa[[grp_col]]) %in% grps
@@ -215,8 +173,7 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0),
                          set_name = default_set) {
   set_cols <- adj_sets[[set_name]]
   tag <- gsub("[^A-Za-z0-9]+", "_", sub(" \\[.*", "", comp))
-  # dir carries the design so they do not overwrite each other; legacy
-  # "__adjusted" dirs were the TSS_FRIP set
+  # dir carries the design so runs do not overwrite each other
   ana_adj <- if (identical(set_name, "TSS_FRIP") &&
                  dir.exists(file.path(out_dir, paste0(cell, "__", tag, "__adjusted")))) {
     file.path(out_dir, paste0(cell, "__", tag, "__adjusted"))
@@ -235,9 +192,7 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0),
   ds <- ChrAccR::loadDsAcc(file.path(anaDir_existing, cell, "data", "dsATAC_filtered"))
   sa <- ChrAccR::getSampleAnnot(ds)
 
-  # Bridge ChrAccR sample ids to ArchR Sample ids via the descriptor lookup, then
-  # to the QC metrics. Try the rownames and every annotation column, and report
-  # which one mapped best (so we can see the correct bridge column if this fails).
+  # bridge ChrAccR ids to ArchR Sample via the lookup, trying every column
   try_map <- function(v) id_lookup$Sample[match(norm_key(v), id_lookup$key)]
   cand   <- c(list(.rownames = rownames(sa)), as.list(as.data.frame(sa)))
   mapped <- lapply(cand, try_map)
@@ -256,8 +211,7 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0),
   } else {
     message("  matched all ", length(idx), " samples to QC metrics via '", best, "'")
   }
-  # DESeq2 rejects NA in the design, so if any samples are still unmatched, stop
-  # with a clear message rather than the opaque "cannot contain NA" error.
+  # DESeq2 rejects NA in the design, so stop if any samples are unmatched
   if (mean(is.na(idx)) > 0) {
     stop(sum(is.na(idx)), " of ", length(idx),
       " samples could not be mapped to QC metrics; fix the id_lookup / bridge ",
@@ -282,11 +236,7 @@ run_adjusted <- function(anaDir_existing, cell, comp, extra_adj = character(0),
   # write the augmented annotation back onto the object
   ds@sampleAnnot <- sa
 
-  # DESeq2-based differential needs raw integer counts. The processed DsATAC can
-  # carry normalized/transformed (non-integer) counts, which makes
-  # run_atac_differential fail with "some values in assay are not integers".
-  # Loading a raw/pre-normalization object would be cleaner; as a safeguard we
-  # round any non-integer count matrix back to integers so the model can run.
+  # DESeq2 needs integer counts, so round any non-integer count matrix
   ct_slots <- tryCatch(names(ds@counts), error = function(e) character(0))
   for (rt in ct_slots) {
     cm <- tryCatch(as.matrix(ds@counts[[rt]]), error = function(e) NULL)
@@ -334,8 +284,7 @@ compare_adjusted <- function(anaDir_existing, cell, comp, ana_adj, set_name) {
   }
 
   adj <- read_diff(ana_adj)
-  # that dir holds every comparison for the cell type, so pick by group labels
-  # in the filename, falling back to the comparisonTable row index
+  # pick the comparison by group labels in the filename, else by row index
   ddir <- file.path(anaDir_existing, cell, "reports", "differential_data")
   unadj_all <- sort(list.files(ddir,
     pattern = "diffTab.*archrPeaks.*\\.tsv$", full.names = TRUE
@@ -389,8 +338,7 @@ compare_adjusted <- function(anaDir_existing, cell, comp, ana_adj, set_name) {
   )
 }
 
-# Same columns for comparisons that did not complete, so they stay visible.
-# "failed" = should have worked and errored; "not feasible" = correctly refused.
+# blank row for comparisons that did not complete
 blank_row <- function(cell, comp, set_name, status) {
   data.frame(
     cell = cell, comparison = sub(" \\[.*", "", comp),
@@ -421,8 +369,7 @@ skip_row <- function(cell, comp, set_name, set_cols, fs) {
 covid_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_covid_2023-10-02/"
 other_dir <- "/icbb/projects/igunduz/DARPA_analysis/chracchr_run_011023/ChrAccRuns_2023-10-02/"
 
-# Sweep every cell type in both runs. A cell type needs both the filtered
-# DsATAC object and a saved unadjusted run; anything else goes in the skip log.
+# sweep every cell type that has both a filtered DsATAC object and a saved run
 skipped <- list()
 note_skip <- function(anaDir, cell, reason) {
   message("  skipping ", cell, ": ", reason)
@@ -511,9 +458,7 @@ message("Comparisons discovered: ", length(jobs),
   "; model fits queued (comparison x adjustment set): ", length(runs))
 
 ## ---- 3c. Run the sweep ------------------------------------------------------
-# rewritten after every fit, so a crash still leaves a usable table
-# distinct from 07_4's summary. Both used to write the same filename and
-# whichever ran last overwrote the other's status/feasibility columns.
+# rewritten after every fit so a crash still leaves a usable table
 summary_csv <- file.path(fig_dir, "confounder_adjusted_DAR_fit_log.csv")
 res_list <- list()
 
@@ -542,8 +487,7 @@ message(sprintf("%d fitted, %d refused as not feasible, %d failed (of %d)",
   n_ok, n_skip, n_fail, nrow(res)))
 
 ## ---- 3d. Does the choice of covariates change the answer? -------------------
-# per comparison: how much do the counts move across designs, and do the
-# effect sizes stay correlated with the unadjusted fit?
+# per comparison: how much counts move across designs and effect-size correlation
 stability <- res %>%
   dplyr::filter(status == "ok") %>%
   dplyr::group_by(cell, comparison) %>%
@@ -570,8 +514,7 @@ message("Per-comparison stability across designs written to ",
 print(as.data.frame(stability))
 
 ## ---- 4. Figures ------------------------------------------------------------
-# Figures are drawn by 07_4, reading the tables above off disk, so the fits and
-# the figures cannot drift apart.
+# figures are drawn by 07_4 from the tables above
 ok <- res[!is.na(res$status) & res$status == "ok", , drop = FALSE]
 message("Fit log written to confounder_adjusted_DAR_fit_log.csv (status per ",
   "comparison x design, including designs refused as not feasible)")

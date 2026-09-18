@@ -113,11 +113,7 @@ lapply(cells, function(cell) {
 
 
 #####################################################################
-# R3.4: direct moderate-vs-severe differential accessibility
-# Loads the EXISTING processed ChrAccR DsATAC object (no re-run of import/
-# filtering/normalization) and runs ChrAccR's own differential module for the
-# C19_sev vs C19_mod comparison, so it uses the same normalization, model and
-# cutoffs as the control comparisons above.
+# Direct moderate-vs-severe differential accessibility
 #####################################################################
 cell_ms <- "Mono_CD14"
 # existing ChrAccR run directory (see src/atac/08_1_chraccr_plots.R)
@@ -127,21 +123,19 @@ plot_dir <- "/icbb/projects/igunduz/finalize_echo_050824/C19/"
 # load the processed object
 ds <- ChrAccR::loadDsAcc(paste0(existing_run, cell_ms, "/data/dsATAC_filtered/"))
 
-# configure the differential module for the direct moderate-vs-severe test,
-# mirroring the settings used for the control comparisons above
+# configure the differential module for the moderate-vs-severe test
 setConfigElement("differentialColumns", c("sample_exposure_group"))
 setConfigElement("differentialCompNames", c("C19_sev vs C19_mod [sample_exposure_group]"))
 setConfigElement("differentialAdjColumns", "processing_date")
 setConfigElement("differentialCutoffL2FC", 0.5)
 setConfigElement("filteringSexChroms", TRUE)
 
-# run into a FRESH analysis dir: run_atac_differential skips if a differential
-# report already exists in anaDir, so we do not reuse the control-comparison dir
+# run into a fresh analysis dir (run_atac_differential skips if a report exists)
 ms_dir <- paste0(existing_run, cell_ms, "_mod_vs_sev/")
 if (!dir.exists(ms_dir)) dir.create(ms_dir, recursive = TRUE)
 run_atac_differential(ds, ms_dir)
 
-# read the resulting DAR table. We search for the diffTab file recursively so we can find it even if the subdir structure changes in future versions of ChrAccR.
+# read the resulting DAR table (search recursively for the diffTab file)
 source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/helpers.R") # cutL0.5fc2Padj05
 
 diff_files <- list.files(ms_dir, pattern = "diffTab.*\\.tsv$", recursive = TRUE, full.names = TRUE)

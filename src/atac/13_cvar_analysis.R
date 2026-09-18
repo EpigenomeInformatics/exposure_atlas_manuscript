@@ -78,11 +78,11 @@ se_dev <- SummarizedExperiment(
 dev <- as(se_dev, "chromVARDeviations")
 
 # -------------------------------------------------------------------
-# 3. ROBUST METADATA PARSING (Fixing the NA issue)
+# 3. Metadata parsing
 # -------------------------------------------------------------------
 cn <- colnames(dev)
 
-# A. Extract Condition (everything before the first underscore usually, but handled specifically)
+# A. Extract condition
 colData(dev)$Condition <- str_extract(cn, "^[^_]+_[^_]+")
 colData(dev)$Exposure <- str_extract(cn, "^[^_]+")
 
@@ -94,14 +94,12 @@ remainder <- str_remove(remainder, "\\.tsv\\.gz$")
 # Remove the _Bei tag if it exists in the middle
 remainder <- str_replace(remainder, "_Bei_", "_")
 
-# C. Match Cell Types Deterministically
-# Instead of regex splitting, we check which valid cell type appears at the start of the remainder
+# C. Match cell types
 colData(dev)$Cell_Type <- NA_character_
 colData(dev)$Sample <- NA_character_
 
 for (ct in names(cell_type_colors)) {
-  # Pattern: Start of string, followed by cell type, followed by underscore
-  # This distinguishes "T_mem" from "T_mem_CD4" by ensuring the longest match logic or exact boundaries
+  # match cell type at the start of the remainder
   pattern <- paste0("^", ct, "_")
   
   # Find indices where this cell type matches
@@ -162,9 +160,7 @@ for(comp_str in raw_comps) {
     
     dev_sub <- dev[, subset_mask]
     
-    # Check if we have data for both groups in this cell type
-    # We need at least 2 samples per group generally, but at least 1 to run without immediate error
-    # (differentialDeviations usually requires replicates, check your sample size)
+    # require >1 sample per group
     n_g1 <- sum(colData(dev_sub)$Condition == group1)
     n_g2 <- sum(colData(dev_sub)$Condition == group2)
     
@@ -179,7 +175,7 @@ for(comp_str in raw_comps) {
         diff_res$Comparison <- paste0(group1, "_vs_", group2)
         diff_res$Group1 <- group1
         diff_res$Group2 <- group2
-        diff_res$Cell_Type <- ct # Crucial: Label the result with the cell type
+        diff_res$Cell_Type <- ct # label with the cell type
         
         # Store in list
         list_name <- paste0(group1, "_vs_", group2, "_", ct)
@@ -275,13 +271,13 @@ devmat <- zmat[top_hits, ]
 
 condition_colors <- c(
   # COVID-19 (Greens)
-  "C19_ctrl"      = "#2b8cbe",  # Control (Blue-ish based on Figure 1A legend)
+  "C19_ctrl"      = "#2b8cbe",  # Control
   "C19_mild"      = "#a1d99b",  # Light Green
   "C19_mod"       = "#41ab5d",  # Medium Green
   "C19_sev"       = "#006d2c",  # Dark Green
 
   # Influenza (Oranges)
-  "Influenza_ctrl"= "#2b8cbe",  # Control (Matching COVID control if they are the same baseline)
+  "Influenza_ctrl"= "#2b8cbe",  # Control
   "Influenza_d3"  = "#fec44f",  # Day 3 (Yellow/Orange)
   "Influenza_d6"  = "#fe9929",  # Day 6 (Orange)
   # day 28 is the true final timepoint; "d30" is a legacy mislabel
@@ -408,8 +404,7 @@ for (i in seq_along(unique_types)) {
     col = col_fun,
     top_annotation = col_ha_sub,
     
-    # 1. Clustering Columns WITHIN groups
-    # Split by condition, KEEP condition order (e.g. Ctrl then Disease), CLUSTER samples inside
+    # cluster columns within condition groups
     column_split = sub_anno_df$Condition, 
     cluster_column_slices = FALSE, 
     cluster_columns = TRUE,        

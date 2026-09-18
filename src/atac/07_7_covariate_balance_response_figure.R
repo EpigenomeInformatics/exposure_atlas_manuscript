@@ -3,8 +3,7 @@
 #####################################################################
 # 07_7_covariate_balance_response_figure.R
 # created on 2026-08-18 by Irem B. Gunduz
-# Response figure: covariate balance, and the stability of the effect sizes
-# and TF enrichments under QC adjustment.
+# Response figure: covariate balance and effect-size/TF-enrichment stability under QC adjustment
 #
 # in:  figures/covariate_balance_by_comparison.csv   (07_6_covariate_balance.R)
 #      figures/confounder_adjusted_DAR_summary.csv   (07_4_confounder_adjusted_DAR_plots.R)
@@ -13,9 +12,6 @@
 #      <out_dir>/confounder_adjusted_DAR_regions.csv (07_4_confounder_adjusted_DAR_plots.R)
 # out: figures/response_figure_2_covariate_balance.pdf
 #      figures/response_figure_2_covariate_balance.png
-#
-# Each |SMD| is scaled by its own permutation null 95th percentile, so 1 is a
-# significance boundary rather than a fixed convention.
 #####################################################################
 
 suppressPackageStartupMessages({

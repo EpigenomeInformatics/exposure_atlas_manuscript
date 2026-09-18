@@ -4,15 +4,7 @@
 # 10_tcells.R
 # Created on 28-04-2025 by Irem B. Gunduz, written by Bei Wei
 # Last modified (revision) on 2025 by I.B.G.
-# This script is used to analyze T cells
-#
-# REVISION NOTES (reviewer response):
-#  (R1/R2/R3) Replaced pooled Fisher's exact test on cell counts with a
-#             subject-level differential abundance test (donor as unit).
-#  (R2/R3)    Replaced FOXP2/FOXP3-only motif matching with all FOXP-family
-#             motifs; report as family, not FOXP2-specific.
-#  (R2/R3)    Added CD4/CD8A/CD8B and Treg-marker (FOXP3/IL2RA) gene-activity
-#             panels to support CD8 identity and exclude Treg contamination.
+# Analyze T cells
 #####################################################################
 
 ## Load Libraries
@@ -36,9 +28,7 @@ source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_
 addArchRThreads(threads = 30)
 fig_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
-# Cache the subsetted/clustered/peak-called project as RDS so LSI, clustering,
-# UMAP, peak calling and chromVAR are not redone on every run. The Arrow files
-# under outputDir must stay put for the RDS to load.
+# cache the processed project as RDS so it is not rebuilt every run (Arrow files under outputDir must stay put)
 hiv_rds <- file.path(outputDir, "hiv_tcell_project.rds")
 build_project <- !file.exists(hiv_rds)
 
@@ -223,13 +213,7 @@ ggsave(umap_hiv, file = paste0(fig_dir, "umap_tcell_timepoint.pdf"), width = 7, 
 # Define Status
 df$Status <- ifelse(df$Clusters %in% c("C1","C2"), "Tex", "Other")
 
-## <<< REVISION (R1/R2/R3): subject-level differential abundance ---------------
-## Previously, Tex accumulation was tested with a Fisher's exact test on a
-## pooled cell-count contingency table (df$Status x df$TimePoint). That treats
-## individual cells as independent observations and ignores donor structure
-## (pseudoreplication). All three reviewers flagged this. We instead compute
-## the per-subject Tex proportion at each stage and test the change across the
-## four subjects, so the donor is the unit of analysis.
+## subject-level differential abundance: per-subject Tex proportion tested across the four subjects (donor as unit)
 
 # Per-subject, per-timepoint Tex proportion
 subj_prop <- df %>%
@@ -250,11 +234,7 @@ write.csv(subj_prop_wide,
           file = paste0(fig_dir, "tex_proportion_per_subject.csv"),
           row.names = FALSE)
 
-# Paired, subject-level tests across stages (N = 4 subjects).
-# Wilcoxon signed-rank is used as the nonparametric paired test; with n = 4 the
-# p-values are necessarily coarse, so we report them alongside the per-subject
-# values rather than as standalone significance. We also report the paired
-# t-test for reference.
+# paired subject-level tests across stages (N = 4): Wilcoxon signed-rank and paired t-test
 run_subject_level_paired <- function(wide, g1, g2) {
   x <- wide[[g1]]
   y <- wide[[g2]]
@@ -297,9 +277,7 @@ tex_traj <- ggplot(subj_prop_plot,
 ggsave(tex_traj, file = paste0(fig_dir, "tex_proportion_trajectory.pdf"),
        width = 6, height = 5)
 
-## <<< REVISION (R2/R3): donor composition of each Tex cluster -----------------
-## ClustersHIV x Subject as percentages, to show C1/C2 are not one donor.
-## Asked for by R2 and by Fabian (comments 64/65/66).
+## donor composition of each Tex cluster: ClustersHIV x Subject as percentages
 cluster_levels_all <- paste0("C", 1:6)   # C1/C2 are the exhausted (Tex) clusters
 donor_comp_df <- getCellColData(project, select = c("ClustersHIV", "Sample")) %>%
   as.data.frame() %>%
@@ -322,8 +300,7 @@ write.csv(donor_comp,
           file = paste0(fig_dir, "hiv_cluster_donor_composition.csv"),
           row.names = FALSE)
 
-# Horizontal stacked barplot: one bar per cluster (all six), split by subject
-# (each bar sums to 100%). Clusters on the y-axis (C1 at top), proportion on x.
+# horizontal stacked barplot: one bar per cluster, split by subject (each bar sums to 100%)
 donor_comp_bar <- ggplot(donor_comp,
                          aes(x = pct, y = ClustersHIV, fill = Subject)) +
   geom_col(width = 0.7, colour = "white", linewidth = 0.2) +
@@ -337,7 +314,6 @@ donor_comp_bar <- ggplot(donor_comp,
 ggsave(donor_comp_bar,
        file = paste0(fig_dir, "hiv_cluster_donor_composition_bar.pdf"),
        width = 6, height = 4)
-## <<< END REVISION -----------------------------------------------------------
 
 ## Previous pooled Fisher test kept below, commented out. Do not use.
 # status_time_table <- table(df$Status, df$TimePoint)
@@ -359,7 +335,6 @@ ggsave(donor_comp_bar,
 # }
 # pairwise_results <- run_pairwise_fisher(status_time_table)
 # write.csv(pairwise_results, file = paste0(fig_dir, "fisher_test_results.csv"), row.names = FALSE)
-## <<< END REVISION -----------------------------------------------------------
 
 ###########################################################################################
 
@@ -393,16 +368,13 @@ lp <- ggplot(df_long, aes(x = Stage, y = Viral_Load, color = Subject, group = Su
 ggsave(lp, file = paste0(fig_dir, "viral_load_subject.pdf"), width = 7, height = 7)
 
 
-## <<< REVISION (R2/R3): CD8 identity + Treg-exclusion markers -----------------
-## CTLA4 is also a Treg marker, so add lineage (CD4/CD8A/CD8B) and Treg
-## (FOXP3/IL2RA) genes to the panel to show Tex is CD8+ and FOXP3-/IL2RA-low.
+## CD8 identity + Treg-exclusion markers: add lineage (CD4/CD8A/CD8B) and Treg (FOXP3/IL2RA) genes
 
 markerGenes <- c(
   "HAVCR2", "CTLA4", "NCAM1", "ROBO2", "ROBO1", "TIGIT",  # exhaustion (original)
   "CD8A", "CD8B", "CD4",                                   # lineage (added)
   "FOXP3", "IL2RA"                                         # Treg (added)
 )
-## <<< END REVISION -----------------------------------------------------------
 
 # Get the marker genes
 markersGS <- getMarkerFeatures(
@@ -429,9 +401,7 @@ dev.off()
 
 project <- addImputeWeights(project)
 
-## <<< REVISION (R2/R3): keep a colour bar on each gene-activity UMAP ----------
-## guides(color = FALSE) dropped the scale entirely. Per-gene scales, since
-## CD8A and FOXP3 span different ranges.
+## keep a colour bar on each gene-activity UMAP (per-gene scales)
 style_umap_gene <- function(x) {
   x +
     theme_ArchR(baseSize = 6.5) +
@@ -446,7 +416,6 @@ style_umap_gene <- function(x) {
       legend.title      = element_text(size = 5)
     )
 }
-## <<< END REVISION -----------------------------------------------------------
 
 p <- plotEmbedding(
   ArchRProj = project,
@@ -461,8 +430,7 @@ pdf(file = paste0(fig_dir, "exhaustion_markers_umap.pdf"), width = 12, height = 
 do.call(cowplot::plot_grid, c(list(ncol = 3), p2))
 dev.off()
 
-## <<< REVISION (R2/R3): separate lineage/Treg UMAP panel, so it can be cited --
-## directly in the annotation text.
+## separate lineage/Treg UMAP panel
 lineage_treg_genes <- c("CD8A", "CD8B", "CD4", "FOXP3", "IL2RA")
 p_lin <- plotEmbedding(
   ArchRProj = project,
@@ -476,8 +444,7 @@ pdf(file = paste0(fig_dir, "lineage_treg_markers_umap.pdf"), width = 11, height 
 do.call(cowplot::plot_grid, c(list(ncol = 3), p_lin2))
 dev.off()
 
-# Quantitative check: mean gene-activity of lineage/Treg markers in Tex vs Other,
-# to state numerically that Tex clusters are CD8+ and FOXP3-/IL2RA-low.
+# mean gene-activity of lineage/Treg markers in Tex vs Other
 gsm <- getMatrixFromProject(project, useMatrix = "GeneScoreMatrix")
 gs_rownames <- rowData(gsm)$name
 want <- intersect(lineage_treg_genes, gs_rownames)
@@ -490,12 +457,9 @@ tex_summary <- sapply(want, function(g) {
 tex_summary <- t(tex_summary)  # rows = gene, cols = Tex/Other
 write.csv(as.data.frame(tex_summary),
           file = paste0(fig_dir, "tex_lineage_treg_meanactivity.csv"))
-## <<< END REVISION -----------------------------------------------------------
 
 
-## <<< REVISION (R2): lineage + exhaustion activity per HIV CD8 subcluster -----
-## Quantitative companion to the marker UMAPs: CD8A/CD8B high and CD4 low in all
-## six clusters, CTLA4/HAVCR2 up in C1/C2.
+## lineage + exhaustion activity per HIV CD8 subcluster
 comp_genes_wanted <- c("CD8A", "CD8B", "CD4", "CTLA4", "HAVCR2")
 # gs_sub holds only the lineage/Treg panel, so pull these from the full matrix
 comp_genes <- intersect(comp_genes_wanted, gs_rownames)
@@ -535,7 +499,6 @@ comp_means <- comp_df %>%
 write.csv(comp_means,
           file = paste0(fig_dir, "hiv_cluster_CD4_CD8_geneactivity_means.csv"),
           row.names = FALSE)
-## <<< END REVISION -----------------------------------------------------------
 
 
 #####################################################################
@@ -629,13 +592,7 @@ ggsave(ggDo, file = paste0(fig_dir, "motif_depletion_tex.pdf"), width = 6, heigh
 data("human_pwms_v2")
 motifs <- human_pwms_v2
 
-## <<< REVISION (R2/R3): match the full FOXP family, not FOXP2/FOXP3 only ------
-## Reviewers noted that FOXP-family motifs are highly similar and effectively
-## indistinguishable, and that singling out FOXP2 is misleading (FOXP2 is not a
-## canonical T-cell TF; FOXP3 is the canonical Treg factor). We therefore match
-## ALL FOXP-family motifs and display them as a family in the browser track,
-## rather than restricting to FOXP2/FOXP3. Individual members are still captured
-## for completeness but interpreted at the family level in the text.
+## match the full FOXP family, not FOXP2/FOXP3 only (family-level interpretation)
 foxp <- names(motifs)[grepl("FOXP", names(motifs), ignore.case = TRUE)]
 message("FOXP-family motifs matched: ", paste(foxp, collapse = ", "))
 
@@ -648,8 +605,7 @@ motif_positions <- motifmatchr::matchMotifs(
 diff_peaks_gr <- getMarkers(markerTest, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE)$Tex
 saveRDS(diff_peaks_gr, file = paste0(outputDir, "diff_peaks_tex.rds"))
 
-# Collapse all FOXP-family motif matches into a single family-level peak set,
-# so the browser track shows "FOXP family" rather than one arbitrary member.
+# collapse all FOXP-family motif matches into a single family-level peak set
 foxp_cols <- seq_len(ncol(motif_positions))
 foxp_any  <- Reduce(`|`, lapply(foxp_cols, function(j) assay(motif_positions)[, j]))
 foxp_family_peaks <- getPeakSet(project)[foxp_any]
@@ -659,7 +615,6 @@ peaks_matched <- list(
   FOXP_family = foxp_family_peaks,  # all FOXP members, union of matches
   DiffPeaks   = diff_peaks_gr
 )
-## <<< END REVISION -----------------------------------------------------------
 
 genes <- c("CTLA4","HAVCR2")  # removed FOXP2 as a highlighted "gene"; family shown in track
 plot <- plotBrowserTrack(
@@ -684,19 +639,10 @@ plotPDF(
 
 #####################################################################
 # TF-activity (chromVAR) UMAPs for the supplement
-# (Fabian, comments 7/9/11: include the TF activities we previously only
-#  checked manually in a supplementary panel). We compute per-cell motif
-#  deviations and project the FOXP-family and exhaustion-associated TF
-#  activities onto the T-cell UMAP so they can be shown directly.
 #####################################################################
 if (build_project) project <- addDeviationsMatrix(ArchRProj = project, peakAnnotation = "Motif", force = TRUE)
 
-## getFeatures() on a MotifMatrix returns BOTH the bias-corrected z-scores
-## ("z:TF_###") and the raw deviations ("deviations:TF_###"). The previous grep
-## matched both, so half the panels were raw-deviation UMAPs that render
-## near-flat/blank. We keep only the z-score features (the standard chromVAR
-## readout) and match each TF symbol exactly (anchored after "z:", so "TOX"
-## does not also grab TOX2/TOX3).
+## keep only the z-score features and match each TF symbol exactly (anchored after "z:")
 motif_features <- getFeatures(project, useMatrix = "MotifMatrix")
 motif_z <- grep("^z:", motif_features, value = TRUE)
 
@@ -734,17 +680,10 @@ plotPDF(p_tf,
 
 #####################################################################
 # chromVAR TF-activity heatmap across HIV clusters (C1-C6), Altius archetypes
-# ArchR-native marker heatmap of the most differentially active (variable)
-# Altius archetypes across the six HIV CD8+ T-cell clusters, on chromVAR
-# z-scores. Coloured with the ChrAccR diverging scheme (`.default.div`,
-# teal-to-brown) so it matches the cvar TF-deviation heatmap.
 #####################################################################
 # Add the Altius archetype annotation + deviations matrix on this T-cell peak set
 if (build_project) {
-  # subsetCells() inherits peak annotations from the full project, whose match
-  # matrices are sized to the OLD peak set. After building a new T-cell peak set
-  # a stale 'altius' annotation makes addDeviationsMatrix fail with
-  # 'subscript out of bounds', so drop it and recompute against the new peaks.
+  # drop the stale 'altius' annotation (sized to the old peak set) and recompute against the new peaks
   if ("altius" %in% names(project@peakAnnotation)) {
     project@peakAnnotation <- project@peakAnnotation[
       setdiff(names(project@peakAnnotation), "altius")
@@ -760,17 +699,14 @@ if (build_project) {
   message("Saved HIV T-cell project to ", hiv_rds)
 }
 
-# Top-30 most VARIABLE Altius archetypes (chromVAR combined variability), shown
-# as mean per-cluster z-scores. The differential marker test returned too few
-# archetypes on this small T-cell peak set, so we rank by variability instead.
+# most variable Altius archetypes (chromVAR variability), shown as mean per-cluster z-scores
 vd <- as.data.frame(getVarDeviations(project, name = "altiusMatrix", plot = FALSE))
 all_feats <- if ("name" %in% colnames(vd)) vd$name else rownames(vd)
 
 n_top   <- 50
 top_var <- head(all_feats, n_top)
 
-# Always include the FOXP/FOX-family archetype(s), even if not among the top
-# variable set, since they are the focus of the HIV/Tex analysis.
+# always include the FOX-family archetype(s), the focus of the HIV/Tex analysis
 fox_feats <- grep("fox", all_feats, value = TRUE, ignore.case = TRUE)
 if (length(fox_feats)) message("FOX-family archetypes added: ", paste(fox_feats, collapse = ", "))
 top_var <- unique(c(top_var, fox_feats))
@@ -788,8 +724,7 @@ mean_z <- sapply(cluster_levels, function(cl)
   rowMeans(zmat[, clust == cl, drop = FALSE], na.rm = TRUE))
 mean_z <- t(scale(t(mean_z)))          # row-scale for cluster-to-cluster contrast
 
-# Same diverging palette as the cvar TF-deviation heatmap (ChrAccR .default.div,
-# teal-to-brown); fall back to a BrBG teal-brown ramp if the config is absent.
+# same diverging palette as the cvar TF-deviation heatmap (fall back to BrBG if absent)
 colors.cv <- tryCatch(
   ChrAccR::getConfigElement("colorSchemesCont")[[".default.div"]],
   error = function(e) rev(RColorBrewer::brewer.pal(11, "BrBG"))
@@ -813,10 +748,7 @@ ComplexHeatmap::draw(hm_motifs)
 dev.off()
 
 #####################################################################
-## <<< REVISION: same marker set across ALL T-cell types in the atlas ----------
-## Cell type on the x axis instead of HIV subcluster, so exhaustion markers can
-## be read against lineage markers outside the HIV subset.
-## T_mix dropped: mixed cluster, its distributions blend the neighbours.
+# Same marker set across all T-cell types in the atlas (T_mix dropped)
 #####################################################################
 
 tcell_types <- c("T_naive", "T_mem_CD4", "T_mem_CD8", "T_mait") # T_mix excluded
@@ -868,12 +800,10 @@ tcell_df <- do.call(rbind, lapply(genes_t, function(g) {
     Gene     = factor(Gene, levels = genes_t)
   )
 
-## Gene activity is zero-inflated with long right tails, so a plain linear
-## violin is set by a handful of extreme cells. Two readable views:
+## gene activity is zero-inflated with long right tails; two readable views follow
 
 ## ---- (a) Dot plot ----------------------------------------------------------
-## Size = % cells with non-zero activity, colour = mean scaled within gene.
-## Separates detection rate from level, which a violin conflates.
+## size = % cells with non-zero activity, colour = mean scaled within gene
 tcell_dot <- tcell_df %>%
   dplyr::group_by(Gene, CellType) %>%
   dplyr::summarise(
@@ -902,13 +832,8 @@ ggsave(p_dot,
        file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_dotplot.pdf"),
        width = 6.5, height = 4)
 
-## ---- (b) Violin on a log scale ----------------------------------------------
-## Same distributions as before, but log1p-transformed so the zero-inflated bulk
-## is resolved instead of being flattened by the tail. Kept as the companion to
-## the dot plot for anyone who wants the full distribution rather than a summary.
-# Linear units and free y, matching the other gene-activity panels. Violins are
-# drawn from cells at or below each gene's 99.5th percentile; median and IQR use
-# every cell, so only the drawn tail is affected.
+## ---- (b) Violin ----------------------------------------------
+# violins drawn from cells at or below each gene's 99.5th percentile; median and IQR use every cell
 viol_caps <- tcell_df %>%
   dplyr::group_by(Gene) %>%
   dplyr::summarise(cap = stats::quantile(Activity, 0.995, na.rm = TRUE),
@@ -945,8 +870,7 @@ ggsave(tcell_violin,
        file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_violin.pdf"),
        width = 12, height = 4)
 
-## Unit is the CELL, so descriptive only. A formal test between cell types
-## would be pseudoreplicated across a donor's cells and needs donor-level means.
+## unit is the cell, so descriptive only
 write.csv(
   tcell_dot %>%
     dplyr::mutate(dplyr::across(c(pct_detected, mean_all, mean_detected,
@@ -965,7 +889,6 @@ tcell_means <- tcell_df %>%
 write.csv(tcell_means,
           file = paste0(fig_dir, "tcell_lineage_exhaustion_geneactivity_means.csv"),
           row.names = FALSE)
-## <<< END REVISION -----------------------------------------------------------
 
 #####################################################################
 

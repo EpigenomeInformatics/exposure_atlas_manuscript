@@ -2,21 +2,7 @@
 
 #####################################################################
 # 12b_milo_hiv.R
-# miloR neighbourhood differential-abundance on the HIV CD8+ T-cell subset.
-#
-# PURPOSE (reviewer R3.2): a reviewer asked whether neighbourhood-based
-# differential-abundance testing (Milo) would give better resolution than
-# predefined clusters. Our HIV design is 4 subjects x 3 stages = 12 samples,
-# which is at or below Milo's minimum for a mixed model. This script shows that
-# Milo does not give a usable result here. We run it two ways:
-#   (1) with the real 12 samples as replicates (design ~ Subject + Stage), and
-#   (2) with pseudo-replicates (each sample's cells split into fake replicates,
-#       as suggested), which is the only way to give the model "replication".
-# We then show that (1) yields essentially no significant neighbourhoods and
-# (2) the pseudo-replicate result is unstable: the set of "significant"
-# neighbourhoods changes with the random split (seed), i.e. the significance is
-# an artefact of the fake replicates, not a real signal.
-#
+# miloR neighbourhood differential-abundance on the HIV CD8+ T-cell subset
 #####################################################################
 
 set.seed(1)
@@ -52,11 +38,7 @@ lsi   <- getReducedDims(project, reducedDims = "IterativeLSI_hiv")
 cells <- rownames(lsi)
 samp  <- sapply(strsplit(cells, "#"), `[`, 1)
 
-# Milo's buildGraph filters LSI dims that correlate with sequencing depth, using
-# colSums of the counts assay. A dummy all-zero assay makes depth constant, which
-# yields NA correlations and a "subscript out of bounds" error in findKNN. We give
-# it a real per-cell depth (nFrags) as a 1-row counts assay so the depth filter is
-# well defined (it will drop LSI dim 1, as intended for LSI embeddings).
+# provide per-cell depth (nFrags) as a 1-row counts assay so Milo's depth filter is defined
 nfrags <- getCellColData(project, select = "nFrags", drop = TRUE)[match(cells, project$cellNames)]
 sce <- SingleCellExperiment(
   assays = list(counts = matrix(as.numeric(nfrags), nrow = 1,
@@ -101,14 +83,7 @@ if (!is.null(res_real)) {
 }
 
 #####################################################################
-# (2) PSEUDO-replicates: split each sample's cells into n_rep fake replicates.
-#     Splitting one sample's cells into "replicates" is pseudoreplication: the
-#     fake replicates are not independent, so the model sees far more replication
-#     than the 4 real subjects provide and inflates significance. We demonstrate
-#     the inflation with a NULL: permute the stage labels within each subject (so
-#     there is no real stage effect) and re-run. If the null still calls many
-#     "significant" neighbourhoods, those hits are an artefact of the fake
-#     replicates, not stage biology.
+# (2) PSEUDO-replicates: split each sample's cells into n_rep fake replicates
 #####################################################################
 run_pseudo <- function(seed, n_rep = 3, permute = FALSE) {
   set.seed(seed)
@@ -154,13 +129,5 @@ message("A large permuted-null count means the significance is a pseudoreplicati
         "artefact of the fake replicates, not a real stage effect.")
 
 #####################################################################
-# Interpretation for the response letter:
-#  - REAL model (Section 1, ~Subject + Stage on the 12 samples): the honest
-#    donor-aware test. Report n_sig_real from that section as the main result.
-#  - PSEUDO model: to give Milo "replication" we split cells into fake replicates,
-#    which is pseudoreplication. It calls hundreds of significant neighbourhoods,
-#    but the permuted-stage NULL calls a comparable number -> those hits are false
-#    positives manufactured by the fake replicates. Either way (underpowered real
-#    model, or inflated pseudo model) neighbourhood DA does not give a trustworthy
-#    answer at 4 subjects, which is why we keep the subject-level cluster test.
+# Interpretation: neighbourhood DA is not trustworthy at 4 subjects; keep the subject-level cluster test
 #####################################################################

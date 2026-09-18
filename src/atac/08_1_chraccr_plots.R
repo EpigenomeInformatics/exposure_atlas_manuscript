@@ -264,8 +264,7 @@ saveRDS(labels, file = "/icbb/projects/igunduz/mono_projection_070824/labels.rds
 
 
 ###############################################################################
-# R3.4: moderate vs severe DAR overlap, sign concordance, one-group-only
-# Uses prepareDARforPlot + isDiff filter (same DAR definition as Fig 3).
+# Moderate vs severe DAR overlap, sign concordance, one-group-only
 ###############################################################################
 
 # severe = index 3, moderate = index 2 (matches the j<-ifelse logic above)
@@ -313,17 +312,11 @@ write.csv(summary_r34,
           row.names = FALSE)
 
 ###############################################################################
-# R3.4 (revision): moderate-vs-severe DAR overlap, split by direction.
-# The direct moderate-vs-severe comparison is computed in
-# 07_2_run_ChrAccR_C19.R and read from mod_vs_sev_DAR.rds.
-# Direction convention follows ChrAccR: log2FC > 0 = higher accessibility in the
-# disease group of each comparison.
+# Moderate-vs-severe DAR overlap, split by direction
 ###############################################################################
 fig_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 
-# Select the ChrAccR comparisons BY NAME (robust to diffTab ordering) rather
-# than by a hard-coded positional index; moderate-vs-severe comes from the
-# direct comparison in 07_2_run_ChrAccR_C19.R (mod_vs_sev_DAR.rds).
+# select the ChrAccR comparisons by name rather than by positional index
 comparisonTable <- readRDS(paste0(outputDir, cell, "/reports/differential_data/comparisonTable.rds"))
 comp_index <- function(grp1, grp2) {
   i <- which(comparisonTable$grp1 == grp1 & comparisonTable$grp2 == grp2)
@@ -353,20 +346,13 @@ message(sprintf(
 ))
 
 ###############################################################################
-# Single compact panel replacing the two UpSet plots.
-# One stacked bar carries everything the upsets did: the three overlap
-# categories (moderate-only / shared / severe-only), the hyper- vs hypo-
-# accessible split within each, and -- in the subtitle -- the effect-size
-# concordance of the shared core plus the null result of the direct
-# moderate-vs-severe test. Small enough to sit as an inset in Figure 3
-# (Fabian's suggestion) rather than taking a full panel.
+# Single compact stacked-bar panel of the moderate/shared/severe DAR overlap
 ###############################################################################
 ov       <- intersect(dar_cm$id, dar_cs$id)
 mod_only <- setdiff(dar_cm$id, dar_cs$id)
 sev_only <- setdiff(dar_cs$id, dar_cm$id)
 
 # direction taken from the group in which the region is differential
-# (severe for the shared set; the shared set is direction-concordant anyway)
 dir_of <- function(ids, tab) {
   ifelse(tab$log2FC[match(ids, tab$id)] > 0, "Hyper-accessible", "Hypo-accessible")
 }

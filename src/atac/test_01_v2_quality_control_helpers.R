@@ -1,5 +1,4 @@
-## Extract the pure-function definitions from the script and exercise them on
-## synthetic data with known structure. No ArchR / no data needed.
+## Extract the pure-function definitions from the script and test them on synthetic data
 set.seed(1)
 
 # Locate the script: next to this test file, or in the working directory.
@@ -73,12 +72,8 @@ ok("assoc_test picks the donor unit for a donor-constant covariate",
 ok("assoc_test reports n = number of donors, not samples",
    res_donor$n == 8 && res_donor$n_group == 8)
 
-## ---- THE CENTRAL CLAIM: calibration under the null --------------------------
-# 24 samples from 8 donors (3 each). Donor identity drives the coordinate;
-# cohort is assigned at the donor level and has NO effect. A correct test
-# rejects at ~5%. A sample-level OLS that treats the 3 samples of a donor as
-# independent should reject far more often. This is the whole reason the script
-# groups on donor, so it is worth checking rather than asserting.
+## ---- Calibration under the null --------------------------------------------
+# cohort assigned at donor level with no effect; a correct test rejects at ~5%, a naive sample-level OLS far more
 nsim <- 1000
 naive_rej <- donor_rej <- logical(nsim)
 for (s in seq_len(nsim)) {
@@ -108,8 +103,7 @@ cat(sprintf("   noise factor: raw R2 = %.2f, adjusted R2 = %.2f\n", rs$r2, rs$ad
 ok("raw R2 is inflated for a multi-level factor on few donors", rs$r2 > 0.15)
 ok("adjusted R2 discounts it", rs$adj_r2 < rs$r2)
 
-# a factor with one level per donor leaves zero residual df: the test is not
-# defined and must come back NA rather than a spurious R2 of 1
+# a factor with one level per donor leaves zero residual df, so the test must return NA
 ok("saturated factor -> NA (no residual df)",
    is.na(assoc_test(rnorm(24), factor(donor), donor)$p))
 

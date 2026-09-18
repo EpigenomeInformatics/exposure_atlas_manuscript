@@ -280,19 +280,19 @@ go_results <- enrichGO(
 )
 
 
-# Sıralama: Count değerine göre azalan sırada
+# sort by Count, descending
 go_results@result <- go_results@result[order(go_results@result$Count, decreasing = TRUE), ]
 
-# PDF çıktısı için görselleştirme
+# plot for PDF output
 pdf(paste0(plot_dir, "GO_enrichment_CD14_mono_severe_vs_mild.pdf"), width = 12, height = 8)
 
-# Dotplot ile görselleştirme
+# dotplot
 dotplot(go_results, 
         showCategory = 20, 
         title = "GO Enrichment: CD14 Mono Severe vs Mild") +
   theme_minimal()
 
-# Alternatif: Barplot ile görselleştirme
+# alternative: barplot
 barplot(go_results, 
         showCategory = 20, 
         title = "GO Enrichment: CD14 Mono Severe vs Mild") +

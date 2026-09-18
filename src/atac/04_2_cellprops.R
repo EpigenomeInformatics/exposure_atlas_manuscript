@@ -108,9 +108,7 @@ p <- ggplot(df, aes(x = sample_exposure_group, y = freq, fill = sample_exposure_
   facet_wrap("ClusterCellTypes", scales = "free_y", ncol = 4) +
   # outlier.shape = NA so outliers are not drawn twice once the points are added
   geom_boxplot(outlier.shape = NA, alpha = 1, color = "black") +
-  # Individual samples shown as points (reviewer 1, minor comment 1): with only a
-  # few donors per group the distribution is not meaningful on its own, so every
-  # sample is displayed. Seeded jitter keeps the figure reproducible.
+  # show individual samples as jittered points (seeded for reproducibility)
   geom_point(
     position = position_jitter(width = 0.18, height = 0, seed = 12),
     size = 1.1, alpha = 0.75, colour = "black", show.legend = FALSE
@@ -129,10 +127,7 @@ p <- ggplot(df, aes(x = sample_exposure_group, y = freq, fill = sample_exposure_
 # Save the plot
 ggsave(p, filename = paste0(fig_dir, "cell_prop_plots.pdf"), width = 20, height = 20)
 
-# Version without the significance brackets. The brackets add roughly a third of
-# the panel height and, as noted below, show RAW p-values; the adjusted values
-# are reported in cell_prop_wilcox_bonferroni.csv. Use this version if space in
-# the supplementary figure is tight.
+# version without the significance brackets
 p_nobrackets <- p
 p_nobrackets$layers <- p_nobrackets$layers[
   !vapply(p_nobrackets$layers, function(l) inherits(l$stat, "StatCompareMeans"), logical(1))
@@ -143,11 +138,7 @@ ggsave(p_nobrackets,
 )
 
 #####################################################################
-# Explicit per-sample Wilcoxon rank-sum tests with Bonferroni correction
-# (R2 / R3.2). NOTE: stat_compare_means(comparisons = ...) draws each bracket's
-# RAW pairwise p-value; its p.adjust.method is ignored for bracket comparisons.
-# We therefore compute the adjusted p-values we report here, at the sample
-# (donor) level, so the reported padj values are reproducible.
+# Per-sample Wilcoxon rank-sum tests with Bonferroni correction
 #####################################################################
 prop_test_df <- do.call(rbind, lapply(comparisons, function(cmp) {
   do.call(rbind, lapply(unique(as.character(df$ClusterCellTypes)), function(ct) {
@@ -168,8 +159,7 @@ prop_test_df <- do.call(rbind, lapply(comparisons, function(cmp) {
   }))
 }))
 
-# Bonferroni across the full family of tests. To match a narrower family (e.g.
-# per cohort or per cell type), group_by before p.adjust instead.
+# Bonferroni across the full family of tests
 prop_test_df$p_adj <- p.adjust(prop_test_df$p_value, method = "bonferroni")
 prop_test_df <- prop_test_df[order(prop_test_df$p_adj), ]
 write.csv(prop_test_df,
@@ -179,11 +169,7 @@ message("Significant cell-type composition changes (Bonferroni p_adj < 0.05):")
 print(subset(prop_test_df, p_adj < 0.05))
 
 #####################################################################
-# NOTE: this script now only writes the raw statistics CSV above
-# (cell_prop_wilcox_bonferroni.csv). Insertion of the composition table into the
-# supplementary workbook and ALL supplementary-table numbering are handled in one
-# place — 12_assemble_supplementary_tables.R — so there is a single source of
-# truth for the numbering. Run that script last, after this one.
+# Writes the raw statistics CSV; table assembly is in 12_assemble_supplementary_tables.R
 #####################################################################
 
 #####################################################################

@@ -2,9 +2,7 @@
 
 #####################################################################
 # 13b_cvar_variance_decomposition.R -- add-on to 13_cvar_analysis.R
-# Reviewer R3.3: design-aware decomposition of TF-activity variance into
-# lineage, exposure, severity/stage, donor and (for C19) processing-batch
-# components. Outputs varpart_*.csv / .pdf into save_dir.
+# Decomposition of TF-activity variance into lineage, exposure, severity/stage, donor and batch components
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -43,8 +41,7 @@ meta$Exposure  <- factor(meta$Exposure)
 meta$Condition <- factor(meta$Condition)
 meta$Sample    <- factor(meta$Sample)
 
-# DONOR identity. meta$Sample is one level per SAMPLE, not per person: HIV has 3
-# timepoints/subject, influenza 4, and some C19 donors were sampled twice.
+# donor identity: meta$Sample is one level per sample, not per person
 hiv_subject <- c(
   hiv6 = "HIV_S1", hiv12 = "HIV_S1", hiv9 = "HIV_S1",
   hiv8 = "HIV_S2", hiv4  = "HIV_S2", hiv1 = "HIV_S2",
@@ -241,11 +238,7 @@ if (sum(covid_mask) > 10) {
               "varpart_boxplot_COVID_severity.pdf")
 
   ## ---- Model C3: severity without donor ----
-  # Donor is nested in Condition: each COVID donor sits in exactly one severity
-  # arm, so in model C the 22-level donor term absorbs what the 4-level
-  # condition term could explain. C therefore gives a LOWER bound on severity
-  # and C3, which omits donor, gives an UPPER bound. The design cannot separate
-  # them further.
+  # donor is nested in Condition, so C is a lower bound on severity and C3 (no donor) an upper bound
   formC3  <- ~ (1 | Cell_Type) + (1 | Condition)
   vpC3    <- fitExtractVarPartModel(zmat_c, formC3, meta_c)
   vpC3_df <- as.data.frame(vpC3); vpC3_df$Motif <- rownames(vpC3_df)
@@ -274,10 +267,7 @@ if (sum(covid_mask) > 10) {
     100 * bounds$Median[1], 100 * bounds$Median[2], 100 * bounds$Median[3]))
 
   ## ---- Model C2: processing batch in place of donor ----
-  # Batch cannot be ADDED to C: every sample of a donor shares a batch, so
-  # (1|Donor) would absorb it. Swapping donor out identifies batch instead.
-  # If Condition holds up in C2 the severity signal is not merely batch; if it
-  # drops while Batch takes a comparable share, the two are not separable.
+  # batch replaces donor (every sample of a donor shares a batch, so donor would absorb it)
   if (has_batch && nlevels(droplevels(meta_c$Batch)) >= 2) {
     keep_b  <- !is.na(meta_c$Batch)
     meta_c2 <- droplevels(meta_c[keep_b, ])
@@ -316,8 +306,7 @@ if (sum(covid_mask) > 10) {
   }
 }
 
-# 7. Within-cell-type decomposition (comment 112): drop the lineage axis and
-#    split variance between exposure and donor within each lineage.
+# 7. Within-cell-type decomposition: split variance between exposure and donor within each lineage
 cell_types <- levels(droplevels(meta$Cell_Type))
 vp_list <- lapply(cell_types, function(ct) {
   idx <- meta$Cell_Type == ct
@@ -420,9 +409,7 @@ ggsave(file.path(save_dir, "varpart_within_celltype_exposureonly.pdf"), p_within
   width = 8, height = 5
 )
 
-# 8. Exposure effect within each cell type, separately per cohort. Within a
-#    cohort, Condition is the stage/severity arm, so this asks how much TF
-#    activity variance that arm explains in each lineage of each cohort.
+# 8. Exposure effect within each cell type, separately per cohort (Condition = stage/severity arm)
 cohorts <- levels(droplevels(meta$Exposure))
 vp_cc <- dplyr::bind_rows(lapply(cohorts, function(co) {
   dplyr::bind_rows(lapply(cell_types, function(ct) {
@@ -437,8 +424,7 @@ vp_cc <- dplyr::bind_rows(lapply(cohorts, function(co) {
     zv <- apply(z, 1, var, na.rm = TRUE)
     z  <- z[is.finite(zv) & zv > 0, , drop = FALSE]
     if (nrow(z) < 10) return(NULL)
-    # a donor term is estimable only when donors are meaningfully fewer than
-    # pseudobulks; in OP each donor contributes a single sample
+    # a donor term is estimable only when donors are fewer than pseudobulks
     use_donor <- nlevels(m$Donor) >= 2 && nlevels(m$Donor) <= 0.75 * ncol(z)
     form <- if (use_donor) ~ (1 | Condition) + (1 | Donor) else ~ (1 | Condition)
     vp <- tryCatch(as.data.frame(fitExtractVarPartModel(z, form, m)),
@@ -483,8 +469,7 @@ write.csv(cc_summary,
 message("Exposure-attributable variance within each cell type, per cohort:")
 print(as.data.frame(cc_summary))
 
-# Plasma is dropped: too few cells per pseudobulk, and 05_pseudobulk.R excludes
-# it elsewhere in the pipeline
+# Plasma is dropped: too few cells per pseudobulk
 cc_drop    <- c("Plasma")
 cc_ymax    <- 0.4
 cc_med     <- cc_summary %>% dplyr::filter(!Cell_Type %in% cc_drop)
@@ -499,10 +484,8 @@ cc_sub <- paste0(
   "condition fraction, so values compare between cell types but not between cohorts."
 )
 
-# One panel: four dodged boxes per cell type, coloured by cohort. Medians and
-# lower quartiles sit at exactly 0 for most cells, so a point-and-interval draws
-# every mark growing out of the axis and reads like a bar chart.
-# Cohort palette as used elsewhere in the repo.
+# one panel: dodged boxes per cell type, coloured by cohort
+# cohort palette as used elsewhere in the repo
 exposure_cols <- c("C19" = "#238B45", "HIV" = "#88419D",
                    "Influenza" = "#D95F0E", "OP" = "#084594")
 cc_lvls  <- sort(unique(as.character(vp_cc_plot$Exposure)))

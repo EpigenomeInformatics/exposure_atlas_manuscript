@@ -2,10 +2,7 @@
 
 #####################################################################
 # 01_v2_quality_control.R -- Irem Gunduz, 2026-08-07 (rev. 2026-08-26)
-# Association of the IterativeLSI / Harmony dimensions with known covariates.
-# Each covariate is tested where it varies: donor level (cohort, age, sex),
-# sample level with (1|donor) (sampling day, viral load, per-sample QC), and
-# within-C19 for processing batch. Variance decomposition lives in 13b.
+# Association of the IterativeLSI / Harmony dimensions with known covariates
 #####################################################################
 
 ## Load Libraries
@@ -42,14 +39,8 @@ outputDir  <- Sys.getenv("EXPOSURE_ATLAS_ARCHR",
 # corCutOff = 1 keeps dimensions ArchR's 0.75 default would drop for depth.
 archr_cor_cutoff <- 0.75   # the default that 02_cluster_and_batch.R relies on
 
-# Load the ArchR project (already subsetted to non-BA samples).
-# loadArchRProject() remaps the stored GroupCoverages paths with a plain gsub of
-# the old output directory and then asserts all of them exist:
-#     zfiles <- gsub(outputDir, outputDirNew, zdata$File)
-#     stopifnot(all(file.exists(zfiles)))
-# That assertion is NOT covered by force = TRUE, so a moved project or deleted
-# coverage files abort the load. Nothing in this script touches coverages, so
-# fall back to a loader that repairs what it can and warns about the rest.
+# Load the ArchR project. loadArchRProject() asserts all GroupCoverages paths
+# exist (not covered by force = TRUE), so fall back to a lenient loader.
 load_archr_lenient <- function(path) {
   p <- normalizePath(path, mustWork = TRUE)
   proj <- ArchR::recoverArchRProject(readRDS(file.path(p, "Save-ArchR-Project.rds")))
@@ -222,9 +213,7 @@ message(sprintf(
   sum(rep_don$n), nrow(rep_don), if (nrow(rep_don)) max(rep_don$n) else 0L
 ))
 
-# BATCH. processing_date is C19-only (710/720), so it is a within-C19 covariate.
-# supplier is a relabelling of cohort and processing_institution is constant, so
-# neither adds anything; tss_cutoff / log10frags_cutoff do vary within cohort.
+# BATCH: processing_date is C19-only; supplier aliases cohort, processing_institution is constant
 
 atac_meta_covid_path <- file.path(repo_dir, "sample_annots/ATAC_metadata_covid.csv")
 if (file.exists(atac_meta_covid_path)) {
@@ -372,17 +361,12 @@ message(sprintf(
 
 
 ## ---- Predict donor sex from chrY and XIST accessibility ---------------------
-# Supervised: threshold XIST -> Sex_by_xist, train LDA on recorded sex where it
-# agrees, predict all. chrY is held out of the training-set definition, so
-# agreement with Sex_by_chrY is the only non-circular check.
+# threshold XIST -> Sex_by_xist, train LDA where recorded sex agrees, predict all (chrY held out for a non-circular check)
 xist_gr <- GenomicRanges::GRanges(
   "chrX", IRanges::IRanges(start = 73820651, end = 73852753)
 ) # XIST gene, hg38
 
-# Reading chrX/chrY fragments from every arrow is the slow step, so it is cached.
-# Only the raw counts are cached; the thresholds and the LDA below are recomputed
-# every run, so changing the classifier does not need a re-extraction.
-# Force a re-extraction with REDO_SEX=1.
+# chrX/chrY fragment extraction is slow, so the raw counts are cached (REDO_SEX=1 to re-extract)
 sex_counts_csv <- file.path(repo_dir, "figures/sex_fragment_counts.csv")
 count_cols <- c("Sample", "chrY", "chrX", "xist",
                 "chrY_frac", "xist_frac", "chrY_chrX_ratio")
@@ -462,8 +446,7 @@ eps_xist <- half_min_nonzero(sex_metrics$xist_frac)
 sex_metrics$log_chrY <- log10(sex_metrics$chrY_frac + eps_chrY)
 sex_metrics$log_xist <- log10(sex_metrics$xist_frac + eps_xist)
 
-# Do NOT cluster on chrY and XIST jointly: chrY carries cohort-specific offsets,
-# so the split follows cohort, not sex. Threshold on XIST, cross-check with chrY.
+# threshold on XIST and cross-check with chrY (chrY carries cohort-specific offsets)
 gap_threshold <- function(x, eps, lo = 0.10, hi = 0.90) {
   lx   <- sort(log10(x + eps))
   n    <- length(lx)
@@ -735,8 +718,7 @@ collapse_to_group <- function(y, x, group, cohort = NULL) {
 }
 
 ## ---- One association test, at the right level -------------------------------
-# group = donor (sample-level) or sample (pseudobulk-level). With `cohort`, the
-# test is partial. Returns raw + adjusted R^2, p, n, and the unit tested.
+# group = donor or sample; with `cohort` the test is partial. Returns R^2, p, n and the unit
 assoc_test <- function(y, x, group, cohort = NULL,
                        collapsed_unit = "per donor",
                        obs_unit = "per sample, donor-adjusted") {
@@ -799,9 +781,7 @@ assoc_test <- function(y, x, group, cohort = NULL,
       list(m0 = m0, m1 = m1, an = stats::anova(m0, m1))
     })), silent = TRUE)
     if (inherits(fits, "try-error")) return(fail)
-    # Nakagawa marginal R^2: fixed-effect variance over total variance. The
-    # conditional-residual version does not track what the LRT tests, because
-    # adding x can move the variance components without moving the residuals.
+    # Nakagawa marginal R^2: fixed-effect variance over total variance
     r2_marginal <- function(m) {
       vf <- stats::var(as.vector(lme4::getME(m, "X") %*% lme4::fixef(m)))
       vr <- sum(vapply(lme4::VarCorr(m),
@@ -871,8 +851,7 @@ for (emb in embeddings_to_test) {
   dcor      <- apply(reddim, 2, abscor, w = cell_depth)
   tsscor    <- apply(reddim, 2, abscor, w = cell_qc$TSSEnrichment)
   fripcor   <- apply(reddim, 2, abscor, w = cell_qc$FRIP)
-  # the same correlations after removing the sample means, i.e. purely
-  # within-sample, which is where the per-sample QC means cannot look
+  # the same correlations after removing the sample means (purely within-sample)
   demean <- function(v) v - ave(v, cell_sample)
   wdepth <- demean(cell_depth); wtss <- demean(cell_qc$TSSEnrichment)
   wfrip  <- demean(cell_qc$FRIP)
@@ -972,10 +951,7 @@ depth_cor_df <- dplyr::bind_rows(depth_cor_tbl)
 write.csv(depth_cor_df,
   file = file.path(repo_dir, "figures/dim_depth_correlation.csv"), row.names = FALSE)
 
-# The QC metrics vary from cell to cell, so they are correlated at the cell
-# level rather than summarised per sample. "within sample" repeats the
-# correlation after subtracting each sample's mean from its cells, which is the
-# part a per-sample mean cannot see.
+# QC metrics vary per cell, so correlated at the cell level; "within sample" subtracts each sample's mean first
 qc_lab <- c(
   abs_cor_with_TSSEnrichment          = "TSS enrichment",
   abs_cor_with_log10_nFrags           = "log10 fragments",

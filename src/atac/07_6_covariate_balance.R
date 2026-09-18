@@ -4,28 +4,6 @@
 # 07_6_covariate_balance.R
 # created on 2026-08-12 by Irem B. Gunduz
 # Are the technical covariates balanced between the compared groups?
-#
-# Different question from 07_3/07_4:
-#   07_3/07_4  if we adjust, do the DAR calls change?   (sensitivity)
-#   here       is there anything to adjust FOR?         (confounding)
-#
-# Adjustment only removes confounding if the covariate differs between the two
-# groups being compared. TSS enrichment differs a lot BETWEEN cohorts (Supp Fig
-# 1A) but every comparison is WITHIN a cohort, so that variation never enters
-# the model.
-#
-# Reading the output:
-#  - ignore the rank-sum p. At 4-7 per group it has no power, and n = 4 vs 4
-#    cannot go below 0.029.
-#  - |SMD| < 0.25 does NOT apply here. That convention is for large matched
-#    studies. Under the null SMD has SE ~ sqrt(2/n), so median |SMD| lands near
-#    0.43 at n = 5 and 0.65 at n = 3. An earlier version used 0.25 and called
-#    203/300 tests imbalanced, which was the threshold, not the data.
-#  - use p_perm / p_perm_BH: permute group labels within the comparison and see
-#    where the observed |SMD| falls. Exact at these group sizes.
-#  - permutation is per comparison. A covariate shifted the same way across many
-#    comparisons sharing a control arm is one fact repeated, so read the
-#    direction summary at the end too.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -184,8 +162,7 @@ balance_one <- function(sa, cell, grp1, grp2) {
 }
 
 ## ---- 3. Sweep every cell type and comparison -------------------------------
-# One loadDsAcc per CELL TYPE (not per comparison): the sample annotation is
-# shared across the comparisons of a cell type, so loading it once is enough.
+# one loadDsAcc per cell type; the sample annotation is shared across its comparisons
 collect_balance <- function(anaDir) {
   if (!dir.exists(anaDir)) {
     message("analysis directory not found: ", anaDir)
@@ -298,8 +275,7 @@ per_cov <- cont %>%
     max_abs_SMD       = round(max(abs(SMD)), 3),
     n_imbalanced_perm = sum(imbalanced == "imbalanced", na.rm = TRUE),
     min_p_perm        = signif(min(p_perm, na.rm = TRUE), 3),
-    # consistent direction across comparisons, even if none is significant
-    # on its own. This is what caught the COVID-19 cell-number difference.
+    # consistent direction across comparisons, even if none is significant alone
     pct_higher_in_grp1 = round(100 * mean(SMD > 0), 1),
     p_sign_test       = signif(stats::binom.test(sum(SMD > 0), dplyr::n())$p.value, 3),
     .groups = "drop"
@@ -310,9 +286,7 @@ write.csv(per_cov, file.path(fig_dir, "covariate_balance_summary.csv"),
   row.names = FALSE)
 
 ## ---- 4b. Direction consistency within a cohort ------------------------------
-# Comparisons sharing a control arm are not independent, so this is
-# descriptive. It exists because per-comparison tests cannot see a consistent
-# shift across comparisons.
+# descriptive: comparisons sharing a control arm are not independent
 cohort_of <- function(x) sub("_.*", "", x)
 direction <- cont %>%
   dplyr::mutate(cohort = cohort_of(comparison)) %>%
@@ -330,11 +304,7 @@ write.csv(direction, file.path(fig_dir, "covariate_balance_direction.csv"),
   row.names = FALSE)
 
 ## ---- 5. Figure --------------------------------------------------------------
-# Signed SMD, cohort on the y axis: is a covariate pushed to one side in a
-# given cohort? Shaded band is the chance envelope from the permutations.
-# (An earlier version plotted |SMD| against the null and was unreadable --
-# nothing was significant, so the colour carried nothing, and absolute values
-# hid the direction, which is the actual finding.)
+# signed SMD with cohort on the y axis; shaded band is the chance envelope from the permutations
 # canonical cohort colours (same values as comp_group_colors in 14_l2fc.R)
 cohort_colors <- c(
   "C19" = "#238B45", "HIV" = "#88419D",

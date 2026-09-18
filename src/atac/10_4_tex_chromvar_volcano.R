@@ -4,18 +4,6 @@
 # 10_4_tex_chromvar_volcano.R
 # created on 2026-08-15 by Irem B. Gunduz
 # chromVAR z-score volcano, Tex vs other CD8+ clusters
-#
-# CTLA4, HAVCR2 and TIGIT all rise on ACTIVATED CD8 cells, so marker activity
-# does not separate exhaustion from activation. Every motif is tested, so the
-# exhaustion regulators have to come out of the data rather than be asserted.
-#
-# Run on both motif sets: cisbp (named TFs, for TOX / NR4A / TCF7) and the
-# Altius archetypes (same style as the zdiff volcano elsewhere in the paper).
-#
-# !! The Wilcoxon runs on CELLS, which are not independent within a donor. With
-# ~7000 cells the p-value largely reports the cell count, so a motif is only
-# called differential if it ALSO moves the same way in all four donors. Both
-# criteria are in the figure caption.
 #####################################################################
 
 suppressPackageStartupMessages({
@@ -45,18 +33,13 @@ matrices <- c("MotifMatrix", "altiusMatrix")
 zdiff_cut <- 0.25   # |difference in mean chromVAR z| to call differential
 padj_cut <- 0.01    # threshold used to CALL motifs differential
 
-# The red line marks padj_cut and therefore sits low in the panel. With ~7000
-# cells the weakest motif we call is at -log10(padj) = 6.6 (cisbp) / 11.6
-# (Altius), so padj does not bind at any conventional threshold; |zdiff| and
-# donor consistency do the selecting. Keep the line reporting the real cutoff.
+# red line marks padj_cut; |zdiff| and donor consistency do the selecting
 padj_line <- padj_cut
 padj_cap <- 50      # -log10 cap; cell-level p underflows to 0
 n_label_each <- 10  # top motifs labelled per direction
 x_lim <- c(-2, 2)   # clipped, not filtered; anything outside is reported below
 
-# always labelled if present, whatever their rank; motif names differ between
-# the two sets (cisbp keeps gene symbols, Altius collapses families into
-# lowercase archetypes), so one list per matrix
+# always labelled if present; one list per matrix (names differ between the two sets)
 tf_always <- list(
   MotifMatrix = c("TOX", "TOX2", "NR4A1", "NR4A2", "NR4A3", "TCF7", "TCF7L2",
     "LEF1", "TBX21", "EOMES", "FOXP1", "FOXP2", "FOXP3", "FOXP4", "FOXO1",
@@ -84,9 +67,7 @@ if (length(use_matrices) == 0) {
 }
 
 ## ---- 2. Pull the chromVAR z-scores from one matrix ---------------------------
-# The z-scores and raw deviations live either in two ASSAYS ("z" / "deviations")
-# or in two sets of ROWS marked by rowData$seqnames, depending on ArchR version.
-# Try the assay route first and report what was found on failure.
+# z-scores live in two assays or two sets of rows depending on ArchR version; try the assay route first
 get_z <- function(mat_name) {
   mm <- getMatrixFromProject(project, useMatrix = mat_name)
   rd <- SummarizedExperiment::rowData(mm)
@@ -142,8 +123,7 @@ test_matrix <- function(zmat, status, subj, donors) {
   ) %>%
     dplyr::mutate(
       padj = stats::p.adjust(p, method = "BH"),
-      # cell-level p underflows to 0; floor before -log10 or the strongest
-      # motifs become Inf and drop off the plot
+      # floor p before -log10 or the strongest motifs become Inf
       mlog10padj = pmin(-log10(pmax(padj, .Machine$double.xmin)), padj_cap),
       robust = donors_consistent == length(donors),
       group = dplyr::case_when(
@@ -178,8 +158,7 @@ volcano_plot <- function(v, mat_name) {
     geom_point(size = 1.4, alpha = 0.85) +
     ggrepel::geom_text_repel(data = lab, aes(label = motif), size = 3.6,
       max.overlaps = Inf, min.segment.length = Inf, segment.size = 0,
-      # no leader lines, so keep the repulsion weak or a label drifts away
-      # from the point it belongs to
+      # no leader lines, so keep the repulsion weak
       box.padding = 0.4, point.padding = 0.2, force = 0.6,
       seed = 12, show.legend = FALSE) +
     scale_colour_manual(
