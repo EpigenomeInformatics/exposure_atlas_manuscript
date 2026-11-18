@@ -13,6 +13,8 @@
 #     src/atac/07_6_covariate_balance.R        -> figures/covariate_balance_summary.csv
 #   - src/meth/01b_meth_pseudobulk_qc.R -> figures/meth_pseudobulk_qc.csv
 #         and figures/meth_pseudobulk_qc_by_group.csv
+#   - src/atac/03_annotate.R -> sample_annots/cluster_jaccard_matrix.tsv
+#   - src/atac/08_1_chraccr_plots.R -> moderate_vs_severe_DAR_summary.csv (its C19 plot_dir)
 #
 # Numbering is declared once in `final_layout`; the Index and sheet order derive from it.
 #
@@ -26,7 +28,7 @@
 #   S8    Variance attributable to exposure within each cell type
 #   S9    Differentially accessible genes in CD8+ T-cell clusters
 #   S10   Differentially accessible cCREs in CD8+ T-cell clusters
-#   S11   Differentially accessible cCREs, COVID-19 severe vs control
+#   S11   Differentially accessible cCREs, COVID-19 severe vs control (+ overlap with moderate)
 #   S12   Covariate balance between compared groups
 #   S13   Confounder-adjusted DARs vs unadjusted, sensitivity
 #   S14   Bulk RNA-seq differential expression, CD14+ monocytes
@@ -58,8 +60,11 @@ comp_csv     <- file.path(fig_dir, "cell_prop_wilcox_bonferroni.csv")
 allc_csv     <- file.path(annot, "allc_sample_annot_final.csv")
 pbqc_csv     <- file.path(fig_dir, "meth_pseudobulk_qc.csv")
 pbqc_grp_csv <- file.path(fig_dir, "meth_pseudobulk_qc_by_group.csv")
+jacc_tsv     <- file.path(annot, "cluster_jaccard_matrix.tsv")
+modsev_csv   <- "/icbb/projects/igunduz/finalize_echo_050824/C19/moderate_vs_severe_DAR_summary.csv"
 
-stopifnot(file.exists(supp_in), file.exists(comp_csv), file.exists(allc_csv))
+stopifnot(file.exists(supp_in), file.exists(comp_csv), file.exists(allc_csv),
+          file.exists(jacc_tsv), file.exists(modsev_csv))
 if (!all(file.exists(pbqc_csv, pbqc_grp_csv))) {
   stop("Missing the methylation pseudobulk QC tables. Run ",
     "src/meth/01b_meth_pseudobulk_qc.R first.")
@@ -78,7 +83,8 @@ final_layout <- tibble::tribble(
     "Cluster-to-cell-type annotation mapping: each of the 22 graph-based scATAC",
     "clusters was assigned to a cell type using the Jaccard similarity between its",
     "cells and the mapped scRNA-seq labels; reported with the final assigned cell",
-    "type and cluster size"),
+    "type and cluster size. Label columns are Jaccard indices (0 to 1), not cell",
+    "counts, so a row does not sum to the cluster size"),
   "Table S4",    paste(
     "Association of the IterativeLSI and Harmony dimensions with known covariates",
     "at the sample x cell-type pseudobulk level, the only level at which cell type",
@@ -102,7 +108,11 @@ final_layout <- tibble::tribble(
     "with the number of pseudobulk profiles per lineage"),
   "Table S9",    "Differentially accessible genes in different clusters within CD8+ T cells",
   "Table S10",   "Differentially accessible cCREs in different clusters within CD8+ T cells",
-  "Table S11",   "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes",
+  "Table S11",   paste(
+    "Differentially accessible cCREs for COVID-19 severe vs control in CD14+ monocytes;",
+    "the columns to the right summarise their overlap with the moderate vs control DARs:",
+    "shared and one-group-only counts, direction concordance and fold-change correlation",
+    "among the shared regions"),
   "Table S12",   paste(
     "Balance of the per-sample quality-control metrics between the groups compared",
     "in each within-cohort differential analysis: median and maximum standardised",
@@ -403,7 +413,37 @@ ct_assoc_supp  <- read_optional(ct_assoc_csv, "Cell-type association table")
 within_ct_supp <- read_optional(within_ct_csv,
   "Within-cell-type exposure variance")
 
+# (f) cluster-to-cell-type Jaccard matrix (S3), written fresh from 03_annotate.R;
+#     the carried-over sheet had lost its decimal points (0.4947 -> 4947)
+jacc_supp <- read.delim(jacc_tsv, stringsAsFactors = FALSE, check.names = FALSE)
+jacc_cols <- setdiff(colnames(jacc_supp), c("Cluster", "Final_CellType", "N_cells"))
+stopifnot(all(jacc_supp[, jacc_cols] >= 0 & jacc_supp[, jacc_cols] <= 1))
+message("Jaccard matrix: ", nrow(jacc_supp), " clusters x ", length(jacc_cols), " labels")
+
+# (g) moderate vs severe DAR overlap (08_1_chraccr_plots.R), written beside the S11 DAR table
+modsev <- read.csv(modsev_csv, stringsAsFactors = FALSE)
+stopifnot(nrow(modsev) == 1,
+          modsev$shared + modsev$moderate_only == modsev$moderate_DARs,
+          modsev$shared + modsev$severe_only == modsev$severe_DARs)
+modsev_supp <- data.frame(
+  `Moderate vs severe DAR overlap` = c(
+    "DARs, moderate vs control",
+    "DARs, severe vs control",
+    "Shared",
+    "Moderate only",
+    "Severe only",
+    "Direction concordance among shared (%)",
+    "Fold-change correlation among shared (r)"),
+  Value = c(modsev$moderate_DARs, modsev$severe_DARs, modsev$shared,
+            modsev$moderate_only, modsev$severe_only,
+            modsev$pct_sign_concordant, modsev$shared_lfc_pearson),
+  check.names = FALSE
+)
+message("Moderate vs severe DARs: ", modsev$shared, " shared of ",
+        modsev$moderate_DARs, " moderate and ", modsev$severe_DARs, " severe")
+
 new_content <- list(
+  "Table S3"   = jacc_supp,
   "Table S4"   = ct_assoc_supp,
   "Table S6"   = comp_supp,
   "Table S8"   = within_ct_supp,
@@ -467,6 +507,21 @@ if (all(names(new_content) %in% names(wb)) &&
     message("Wrote ", nm, " (", nrow(dat), " rows)")
   }
 
+  # S11 is carried over; the overlap summary goes two columns right of the DAR table
+  s11 <- openxlsx::readWorkbook(wb, "Table S11")
+  stopifnot(nrow(s11) == modsev$severe_DARs)
+  openxlsx::writeData(wb, "Table S11", modsev_supp, startCol = ncol(s11) + 2,
+                      headerStyle = hdr)
+  openxlsx::setColWidths(wb, "Table S11", cols = ncol(s11) + 2:3, widths = c(40, 10))
+  message("Wrote the moderate vs severe overlap beside Table S11")
+
+  # S21 is carried over with log2FC stored as text with a decimal comma
+  s21 <- openxlsx::readWorkbook(wb, "Table S21")
+  s21$log2FC <- as.numeric(sub(",", ".", s21$log2FC, fixed = TRUE))
+  stopifnot(!anyNA(s21$log2FC))
+  openxlsx::writeData(wb, "Table S21", s21, headerStyle = hdr)
+  message("Stored Table S21 log2FC as numbers (", nrow(s21), " rows)")
+
   ## ---- 5. Order the sheets to match final_layout ----------------------------
   # one sheet per final_layout row, so the order is the layout order
   want  <- final_layout$new[final_layout$new %in% names(wb)]
@@ -497,10 +552,8 @@ if (all(names(new_content) %in% names(wb)) &&
   openxlsx::addWorksheet(wb, "Index")
   openxlsx::writeData(wb, "Index", idx, headerStyle = hdr)
   openxlsx::setColWidths(wb, "Index", cols = 1:2, widths = c(14, 110))
-  openxlsx::worksheetOrder(wb) <- c(
-    which(names(wb) == "Index"),
-    setdiff(seq_along(names(wb)), which(names(wb) == "Index"))
-  )
+  # one call: a second worksheetOrder() assignment resets the layout order set in section 5
+  openxlsx::worksheetOrder(wb) <- match(c("Index", want, other), names(wb))
 
   openxlsx::saveWorkbook(wb, supp_out, overwrite = TRUE)
   message("Wrote ", supp_out, " (", nrow(idx), " tables)")
