@@ -381,3 +381,34 @@ pdf_file <- file.path(plot_dir, "scatter_plot_cd8tmem_vs_tcmem_diffs_with_motifs
 ggsave(pdf_file, plot = p_cd8, width = 8, height = 6)
 
 #####################################################################
+# Paired Wilcoxon across motifs: memory vs naive mTFR (Figure 4D)
+# self-contained: reads the group_diff_*_mtfr.rds written above
+#####################################################################
+suppressPackageStartupMessages(library(dplyr))
+if (!exists("sannot_dir")) {
+  sannot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/sample_annots/"
+}
+if (!exists("plot_dir")) {
+  plot_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
+}
+
+# stored diff is naive - memory per motif; the paired test only uses the
+# per-motif differences, so memory - naive = -diff gives wilcox.test(mem, naive, paired = TRUE)
+mem_vs_naive <- dplyr::bind_rows(lapply(c(CD4 = "thmem", CD8 = "tcmem"), function(s) {
+  f <- file.path(sannot_dir, paste0("group_diff_", s, "_mtfr.rds"))
+  stopifnot(file.exists(f))
+  d <- readRDS(f)
+  stopifnot("diff" %in% names(d))
+  mem_minus_naive <- -d$diff[is.finite(d$diff)]
+  wt <- wilcox.test(mem_minus_naive, mu = 0, exact = FALSE)
+  data.frame(n_motifs = length(mem_minus_naive),
+             median_mem_minus_naive = median(mem_minus_naive),
+             n_mem_lower = sum(mem_minus_naive < 0),
+             V = unname(wt$statistic), p_value = wt$p.value)
+}), .id = "lineage")
+
+write.csv(mem_vs_naive, file.path(plot_dir, "mtfr_memory_vs_naive_paired_wilcox.csv"), row.names = FALSE)
+message("Paired Wilcoxon signed-rank, memory vs naive mTFR z-score across motifs:")
+print(mem_vs_naive, digits = 3)
+
+#####################################################################

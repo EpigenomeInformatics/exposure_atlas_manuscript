@@ -169,6 +169,96 @@ message("Significant cell-type composition changes (Bonferroni p_adj < 0.05):")
 print(subset(prop_test_df, p_adj < 0.05))
 
 #####################################################################
+# OP sensitivity: samples sharing recorded age + sex may be repeats of one person.
+# Average proportions within age x sex x exposure-group blocks, rerun the OP tests.
+# Samples without age/sex stay as their own block. Bonferroni over the same family as above.
+#####################################################################
+repo_dir   <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript"
+suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables_updated.xlsx")
+if (!file.exists(suppTables)) {
+  suppTables <- file.path(repo_dir, "sample_annots/All_Supplementary_Tables.xlsx")
+}
+stopifnot(file.exists(suppTables))
+
+op_meta <- readxl::read_excel(suppTables, sheet = "Table S1") %>%
+  dplyr::filter(exposure_type == "OP") %>%
+  dplyr::transmute(Sample = arrow_name, Age = as.numeric(Age), Sex = as.character(Sex))
+
+op_df <- df %>%
+  dplyr::filter(grepl("^OP_", as.character(sample_exposure_group))) %>%
+  dplyr::mutate(Sample = as.character(Sample)) %>%
+  dplyr::left_join(op_meta, by = "Sample")
+stopifnot(all(unique(op_df$Sample) %in% op_meta$Sample))
+
+op_df <- op_df %>%
+  dplyr::mutate(block = ifelse(is.na(Age) | is.na(Sex), Sample,
+                               paste(Age, Sex, sample_exposure_group, sep = "_")))
+
+# age/sex blocks that span exposure groups cannot be averaged into one group
+cross_grp <- op_df %>%
+  dplyr::filter(!is.na(Age), !is.na(Sex)) %>%
+  dplyr::distinct(Sample, Age, Sex, sample_exposure_group) %>%
+  dplyr::group_by(Age, Sex) %>%
+  dplyr::filter(dplyr::n_distinct(sample_exposure_group) > 1) %>%
+  dplyr::summarise(groups = paste(sort(unique(as.character(sample_exposure_group))), collapse = ","),
+                   n_samples = dplyr::n(), .groups = "drop")
+if (nrow(cross_grp) > 0) {
+  message("Age/sex blocks spanning OP groups (kept apart by group):")
+  print(as.data.frame(cross_grp))
+}
+
+op_blocks <- op_df %>%
+  dplyr::group_by(ClusterCellTypes, sample_exposure_group, block) %>%
+  dplyr::summarise(freq = mean(freq), n_in_block = dplyr::n(), .groups = "drop")
+
+n_samp  <- dplyr::n_distinct(op_df$Sample)
+n_block <- dplyr::n_distinct(op_blocks$block)
+message(sprintf("OP: %d samples -> %d age/sex/group blocks", n_samp, n_block))
+print(table(droplevels(dplyr::distinct(op_blocks, block, sample_exposure_group)$sample_exposure_group)))
+
+op_comparisons <- Filter(function(cmp) all(grepl("^OP_", cmp)), comparisons)
+op_block_test <- do.call(rbind, lapply(op_comparisons, function(cmp) {
+  do.call(rbind, lapply(unique(as.character(op_blocks$ClusterCellTypes)), function(ct) {
+    sub <- op_blocks[as.character(op_blocks$ClusterCellTypes) == ct &
+      op_blocks$sample_exposure_group %in% cmp, ]
+    g1 <- sub$freq[sub$sample_exposure_group == cmp[1]]
+    g2 <- sub$freq[sub$sample_exposure_group == cmp[2]]
+    if (length(g1) < 1 || length(g2) < 1) {
+      return(NULL)
+    }
+    wt <- suppressWarnings(wilcox.test(g1, g2, exact = FALSE))
+    data.frame(
+      cell_type = ct, group1 = cmp[1], group2 = cmp[2],
+      n1 = length(g1), n2 = length(g2),
+      median1 = median(g1), median2 = median(g2),
+      p_value = wt$p.value, stringsAsFactors = FALSE
+    )
+  }))
+}))
+
+# same Bonferroni family size as the primary table: OP rows swapped for the block-level ones
+stopifnot(nrow(op_block_test) == sum(grepl("^OP_", prop_test_df$group1)))
+op_block_test$p_adj <- pmin(1, op_block_test$p_value * nrow(prop_test_df))
+
+op_compare <- prop_test_df %>%
+  dplyr::filter(grepl("^OP_", group1)) %>%
+  dplyr::select(cell_type, group1, group2, n1, n2, p_value, p_adj) %>%
+  dplyr::inner_join(op_block_test, by = c("cell_type", "group1", "group2"),
+                    suffix = c("_samples", "_blocks")) %>%
+  dplyr::mutate(sig_samples = p_adj_samples < 0.05,
+                sig_blocks  = p_adj_blocks < 0.05,
+                changed     = sig_samples != sig_blocks) %>%
+  dplyr::arrange(p_adj_blocks)
+stopifnot(nrow(op_compare) == nrow(op_block_test))
+
+write.csv(op_compare,
+  file = file.path(fig_dir, "cell_prop_wilcox_bonferroni_OP_agesex_blocks.csv"), row.names = FALSE
+)
+message(sprintf("OP tests significant (Bonferroni < 0.05): %d per sample, %d per age/sex block; %d changed",
+                sum(op_compare$sig_samples), sum(op_compare$sig_blocks), sum(op_compare$changed)))
+print(subset(op_compare, sig_samples | sig_blocks), digits = 3)
+
+#####################################################################
 # Writes the raw statistics CSV; table assembly is in 12_assemble_supplementary_tables.R
 #####################################################################
 

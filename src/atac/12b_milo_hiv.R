@@ -79,6 +79,8 @@ if (!is.null(res_real)) {
   n_sig_real <- sum(res_real$SpatialFDR < 0.1, na.rm = TRUE)
   message(sprintf("REAL 12-sample model (~Subject + Stage): %d / %d neighbourhoods at SpatialFDR < 0.1",
                   n_sig_real, nrow(res_real)))
+  # majority CD8 cluster per neighbourhood (adds Cluster, Cluster_fraction)
+  res_real <- annotateNhoods(milo, res_real, coldata_col = "Cluster")
   write.csv(res_real, paste0(fig_dir, "milo_hiv_real_results.csv"), row.names = FALSE)
 }
 
@@ -130,4 +132,102 @@ message("A large permuted-null count means the significance is a pseudoreplicati
 
 #####################################################################
 # Interpretation: neighbourhood DA is not trustworthy at 4 subjects; keep the subject-level cluster test
+#####################################################################
+
+#####################################################################
+# (3) Response figure: A = nhood logFC by CD8 cluster, B = real vs permuted per seed
+# out: figures/response_figure_3_milo.pdf / .png
+#####################################################################
+suppressPackageStartupMessages(library(patchwork))
+
+real_csv   <- file.path(fig_dir, "milo_hiv_real_results.csv")
+pseudo_csv <- file.path(fig_dir, "milo_hiv_pseudo_seed_summary.csv")
+out_pdf    <- file.path(fig_dir, "response_figure_3_milo.pdf")
+out_png    <- file.path(fig_dir, "response_figure_3_milo.png")
+stopifnot(file.exists(real_csv), file.exists(pseudo_csv))
+
+fdr_cut <- 0.1
+mix_cut <- 0.7  # nhoods whose majority cluster is < 70% of cells are labelled "Mixed"
+
+# copied from 07_7_covariate_balance_response_figure.R
+theme_resp <- theme_classic(base_size = 11) +
+  theme(panel.grid.major = element_line(colour = "grey85", linewidth = 0.3),
+        panel.grid.minor = element_line(colour = "grey92", linewidth = 0.2),
+        plot.title = element_text(face = "bold", hjust = 0, size = 13),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+## ---- Panel A: neighbourhood logFC by CD8 cluster --------------------------
+nh <- read.csv(real_csv, stringsAsFactors = FALSE)
+stopifnot(all(c("logFC", "SpatialFDR", "Cluster", "Cluster_fraction") %in% names(nh)))
+nh <- nh %>%
+  dplyr::filter(!is.na(SpatialFDR)) %>%
+  dplyr::mutate(Cluster = ifelse(Cluster_fraction < mix_cut, "Mixed", Cluster),
+                sig     = SpatialFDR < fdr_cut)
+
+n_sig_nh <- sum(nh$sig)
+message(sprintf("panel A: %d / %d neighbourhoods at SpatialFDR < %.1f (%d labelled Mixed)",
+                n_sig_nh, nrow(nh), fdr_cut, sum(nh$Cluster == "Mixed")))
+print(table(Cluster = nh$Cluster, significant = nh$sig))
+
+# testNhoods() tests the last design coefficient, i.e. Stage chronic vs pre (adjusted for Subject)
+jit <- position_jitter(width = 0.24, height = 0, seed = 3)
+
+pA <- ggplot(nh, aes(x = Cluster, y = logFC, colour = SpatialFDR)) +
+  geom_hline(yintercept = 0, colour = "grey60") +
+  geom_point(position = jit, size = 1.6, alpha = 0.85) +
+  scale_colour_gradientn(colours = c("#c0392b", "#e8a39a", "grey75", "grey85"),
+                         values = c(0, fdr_cut / 2, fdr_cut, 1), limits = c(0, 1),
+                         breaks = c(0, fdr_cut, 0.5, 1), name = "SpatialFDR") +
+  guides(colour = guide_colourbar(barheight = grid::unit(8, "lines"))) +
+  labs(x = "CD8+ T-cell cluster (majority label)",
+       y = "Neighbourhood log fold change\n(chronic vs pre, adjusted for subject)",
+       title = "A") +
+  theme_resp +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# dashed line at the |logFC| where neighbourhoods start passing SpatialFDR = 0.1
+if (n_sig_nh > 0) {
+  lfc_cut <- min(abs(nh$logFC[nh$sig]))
+  pA <- pA +
+    geom_hline(yintercept = c(-lfc_cut, lfc_cut), linetype = "dashed", colour = "#c0392b") +
+    annotate("text", x = 0.6, y = lfc_cut, label = "SpatialFDR = 0.1", colour = "#c0392b",
+             fontface = "italic", size = 3.1, hjust = 0, vjust = -0.4)
+}
+
+## ---- Panel B: significant nhoods per seed, real vs permuted labels --------
+ps <- read.csv(pseudo_csv, stringsAsFactors = FALSE)
+stopifnot(all(c("seed", "n_sig_real_labels", "n_sig_permuted_null") %in% names(ps)))
+ps_long <- dplyr::bind_rows(
+  data.frame(seed = ps$seed, labels = "Real stage labels",     n_sig = ps$n_sig_real_labels),
+  data.frame(seed = ps$seed, labels = "Permuted stage labels", n_sig = ps$n_sig_permuted_null)
+) %>%
+  dplyr::mutate(labels = factor(labels, levels = c("Real stage labels", "Permuted stage labels")))
+
+med_real <- median(ps$n_sig_real_labels, na.rm = TRUE)
+med_perm <- median(ps$n_sig_permuted_null, na.rm = TRUE)
+message(sprintf("panel B: median significant nhoods, real %.0f vs permuted %.0f (%d seeds)",
+                med_real, med_perm, nrow(ps)))
+
+pB <- ggplot(ps_long, aes(x = factor(seed), y = n_sig, fill = labels)) +
+  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
+  geom_hline(yintercept = med_real, linetype = "dashed", colour = "#3b6ea5") +
+  geom_hline(yintercept = med_perm, linetype = "dashed", colour = "#c1741f") +
+  scale_fill_manual(values = c("Real stage labels" = "#3b6ea5",
+                               "Permuted stage labels" = "#c1741f"), name = NULL) +
+  labs(x = "Pseudo-replicate seed",
+       y = sprintf("Neighbourhoods at SpatialFDR < %.1f", fdr_cut),
+       title = "B") +
+  theme_resp +
+  theme(legend.position = "bottom")
+
+## ---- Compose ---------------------------------------------------------------
+fig <- (pA | pB) + patchwork::plot_layout(widths = c(1.6, 1))
+
+fig_w <- 12
+fig_h <- 5
+
+ggsave(out_pdf, fig, width = fig_w, height = fig_h, useDingbats = FALSE)
+ggsave(out_png, fig, width = fig_w, height = fig_h, dpi = 300, bg = "white")
+message("Wrote ", out_pdf, "\n       ", out_png)
 #####################################################################

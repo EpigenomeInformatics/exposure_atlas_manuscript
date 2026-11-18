@@ -114,6 +114,35 @@ if (num_loaded > 1) {
   keep_idx <- order(row_vars, decreasing = TRUE)[1:min(25000, length(row_vars))]
   cor_mat <- cor(mat_data[keep_idx, ], method = "pearson")
 
+  # --- Null model: SARS-CoV-2 vs influenza, CD14 monocytes ---
+  # same peaks as cor_mat; cor.test p plus a peak-label permutation (shuffle one vector)
+  set.seed(14)
+  n_perm  <- 1000
+  c19_cols <- grep("^Mono_CD14:C19_", colnames(mat_data), value = TRUE)
+  flu_cols <- grep("^Mono_CD14:Flu_", colnames(mat_data), value = TRUE)
+  stopifnot(length(c19_cols) > 0, length(flu_cols) > 0)
+
+  null_res <- do.call(rbind, lapply(c19_cols, function(cx) {
+    do.call(rbind, lapply(flu_cols, function(fy) {
+      x <- mat_data[keep_idx, cx]
+      y <- mat_data[keep_idx, fy]
+      r_obs  <- cor(x, y, method = "pearson")
+      ct     <- cor.test(x, y, method = "pearson")
+      r_perm <- replicate(n_perm, cor(x, sample(y), method = "pearson"))
+      data.frame(c19 = cx, flu = fy, n_peaks = length(x), r = r_obs,
+                 p_cor_test = ct$p.value,
+                 p_perm = (1 + sum(abs(r_perm) >= abs(r_obs))) / (1 + n_perm),
+                 perm_r_q95 = unname(quantile(abs(r_perm), 0.95)),
+                 stringsAsFactors = FALSE)
+    }))
+  }))
+  stopifnot(all(abs(null_res$r - cor_mat[cbind(null_res$c19, null_res$flu)]) < 1e-10))
+
+  null_csv <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/l2fc_mono_cd14_c19_vs_flu_null.csv"
+  write.csv(null_res, null_csv, row.names = FALSE)
+  message("CD14 mono SARS-CoV-2 vs influenza l2fc correlation (", n_perm, " peak shuffles):")
+  print(null_res, digits = 3)
+
   # Annotations
   all_labels <- colnames(cor_mat)
   annotation_df <- data.frame(row.names = all_labels)
