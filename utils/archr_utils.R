@@ -429,3 +429,82 @@ projectBulkATAC_vs2 <- function(
 
   return(out)
 }
+
+# Load an ArchR project even when loadArchRProject() fails its file checks
+# (e.g. stopifnot(all(file.exists(zfiles))) for moved GroupCoverages).
+# Re-links arrows, GroupCoverages, peak-annotation and background-peak files
+# into <path>/; anything still missing is reported and left as is. Nothing on disk changes.
+loadArchRProjectForce <- function(path, ...) {
+  out <- tryCatch(
+    ArchR::loadArchRProject(path, showLogo = FALSE, ...),
+    error = function(e) {
+      message("loadArchRProject() failed: ", conditionMessage(e))
+      message("Loading leniently from Save-ArchR-Project.rds")
+      NULL
+    }
+  )
+  if (!is.null(out)) return(out)
+
+  p <- normalizePath(path, mustWork = TRUE)
+  rds <- file.path(p, "Save-ArchR-Project.rds")
+  stopifnot(file.exists(rds))
+  proj <- ArchR::recoverArchRProject(readRDS(rds))
+
+  # arrows are required
+  arrows <- file.path(p, "ArrowFiles", basename(proj@sampleColData$ArrowFiles))
+  if (!all(file.exists(arrows))) {
+    stop("Missing arrow file(s) under ", file.path(p, "ArrowFiles"), ": ",
+         paste(basename(arrows[!file.exists(arrows)]), collapse = ", "))
+  }
+  proj@sampleColData$ArrowFiles <- arrows
+
+  # relink a path into p/<subdir>/<basename(dirname)>/<basename> or p/<subdir>/<basename>
+  relink <- function(f, subdir) {
+    cand <- cbind(file.path(p, subdir, basename(dirname(f)), basename(f)),
+                  file.path(p, subdir, basename(f)))
+    vapply(seq_along(f), function(i) {
+      if (file.exists(f[i])) return(f[i])
+      hit <- cand[i, file.exists(cand[i, ])]
+      if (length(hit)) hit[1] else f[i]
+    }, character(1))
+  }
+
+  gcov <- proj@projectMetadata$GroupCoverages
+  if (length(gcov)) {
+    for (z in seq_along(gcov)) {
+      f   <- relink(gcov[[z]]$coverageMetadata$File, "GroupCoverages")
+      gcov[[z]]$coverageMetadata$File <- f
+      if (!all(file.exists(f))) {
+        message("GroupCoverages '", names(gcov)[z], "': ", sum(!file.exists(f)), "/", length(f),
+                " coverage file(s) missing; only needed for peak calling / tracks.")
+      }
+    }
+    proj@projectMetadata$GroupCoverages <- gcov
+  }
+
+  pa <- proj@peakAnnotation
+  if (length(pa)) {
+    for (z in seq_along(pa)) {
+      for (fld in intersect(c("Positions", "Matches"), names(pa[[z]]))) {
+        f <- pa[[z]][[fld]]
+        if (is.character(f) && length(f) == 1 && tolower(f) != "none") {
+          f <- relink(f, "Annotations")
+          pa[[z]][[fld]] <- f
+          if (!file.exists(f)) message("peakAnnotation '", names(pa)[z], "' ", fld, " missing: ", f)
+        }
+      }
+    }
+    proj@peakAnnotation <- pa
+  }
+
+  bg <- proj@projectMetadata$backgroundPeaks
+  if (is.character(bg) && length(bg) == 1) {
+    bg <- relink(bg, "Background-Peaks")
+    proj@projectMetadata$backgroundPeaks <- bg
+    if (!file.exists(bg)) message("backgroundPeaks missing: ", bg)
+  }
+
+  proj@projectMetadata$outputDirectory <- p
+  message("Loaded ", length(proj$cellNames), " cells, ", nrow(proj@sampleColData), " samples")
+  proj
+}

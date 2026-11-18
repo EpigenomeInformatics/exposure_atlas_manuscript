@@ -173,11 +173,15 @@ print(table(Cluster = nh$Cluster, significant = nh$sig))
 # testNhoods() tests the last design coefficient, i.e. Stage chronic vs pre (adjusted for Subject)
 jit <- position_jitter(width = 0.24, height = 0, seed = 3)
 
+# sort so significant nhoods are drawn last (on top); red below 0.1, grey above
+nh <- dplyr::arrange(nh, dplyr::desc(SpatialFDR))
+
 pA <- ggplot(nh, aes(x = Cluster, y = logFC, colour = SpatialFDR)) +
   geom_hline(yintercept = 0, colour = "grey60") +
-  geom_point(position = jit, size = 1.6, alpha = 0.85) +
-  scale_colour_gradientn(colours = c("#c0392b", "#e8a39a", "grey75", "grey85"),
-                         values = c(0, fdr_cut / 2, fdr_cut, 1), limits = c(0, 1),
+  geom_point(aes(size = sig), position = jit, alpha = 0.85, show.legend = c(size = FALSE)) +
+  scale_size_manual(values = c(`FALSE` = 1.4, `TRUE` = 2.8)) +
+  scale_colour_gradientn(colours = c("#7b1d14", "#e74c3c", "grey70", "grey88"),
+                         values = c(0, fdr_cut - 1e-3, fdr_cut, 1), limits = c(0, 1),
                          breaks = c(0, fdr_cut, 0.5, 1), name = "SpatialFDR") +
   guides(colour = guide_colourbar(barheight = grid::unit(8, "lines"))) +
   labs(x = "CD8+ T-cell cluster (majority label)",

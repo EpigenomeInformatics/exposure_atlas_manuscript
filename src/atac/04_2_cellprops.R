@@ -16,8 +16,10 @@ suppressPackageStartupMessages({
 })
 set.seed(12)
 
+source("/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/utils/archr_utils.R")
 outputDir <- "/icbb/projects/igunduz/archr_projects/icbb/projects/igunduz/archr_project_011023/"
-project <- ArchR::loadArchRProject(outputDir, showLogo = FALSE)
+# loadArchRProject() fails on missing GroupCoverages; fall back to a lenient load
+project <- loadArchRProjectForce(outputDir)
 fig_dir <- "/scratch/icbb/igunduz/irem_github/exposure_atlas_manuscript/figures/"
 
 if (!dir.exists(fig_dir)) {
